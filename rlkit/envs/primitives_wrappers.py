@@ -1120,7 +1120,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
 
     def close_gripper(self, unused=None):
         total_reward, total_success = 0, 0
-        for _ in range(150):
+        for _ in range(300):
             action = [0, 0, 0, 0, 0, 0, 1]
             self.robots[0].control(action, policy_step=False)
             self.sim.step()
