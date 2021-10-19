@@ -1086,7 +1086,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             if self.reward_type == "sparse":
                 reward = float(stats[1] > 0)
             elif self.reward_type == "dense":
-                reward = stats[0]
+                reward = self.reward()
             info["success"] = float(stats[1] > 0)
             info["num low level steps"] = self._num_low_level_steps_total // (
                 int(self.control_timestep / self.model_timestep)

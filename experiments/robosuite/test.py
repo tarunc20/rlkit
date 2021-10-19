@@ -28,8 +28,7 @@ if __name__ == "__main__":
         "interpolation": None,
         "ramp_ratio": 0.2,
     }
-    # max_path_length = 5
-    max_path_length = 200
+    max_path_length = 5
     env = make_env(
         "robosuite",
         "BinDividerPick",
@@ -44,18 +43,22 @@ if __name__ == "__main__":
             horizon=max_path_length,
             control_freq=40,
             reward_shaping=True,
+            use_cube_shift_left_reward=True,
+            use_reaching_reward=True,
+            use_grasping_reward=True,
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
-                action_scale=0.25,
+                action_scale=1,
                 max_path_length=max_path_length,
                 camera_settings={
-                    "distance": 1.0029547420489309,
-                    "lookat": np.array([-0.247022, 0.13217877, 0.41499862]),
-                    "azimuth": 147.65625,
-                    "elevation": -52.499999951105565,
+                    "distance": 1.161288187018284,
+                    "lookat": np.array([-0.26495827, 0.07813156, 0.49040222]),
+                    "azimuth": 159.43359375,
+                    "elevation": -53.20312497206032,
                 },
                 workspace_low=(-0.17, -0.075, 0.95),
                 workspace_high=(0.17, 0.17, 1.0),
+                reward_type="dense",
             ),
             usage_kwargs=dict(
                 use_dm_backend=True,
@@ -65,7 +68,7 @@ if __name__ == "__main__":
         ),
     )
     o = env.reset()
-
+    print(env.reward())
     import time
 
     a = env.action_space.sample()
@@ -77,14 +80,14 @@ if __name__ == "__main__":
         0.25,
         -0.03,
     ]
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
 
     print(r)
 
     a = np.zeros_like(a)
     primitive = "close_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
 
     print(r)
 
@@ -95,7 +98,7 @@ if __name__ == "__main__":
     a[
         env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])
     ] = 0.025
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
 
     print(r)
 
@@ -104,7 +107,7 @@ if __name__ == "__main__":
     primitive = "move_left"
     a[env.get_idx_from_primitive_name(primitive)] = 1
     a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.25
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
 
     print(r)
 
@@ -112,7 +115,7 @@ if __name__ == "__main__":
     a = np.zeros_like(a)
     primitive = "open_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
 
     print(r)
     # for i in range(10000):
