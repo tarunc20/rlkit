@@ -12,6 +12,24 @@ from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
 from rlkit.torch.model_based.dreamer.experiments.kitchen_dreamer import experiment
 
 if __name__ == "__main__":
+    config = {
+        "type": "OSC_POSE",
+        "input_max": 1,
+        "input_min": -1,
+        "output_max": [0.2, 0.2, 0.2, 0.5, 0.5, 0.5],
+        "output_min": [-0.2, -0.2, -0.2, -0.5, -0.5, -0.5],
+        "kp": 150,
+        "damping_ratio": 1,
+        "impedance_mode": "fixed",
+        "kp_limits": [0, 300],
+        "damping_ratio_limits": [0, 10],
+        "position_limits": None,
+        "orientation_limits": None,
+        "uncouple_pos_ori": True,
+        "control_delta": True,
+        "interpolation": None,
+        "ramp_ratio": 0.2,
+    }
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_prefix", type=str, default="test")
     parser.add_argument("--num_seeds", type=int, default=1)
@@ -33,7 +51,7 @@ if __name__ == "__main__":
         exp_prefix = "test" + args.exp_prefix
     else:
         algorithm_kwargs = dict(
-            num_epochs=1000,
+            num_epochs=200,
             num_eval_steps_per_epoch=30,
             min_num_steps_before_training=2500,
             num_pretrain_steps=100,
@@ -60,44 +78,26 @@ if __name__ == "__main__":
             use_camera_obs=False,
             camera_heights=64,
             camera_widths=64,
-            controller_configs={
-                "type": "OSC_POSE",
-                "input_max": 1,
-                "input_min": -1,
-                "output_max": [0.2, 0.2, 0.2, 0.5, 0.5, 0.5],
-                "output_min": [-0.2, -0.2, -0.2, -0.5, -0.5, -0.5],
-                "kp": 150,
-                "damping_ratio": 1,
-                "impedance_mode": "fixed",
-                "kp_limits": [0, 300],
-                "damping_ratio_limits": [0, 10],
-                "position_limits": None,
-                "orientation_limits": None,
-                "uncouple_pos_ori": True,
-                "control_delta": True,
-                "interpolation": None,
-                "ramp_ratio": 0.2,
-            },
+            controller_configs=config,
             horizon=5,
             control_freq=40,
-            reward_shaping=False,
+            reward_shaping=True,
+            use_cube_shift_left_reward=True,
+            use_reaching_reward=True,
+            use_grasping_reward=True,
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
                 action_scale=1,
                 max_path_length=5,
-                workspace_low=(-0.15, -0.2, 0.8),
-                workspace_high=(0.15, 0.2, 1),
-                go_to_pose_iterations=40,
                 camera_settings={
-                    "distance": 0.9532481338137215,
-                    "lookat": [
-                        -0.30494697896254724,
-                        -0.4394507345054956,
-                        0.9492024838769221,
-                    ],
-                    "azimuth": -125.859375,
-                    "elevation": -29.062499923165888,
+                    "distance": 1.161288187018284,
+                    "lookat": [-0.25241684, 0.11155699, 0.49791818],
+                    "azimuth": 159.43359375,
+                    "elevation": -53.20312497206032,
                 },
+                workspace_low=(-0.17, -0.075, 0.95),
+                workspace_high=(0.17, 0.17, 1.0),
+                reward_type="dense",
             ),
             usage_kwargs=dict(
                 use_dm_backend=True,
@@ -153,7 +153,11 @@ if __name__ == "__main__":
         save_video=True,
     )
 
-    search_space = {}
+    search_space = {
+        "env_kwargs.use_cube_shift_left_reward": [True, False],
+        "env_kwargs.use_reaching_reward": [True, False],
+        "env_kwargs.use_grasping_reward": [True, False],
+    }
     sweeper = hyp.DeterministicHyperparameterSweeper(
         search_space,
         default_parameters=variant,

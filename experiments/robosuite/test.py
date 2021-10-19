@@ -80,14 +80,14 @@ if __name__ == "__main__":
         0.25,
         -0.03,
     ]
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
     print(r)
 
     a = np.zeros_like(a)
     primitive = "close_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
     print(r)
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     a[
         env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])
     ] = 0.025
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
     print(r)
 
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     primitive = "move_left"
     a[env.get_idx_from_primitive_name(primitive)] = 1
     a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.25
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
     print(r)
 
@@ -115,13 +115,13 @@ if __name__ == "__main__":
     a = np.zeros_like(a)
     primitive = "open_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
     print(r)
     # for i in range(10000):
     #     action = env.action_space.sample()
     #     obs, reward, done, info = env.step(
-    #         action, render_every_step=False, render_mode="human"
+    #         action, render_every_step=True, render_mode="human"
     #     )  # take action in the environment
     #     # env.render(render_mode="rgb_array", imwidth=64, imheight=64)
     #     # cv2.imwrite('test/test_{}.png'.format(i), obs.reshape(3, 64, 64).transpose(1, 2, 0))

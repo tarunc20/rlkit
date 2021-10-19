@@ -1093,6 +1093,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             )
             info["num low level steps true"] = self._num_low_level_steps_total
             self._num_low_level_steps_total = 0
+            self.update_info(info)
         else:
             info["success"] = float(self._check_success())
 
@@ -1119,7 +1120,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
                         self.render_mode,
                         self.render_im_shape[0],
                         self.render_im_shape[1],
-                    )
+                    )[:, :, ::-1]
                 )
             else:
                 self.render(
