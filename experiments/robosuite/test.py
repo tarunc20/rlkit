@@ -5,6 +5,7 @@ import gym
 import numpy as np
 from robosuite import load_controller_config
 from robosuite.utils.placement_samplers import UniformRandomSampler
+from robosuite.utils.transform_utils import mat2euler
 
 from rlkit.envs.primitives_make_env import make_env
 
@@ -42,10 +43,10 @@ if __name__ == "__main__":
             controller_configs=config,
             horizon=max_path_length,
             control_freq=40,
-            reward_shaping=False,
+            reward_shaping=True,
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
-                action_scale=1,
+                action_scale=0.25,
                 max_path_length=max_path_length,
                 camera_settings={
                     "distance": 1.0029547420489309,
@@ -53,8 +54,8 @@ if __name__ == "__main__":
                     "azimuth": 147.65625,
                     "elevation": -52.499999951105565,
                 },
-                workspace_low=(-0.15, -0.2, 0.8),
-                workspace_high=(0.15, 0.2, 1),
+                workspace_low=(-0.17, -0.075, 0.95),
+                workspace_high=(0.17, 0.17, 1.0),
             ),
             usage_kwargs=dict(
                 use_dm_backend=True,
@@ -65,123 +66,59 @@ if __name__ == "__main__":
     )
     o = env.reset()
 
-    # cv2.imwrite('test.png', o.reshape(3, 64, 64).transpose(1, 2, 0))
-    # while i in range(1000):
-    # print(env.sim.data.body_xpos[env.cube_body_id])
-    # print(env.sim.data.qpos)
-    # a = np.array([
-    #     -0.47844416,
-    #     0.42349762,
-    #     -0.28506953,
-    #     0.05447144,
-    #     -0.1029604,
-    #     -0.7435894,
-    #     0.97611815,
-    # ])
-    # import time
-    # t = time.time()
+    import time
+
     a = env.action_space.sample()
     a = np.zeros_like(a)
     primitive = "move_delta_ee_pose"
     a[env.get_idx_from_primitive_name(primitive)] = 1
     a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = [
-        0.075,
-        0.075,
-        0,
+        0.15,
+        0.25,
+        -0.03,
     ]
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+
+    print(r)
 
     a = np.zeros_like(a)
-    primitive = "top_grasp"
+    primitive = "close_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.2
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
-    # a = np.zeros_like(a)
-    # primitive = "close_gripper"
-    # print(env._eef_xpos)
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-    # print(env._eef_xpos)
+    print(r)
 
     a = env.action_space.sample()
     a = np.zeros_like(a)
     primitive = "lift"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.15
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    a[
+        env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])
+    ] = 0.025
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+
+    print(r)
 
     a = env.action_space.sample()
     a = np.zeros_like(a)
     primitive = "move_left"
     a[env.get_idx_from_primitive_name(primitive)] = 1
     a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.25
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+
+    print(r)
 
     a = env.action_space.sample()
     a = np.zeros_like(a)
     primitive = "open_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
 
     print(r)
-
-    # o, r, d, info = env.step(a, render_every_step=False, render_mode="human")
-    # print(env._check_success(), r, info)
-    # print(env._eef_xpos)
-    # print(time.time()-t)
-    # cv2.imwrite('test2.png', o.reshape(3, 64, 64).transpose(1, 2, 0))
-
-    # a = env.action_space.sample()
-    # a = np.zeros_like(a)
-    # primitive = "move_left"
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.5
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-
-    # a = env.action_space.sample()
-    # a = np.zeros_like(a)
-    # primitive = "move_backward"
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.4
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-
-    # a = env.action_space.sample()
-    # a = np.zeros_like(a)
-    # primitive = "drop"
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.4
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-    # print(env._eef_xpos)
-    # env.reset()
-
-    # a = env.action_space.sample()
-    # a = np.zeros_like(a)
-    # primitive = "move_right"
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.5
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-
-    # a = env.action_space.sample()
-    # a = np.zeros_like(a)
-    # primitive = "move_forward"
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.4
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-
-    # a = env.action_space.sample()
-    # a = np.zeros_like(a)
-    # primitive = "lift"
-    # a[env.get_idx_from_primitive_name(primitive)] = 1
-    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.4
-    # o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
-    # print(env._eef_xpos)
-    # print(env._check_success(), r, info)
-    # cv2.imwrite('test3.png', o.reshape(3, 64, 64).transpose(1, 2, 0))
     # for i in range(10000):
     #     action = env.action_space.sample()
     #     obs, reward, done, info = env.step(
-    #         action, render_every_step=True, render_mode="human"
+    #         action, render_every_step=False, render_mode="human"
     #     )  # take action in the environment
     #     # env.render(render_mode="rgb_array", imwidth=64, imheight=64)
     #     # cv2.imwrite('test/test_{}.png'.format(i), obs.reshape(3, 64, 64).transpose(1, 2, 0))

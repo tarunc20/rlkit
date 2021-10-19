@@ -6,6 +6,7 @@ from gym import spaces
 from gym.spaces.box import Box
 from metaworld.envs.mujoco.mujoco_env import _assert_task_is_set
 from metaworld.envs.mujoco.sawyer_xyz.sawyer_xyz_env import SawyerXYZEnv
+from robosuite.utils.transform_utils import mat2euler
 from robosuite.wrappers.gym_wrapper import GymWrapper
 
 try:
@@ -834,6 +835,10 @@ class RobosuiteWrapper(GymWrapper):
 
     def reset(self):
         o = super().reset()
+        for _ in range(300):
+            action = [0, 0, 0, 0, 0, 0, -1]
+            self.env.robots[0].control(action, policy_step=False)
+            self.env.sim.step()
         o = self.env.render(
             render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
         )
@@ -1153,8 +1158,11 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             if grasp:
                 gripper = 1
             else:
-                gripper = -1
-            action = [*delta, 0, 0, 0, gripper]
+                gripper = 0
+            rot = np.array([-3.14, 0, 0]) - mat2euler(self._eef_xmat)
+            if np.abs(rot[0]) > 0.1:
+                rot = [0, 0, 0]
+            action = [*delta, *rot, gripper]
             if np.allclose(delta - prev_delta, 1e-4):
                 break
             policy_step = True
@@ -1180,41 +1188,45 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         return stats
 
     def move_delta_ee_pose(self, pose):
-        stats = self.goto_pose(self._eef_xpos + pose, grasp=True)
+        stats = self.goto_pose(self._eef_xpos + pose, grasp=False)
         return stats
 
     def lift(self, z_dist):
         z_dist = np.maximum(z_dist, 0.0)
         stats = self.goto_pose(
-            self._eef_xpos + np.array([0.0, 0.0, z_dist]), grasp=True
+            self._eef_xpos + np.array([0.0, 0.0, z_dist]), grasp=False
         )
         return stats
 
     def drop(self, z_dist):
         z_dist = np.maximum(z_dist, 0.0)
         stats = self.goto_pose(
-            self._eef_xpos + np.array([0.0, 0.0, -z_dist]), grasp=True
+            self._eef_xpos + np.array([0.0, 0.0, -z_dist]), grasp=False
         )
         return stats
 
     def move_left(self, x_dist):
         x_dist = np.maximum(x_dist, 0.0)
-        stats = self.goto_pose(self._eef_xpos + np.array([0, -x_dist, 0.0]), grasp=True)
+        stats = self.goto_pose(
+            self._eef_xpos + np.array([0, -x_dist, 0.0]), grasp=False
+        )
         return stats
 
     def move_right(self, x_dist):
         x_dist = np.maximum(x_dist, 0.0)
-        stats = self.goto_pose(self._eef_xpos + np.array([0, x_dist, 0.0]), grasp=True)
+        stats = self.goto_pose(self._eef_xpos + np.array([0, x_dist, 0.0]), grasp=False)
         return stats
 
     def move_forward(self, y_dist):
         y_dist = np.maximum(y_dist, 0.0)
-        stats = self.goto_pose(self._eef_xpos + np.array([y_dist, 0, 0.0]), grasp=True)
+        stats = self.goto_pose(self._eef_xpos + np.array([y_dist, 0, 0.0]), grasp=False)
         return stats
 
     def move_backward(self, y_dist):
         y_dist = np.maximum(y_dist, 0.0)
-        stats = self.goto_pose(self._eef_xpos + np.array([-y_dist, 0, 0.0]), grasp=True)
+        stats = self.goto_pose(
+            self._eef_xpos + np.array([-y_dist, 0, 0.0]), grasp=False
+        )
         return stats
 
     def break_apart_action(self, a):
