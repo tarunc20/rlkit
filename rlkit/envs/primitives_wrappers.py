@@ -926,7 +926,9 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         imwidth=64,
         imheight=64,
         go_to_pose_iterations=100,
+        reward_type="sparse",
     ):
+        self.reward_type = reward_type
         self.imwidth = imwidth
         self.imheight = imheight
         self.workspace_low = np.array(workspace_low)
@@ -1081,7 +1083,10 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
 
         reward, done, info = self._post_action(action)
         if self.control_mode == "primitives":
-            reward = float(stats[1] > 0)
+            if self.reward_type == "sparse":
+                reward = float(stats[1] > 0)
+            elif self.reward_type == "dense":
+                reward = stats[0]
             info["success"] = float(stats[1] > 0)
             info["num low level steps"] = self._num_low_level_steps_total // (
                 int(self.control_timestep / self.model_timestep)
