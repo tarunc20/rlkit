@@ -71,8 +71,11 @@ def experiment(variant):
         continuous_action_dim = eval_envs[0].max_arg_len
         discrete_action_dim = eval_envs[0].num_primitives
         if not discrete_continuous_dist:
-            continuous_action_dim = continuous_action_dim + discrete_action_dim
-            discrete_action_dim = 0
+            if not variant['env_kwargs']['reset_action_space_kwargs']['fixed_schema']:
+                continuous_action_dim = continuous_action_dim + discrete_action_dim
+                discrete_action_dim = 0
+            else:
+                discrete_action_dim = 0
         action_dim = continuous_action_dim + discrete_action_dim
         use_batch_length = False
     world_model_class = WorldModel

@@ -927,6 +927,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         imheight=64,
         go_to_pose_iterations=100,
         reward_type="sparse",
+        fixed_schema=False,
     ):
         self.reward_type = reward_type
         self.imwidth = imwidth
@@ -939,6 +940,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         self.max_path_length = max_path_length
         self.action_scale = action_scale
         self.go_to_pose_iterations = go_to_pose_iterations
+        self.timestep = 0
 
         # primitives
         self.primitive_idx_to_name = {
@@ -981,20 +983,27 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
 
         self.num_primitives = len(self.primitive_name_to_func)
         self.control_mode = control_mode
+        self.fixed_schema = fixed_schema
+        self.schema = {0:0, 1:1, 2:2, 3:4, 4:8}
 
         if self.control_mode == "primitives":
-            action_space_low = -1 * np.ones(self.max_arg_len)
-            action_space_high = np.ones(self.max_arg_len)
-            act_lower_primitive = np.zeros(self.num_primitives)
-            act_upper_primitive = np.ones(self.num_primitives)
-            act_lower = np.concatenate((act_lower_primitive, action_space_low))
-            act_upper = np.concatenate(
-                (
-                    act_upper_primitive,
-                    action_space_high,
+            if self.fixed_schema:
+                action_space_low =  -1 * np.ones(self.max_arg_len)
+                action_space_high = np.ones(self.max_arg_len)
+                self.action_space = Box(action_space_low, action_space_high, dtype=np.float32)
+            else:
+                action_space_low = -1 * np.ones(self.max_arg_len)
+                action_space_high = np.ones(self.max_arg_len)
+                act_lower_primitive = np.zeros(self.num_primitives)
+                act_upper_primitive = np.ones(self.num_primitives)
+                act_lower = np.concatenate((act_lower_primitive, action_space_low))
+                act_upper = np.concatenate(
+                    (
+                        act_upper_primitive,
+                        action_space_high,
+                    )
                 )
-            )
-            self.action_space = Box(act_lower, act_upper, dtype=np.float32)
+                self.action_space = Box(act_lower, act_upper, dtype=np.float32)
         elif self.control_mode == "vices":
             self.action_space = Box(-np.ones(10), np.ones(10))
             ctrl_ratio = 1.0
@@ -1038,7 +1047,6 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         if self.done:
             raise ValueError("executing action in terminated episode")
 
-        self.timestep += 1
         if self.control_mode == "robosuite":
             policy_step = True
             target_pos = action[:3] + self._eef_xpos
@@ -1096,6 +1104,8 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             self.update_info(info)
         else:
             info["success"] = float(self._check_success())
+
+        self.timestep += 1
 
         return self._get_observations(force_update=True), reward, done, info
 
@@ -1244,10 +1254,14 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
     def act(self, a):
         a = np.clip(a, self.action_space.low, self.action_space.high)
         a = a * self.action_scale
-        primitive_idx, primitive_args = (
-            np.argmax(a[: self.num_primitives]),
-            a[self.num_primitives :],
-        )
+        if self.fixed_schema:
+            primitive_args = a
+            primitive_idx = self.schema[self.timestep%5]
+        else:
+            primitive_idx, primitive_args = (
+                np.argmax(a[: self.num_primitives]),
+                a[self.num_primitives :],
+            )
         primitive_name = self.primitive_idx_to_name[primitive_idx]
         primitive_name_to_action_dict = self.break_apart_action(primitive_args)
         primitive_action = primitive_name_to_action_dict[primitive_name]
