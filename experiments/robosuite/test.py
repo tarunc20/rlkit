@@ -57,7 +57,7 @@ if __name__ == "__main__":
                     "elevation": -53.20312497206032,
                 },
                 workspace_low=(-0.17, -0.075, 0.95),
-                workspace_high=(0.17, 0.17, 1.0),
+                workspace_high=(0.17, 0.17, .99),
                 reward_type="dense",
             ),
             usage_kwargs=dict(
@@ -67,6 +67,7 @@ if __name__ == "__main__":
             image_kwargs=dict(),
         ),
     )
+    render_every_step = True
     o = env.reset()
     print(env.reward())
     import time
@@ -80,14 +81,14 @@ if __name__ == "__main__":
         0.25,
         -0.03,
     ]
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=render_every_step, render_mode="human")
 
     print(r)
 
     a = np.zeros_like(a)
     primitive = "close_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=render_every_step, render_mode="human")
 
     print(r)
 
@@ -97,8 +98,8 @@ if __name__ == "__main__":
     a[env.get_idx_from_primitive_name(primitive)] = 1
     a[
         env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])
-    ] = 0.025
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    ] = 0.05
+    o, r, d, info = env.step(a, render_every_step=render_every_step, render_mode="human")
 
     print(r)
 
@@ -107,7 +108,7 @@ if __name__ == "__main__":
     primitive = "move_left"
     a[env.get_idx_from_primitive_name(primitive)] = 1
     a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.25
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=render_every_step, render_mode="human")
 
     print(r)
 
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     a = np.zeros_like(a)
     primitive = "open_gripper"
     a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(a, render_every_step=True, render_mode="human")
+    o, r, d, info = env.step(a, render_every_step=render_every_step, render_mode="human")
 
     print(r)
     # for i in range(10000):

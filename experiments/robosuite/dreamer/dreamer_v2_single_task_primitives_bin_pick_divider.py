@@ -51,7 +51,7 @@ if __name__ == "__main__":
         exp_prefix = "test" + args.exp_prefix
     else:
         algorithm_kwargs = dict(
-            num_epochs=200,
+            num_epochs=500,
             num_eval_steps_per_epoch=30,
             min_num_steps_before_training=2500,
             num_pretrain_steps=100,
@@ -87,7 +87,7 @@ if __name__ == "__main__":
             use_grasping_reward=True,
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
-                action_scale=1,
+                action_scale=.3,
                 max_path_length=5,
                 camera_settings={
                     "distance": 1.161288187018284,
@@ -96,7 +96,7 @@ if __name__ == "__main__":
                     "elevation": -53.20312497206032,
                 },
                 workspace_low=(-0.17, -0.075, 0.95),
-                workspace_high=(0.17, 0.17, 1.0),
+                workspace_high=(0.17, 0.17, 0.99),
                 reward_type="dense",
             ),
             usage_kwargs=dict(
