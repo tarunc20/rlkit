@@ -87,7 +87,7 @@ if __name__ == "__main__":
             use_grasping_reward=True,
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
-                action_scale=.3,
+                action_scale=0.3,
                 max_path_length=5,
                 camera_settings={
                     "distance": 1.161288187018284,
@@ -174,8 +174,7 @@ if __name__ == "__main__":
                 mode=args.mode,
                 variant=variant,
                 use_gpu=True,
-                snapshot_mode="gap",
-                snapshot_gap=10,
+                snapshot_mode="none",
                 python_cmd=subprocess.check_output("which python", shell=True).decode(
                     "utf-8"
                 )[:-1],
