@@ -928,7 +928,9 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         go_to_pose_iterations=100,
         reward_type="sparse",
         fixed_schema=False,
+        spatial_actions=False,
     ):
+        self.spatial_actions = spatial_actions
         self.reward_type = reward_type
         self.imwidth = imwidth
         self.imheight = imheight
@@ -954,6 +956,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             7: "move_backward",
             8: "open_gripper",
             9: "close_gripper",
+            10: "top_xy_grasp",
         }
         self.primitive_name_to_func = dict(
             move_delta_ee_pose=self.move_delta_ee_pose,
@@ -966,6 +969,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             move_backward=self.move_backward,
             open_gripper=self.open_gripper,
             close_gripper=self.close_gripper,
+            top_xy_grasp=self.top_xy_grasp,
         )
         self.primitive_name_to_action_idx = dict(
             move_delta_ee_pose=[0, 1, 2],
@@ -978,19 +982,36 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             move_backward=9,
             open_gripper=[],  # doesn't matter
             close_gripper=[],  # doesn't matter
+            top_xy_grasp=[10, 11, 12],
         )
-        self.max_arg_len = 10
+        self.max_arg_len = 13
 
         self.num_primitives = len(self.primitive_name_to_func)
         self.control_mode = control_mode
         self.fixed_schema = fixed_schema
-        self.schema = {0:0, 1:1, 2:2, 3:4, 4:8}
+        # self.schema = {0:0, 1:1, 2:2, 3:4, 4:8}
+        self.schema = {0: 10, 1: 2, 2: 4}
+        if self.fixed_schema:
+            self.primitive_name_to_action_idx = dict(
+                lift=0,
+                move_left=1,
+                top_xy_grasp=[2, 3, 4],
+            )
+            self.max_arg_len = 5
 
         if self.control_mode == "primitives":
             if self.fixed_schema:
-                action_space_low =  -1 * np.ones(self.max_arg_len)
+                action_space_low = -1 * np.ones(self.max_arg_len)
                 action_space_high = np.ones(self.max_arg_len)
-                self.action_space = Box(action_space_low, action_space_high, dtype=np.float32)
+                self.action_space = Box(
+                    action_space_low, action_space_high, dtype=np.float32
+                )
+                if self.spatial_actions:
+                    self.action_space = Box(
+                        np.concatenate(([0], action_space_low)),
+                        np.concatenate(([64], action_space_high)),
+                        dtype=np.float32,
+                    )
             else:
                 action_space_low = -1 * np.ones(self.max_arg_len)
                 action_space_high = np.ones(self.max_arg_len)
@@ -1203,43 +1224,51 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         stats += self.close_gripper()
         return stats
 
+    def top_xy_grasp(self, xyz):
+        stats = self.move_delta_ee_pose(np.array([xyz[0], xyz[1], 0]))
+        stats = self.drop(
+            xyz[-1],
+        )
+        stats += self.close_gripper()
+        return stats
+
     def move_delta_ee_pose(self, pose):
         stats = self.goto_pose(self._eef_xpos + pose, grasp=False)
         return stats
 
     def lift(self, z_dist):
-        z_dist = np.maximum(z_dist, 0.0)
+        z_dist = np.abs(z_dist)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0.0, 0.0, z_dist]), grasp=False
         )
         return stats
 
     def drop(self, z_dist):
-        z_dist = np.maximum(z_dist, 0.0)
+        z_dist = np.abs(z_dist)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0.0, 0.0, -z_dist]), grasp=False
         )
         return stats
 
     def move_left(self, x_dist):
-        x_dist = np.maximum(x_dist, 0.0)
+        x_dist = np.abs(x_dist)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0, -x_dist, 0.0]), grasp=False
         )
         return stats
 
     def move_right(self, x_dist):
-        x_dist = np.maximum(x_dist, 0.0)
+        x_dist = np.abs(x_dist)
         stats = self.goto_pose(self._eef_xpos + np.array([0, x_dist, 0.0]), grasp=False)
         return stats
 
     def move_forward(self, y_dist):
-        y_dist = np.maximum(y_dist, 0.0)
+        y_dist = np.abs(y_dist)
         stats = self.goto_pose(self._eef_xpos + np.array([y_dist, 0, 0.0]), grasp=False)
         return stats
 
     def move_backward(self, y_dist):
-        y_dist = np.maximum(y_dist, 0.0)
+        y_dist = np.abs(y_dist)
         stats = self.goto_pose(
             self._eef_xpos + np.array([-y_dist, 0, 0.0]), grasp=False
         )
@@ -1253,19 +1282,39 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
 
     def act(self, a):
         a = np.clip(a, self.action_space.low, self.action_space.high)
-        a = a * self.action_scale
         if self.fixed_schema:
             primitive_args = a
-            primitive_idx = self.schema[self.timestep%5]
+            primitive_idx = self.schema[self.timestep % self.max_path_length]
         else:
             primitive_idx, primitive_args = (
                 np.argmax(a[: self.num_primitives]),
                 a[self.num_primitives :],
             )
         primitive_name = self.primitive_idx_to_name[primitive_idx]
-        primitive_name_to_action_dict = self.break_apart_action(primitive_args)
-        primitive_action = primitive_name_to_action_dict[primitive_name]
         primitive = self.primitive_name_to_func[primitive_name]
+        if self.spatial_actions:
+            grid_loc = primitive_args[0]
+            offsets = primitive_args[1:3] * self.action_scale
+            z, y_, z_ = (
+                primitive_args[3] * self.action_scale,
+                primitive_args[4] * self.action_scale,
+                primitive_args[5] * self.action_scale,
+            )
+            y, x = int(grid_loc) % 8, int(grid_loc) // 8
+            x_prime, y_prime = x * 0.0425 - 0.17, y * 0.0425 - 0.17  # re-scale back to workspace
+            x_prime_final, y_prime_final = x_prime + np.abs(offsets[0]) * 0.0425, y_prime + np.abs(offsets[1]) * 0.0425
+            if primitive_name == "top_xy_grasp":
+                string = "grid_loc: {:.2f} x:{:.2f} y:{:.2f} x':{:.2f} y':{:.2f} x'':{:.2f} y'':{:.2f}".format(grid_loc, x, y, x_prime, y_prime, x_prime_final, y_prime_final)
+                primitive_action = np.array([x_prime_final, y_prime_final, z])
+            elif primitive_name == "lift":
+                primitive_action = z_
+            else:
+                primitive_action = y_
+        else:
+            primitive_action = primitive_args * self.action_scale
+            primitive_name_to_action_dict = self.break_apart_action(primitive_args)
+            primitive_action = primitive_name_to_action_dict[primitive_name]
+        # print(a, primitive_name, primitive_action)
         stats = primitive(primitive_action)
         return stats
 

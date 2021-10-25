@@ -37,8 +37,8 @@ if __name__ == "__main__":
             has_renderer=False,
             has_offscreen_renderer=True,
             use_camera_obs=True,
-            camera_heights=64,
-            camera_widths=64,
+            camera_heights=256,
+            camera_widths=256,
             controller_configs=config,
             horizon=max_path_length,
             control_freq=40,
@@ -46,19 +46,31 @@ if __name__ == "__main__":
             use_cube_shift_left_reward=True,
             use_reaching_reward=True,
             use_grasping_reward=True,
+            placement_initializer_kwargs=dict(
+                name="ObjectSampler",
+                x_range=[0.165, 0.165],
+                y_range=[0.165, 0.165],
+                rotation=0,
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=(0, 0, 0.8),
+                z_offset=0.12,
+            ),
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
                 action_scale=1,
                 max_path_length=max_path_length,
                 camera_settings={
                     "distance": 1.161288187018284,
-                    "lookat": np.array([-0.26495827, 0.07813156, 0.49040222]),
-                    "azimuth": 159.43359375,
-                    "elevation": -53.20312497206032,
+                    "lookat": np.array([-0.0, 0.0, 0.22]),
+                    "azimuth": 180,
+                    "elevation": -90,
                 },
                 workspace_low=(-0.17, -0.075, 0.95),
                 workspace_high=(0.17, 0.17, 0.99),
                 reward_type="dense",
+                imwidth=256,
+                imheight=256,
             ),
             usage_kwargs=dict(
                 use_dm_backend=True,
@@ -67,74 +79,109 @@ if __name__ == "__main__":
             image_kwargs=dict(),
         ),
     )
-    render_every_step = True
-    o = env.reset()
-    print(env.reward())
-    import time
+    # from robosuite.utils.camera_utils import get_camera_transform_matrix
+    # import ipdb
 
-    a = env.action_space.sample()
-    a = np.zeros_like(a)
-    primitive = "move_delta_ee_pose"
-    a[env.get_idx_from_primitive_name(primitive)] = 1
-    a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = [
-        0.15,
-        0.25,
-        -0.03,
-    ]
-    o, r, d, info = env.step(
-        a, render_every_step=render_every_step, render_mode="human"
-    )
+    # def world_to_cam(env):
+    #     return get_camera_transform_matrix(env.sim, "agentview", 256, 256) @ np.concatenate(
+    #         (env._eef_xpos, [1])
+    #     )
 
-    print(r)
+    # def cam_to_world(env, cam):
+    #     trans = get_camera_transform_matrix(env.sim, "agentview", 256, 256)
+    #     return np.linalg.inv(trans) @ np.concatenate((cam, [1, 1]))
 
-    a = np.zeros_like(a)
-    primitive = "close_gripper"
-    a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(
-        a, render_every_step=render_every_step, render_mode="human"
-    )
+    # ipdb.set_trace()
 
-    print(r)
+    # camera_transform_matrix = get_camera_transform_matrix(
+    #     env.sim, "agentview", 256, 256
+    # )
 
-    a = env.action_space.sample()
-    a = np.zeros_like(a)
-    primitive = "lift"
-    a[env.get_idx_from_primitive_name(primitive)] = 1
-    a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.05
-    o, r, d, info = env.step(
-        a, render_every_step=render_every_step, render_mode="human"
-    )
+    # render_every_step = False
+    # o = env.reset()
+    # print(env.reward())
+    # import time
 
-    print(r)
+    # a = env.action_space.sample()
+    # a = np.zeros_like(a)
+    # primitive = "move_delta_ee_pose"
+    # a[env.get_idx_from_primitive_name(primitive)] = 1
+    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = [
+    #     0.15,
+    #     0.25,
+    #     -0.03,
+    # ]
+    # o, r, d, info = env.step(
+    #     a, render_every_step=render_every_step, render_mode="human"
+    # )
 
-    a = env.action_space.sample()
-    a = np.zeros_like(a)
-    primitive = "move_left"
-    a[env.get_idx_from_primitive_name(primitive)] = 1
-    a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.25
-    o, r, d, info = env.step(
-        a, render_every_step=render_every_step, render_mode="human"
-    )
+    # print(r)
+    # cv2.imshow("test", o.reshape((3, 256, 256)).transpose(1, 2, 0))
+    # cv2.waitKey(0)
 
-    print(r)
+    # a = np.zeros_like(a)
+    # primitive = "close_gripper"
+    # a[env.get_idx_from_primitive_name(primitive)] = 1
+    # o, r, d, info = env.step(
+    #     a, render_every_step=render_every_step, render_mode="human"
+    # )
 
-    a = env.action_space.sample()
-    a = np.zeros_like(a)
-    primitive = "open_gripper"
-    a[env.get_idx_from_primitive_name(primitive)] = 1
-    o, r, d, info = env.step(
-        a, render_every_step=render_every_step, render_mode="human"
-    )
+    # print(r)
 
-    print(r)
-    # for i in range(10000):
-    #     action = env.action_space.sample()
-    #     obs, reward, done, info = env.step(
-    #         action, render_every_step=True, render_mode="human"
-    #     )  # take action in the environment
-    #     # env.render(render_mode="rgb_array", imwidth=64, imheight=64)
-    #     # cv2.imwrite('test/test_{}.png'.format(i), obs.reshape(3, 64, 64).transpose(1, 2, 0))
-    #     # print(_, done)
-    #     print(i)
-    #     if done:
-    #         env.reset()
+    # cv2.imshow("test", o.reshape((3, 256, 256)).transpose(1, 2, 0))
+    # cv2.waitKey(0)
+
+    # a = env.action_space.sample()
+    # a = np.zeros_like(a)
+    # primitive = "lift"
+    # a[env.get_idx_from_primitive_name(primitive)] = 1
+    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.05
+    # o, r, d, info = env.step(
+    #     a, render_every_step=render_every_step, render_mode="human"
+    # )
+
+    # print(r)
+
+    # cv2.imshow("test", o.reshape((3, 256, 256)).transpose(1, 2, 0))
+    # cv2.waitKey(0)
+
+    # a = env.action_space.sample()
+    # a = np.zeros_like(a)
+    # primitive = "move_left"
+    # a[env.get_idx_from_primitive_name(primitive)] = 1
+    # a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = 0.25
+    # o, r, d, info = env.step(
+    #     a, render_every_step=render_every_step, render_mode="human"
+    # )
+
+    # print(r)
+
+    # a = env.action_space.sample()
+    # a = np.zeros_like(a)
+    # primitive = "open_gripper"
+    # a[env.get_idx_from_primitive_name(primitive)] = 1
+    # o, r, d, info = env.step(
+    #     a, render_every_step=render_every_step, render_mode="human"
+    # )
+
+    # print(r)
+    # cv2.imshow("test", o.reshape((3, 256, 256)).transpose(1, 2, 0))
+    # cv2.waitKey(0)
+    for i in range(10000):
+        a = env.action_space.sample()
+        a = np.zeros_like(a)
+        primitive = "move_delta_ee_pose"
+        a[env.get_idx_from_primitive_name(primitive)] = 1
+        a[env.num_primitives + np.array(env.primitive_name_to_action_idx[primitive])] = [-1, -1,1 ]
+        obs, reward, done, info = env.step(
+            a, render_every_step=False, render_mode="human"
+        )  # take action in the environment
+        cv2.imshow("test", obs.reshape((3, 256, 256)).transpose(1, 2, 0))
+        print(env._eef_xpos)
+        cv2.waitKey(0)
+        print(i)
+        if done:
+            env.reset()
+
+
+
