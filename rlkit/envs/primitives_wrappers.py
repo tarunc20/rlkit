@@ -1225,7 +1225,9 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         return stats
 
     def top_xy_grasp(self, xyz):
-        stats = self.goto_pose(np.array([xyz[0], xyz[1], self._eef_xpos[2]]), grasp=False)
+        stats = self.goto_pose(
+            np.array([xyz[0], xyz[1], self._eef_xpos[2]]), grasp=False
+        )
         stats = self.drop(
             xyz[-1],
         )
@@ -1294,17 +1296,26 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         primitive = self.primitive_name_to_func[primitive_name]
         if self.spatial_actions:
             grid_loc = primitive_args[0]
-            offsets = primitive_args[1:3] * self.action_scale
+            offsets = primitive_args[1:3]
             z, y_, z_ = (
                 primitive_args[3] * self.action_scale,
                 primitive_args[4] * self.action_scale,
                 primitive_args[5] * self.action_scale,
             )
             y, x = int(grid_loc) % 8, int(grid_loc) // 8
-            x_prime, y_prime = x * 0.0425 - 0.17, y * 0.0425 - 0.17  # re-scale back to workspace
-            x_prime_final, y_prime_final = x_prime + np.abs(offsets[0]) * 0.0425, y_prime + np.abs(offsets[1]) * 0.0425
+            x_prime, y_prime = (
+                x * 0.0425 - 0.17,
+                y * 0.0425 - 0.17,
+            )  # re-scale back to workspace
+            x_prime_final, y_prime_final = (
+                x_prime + np.abs(offsets[0]) * 0.0425,
+                y_prime + np.abs(offsets[1]) * 0.0425,
+            )
             if primitive_name == "top_xy_grasp":
-                string = "grid_loc: {:.2f} x:{:.2f} y:{:.2f} x':{:.2f} y':{:.2f} x'':{:.2f} y'':{:.2f}".format(grid_loc, x, y, x_prime, y_prime, x_prime_final, y_prime_final)
+                string = "grid_loc: {:.2f} x:{:.2f} y:{:.2f} x':{:.2f} y':{:.2f} x'':{:.2f} y'':{:.2f}".format(
+                    grid_loc, x, y, x_prime, y_prime, x_prime_final, y_prime_final
+                )
+                # print(string)
                 primitive_action = np.array([x_prime_final, y_prime_final, z])
             elif primitive_name == "lift":
                 primitive_action = z_
