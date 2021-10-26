@@ -1225,7 +1225,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         return stats
 
     def top_xy_grasp(self, xyz):
-        stats = self.move_delta_ee_pose(np.array([xyz[0], xyz[1], 0]))
+        stats = self.goto_pose(np.array([xyz[0], xyz[1], self._eef_xpos[2]]), grasp=False)
         stats = self.drop(
             xyz[-1],
         )
@@ -1314,7 +1314,6 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
             primitive_action = primitive_args * self.action_scale
             primitive_name_to_action_dict = self.break_apart_action(primitive_args)
             primitive_action = primitive_name_to_action_dict[primitive_name]
-        # print(a, primitive_name, primitive_action)
         stats = primitive(primitive_action)
         return stats
 

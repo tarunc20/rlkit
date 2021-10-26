@@ -94,7 +94,7 @@ if __name__ == "__main__":
                     "elevation": -90,
                 },
                 workspace_low=(-0.17, -0.17, 0.95),
-                workspace_high=(0.17, 0.17, 0.99),
+                workspace_high=(0.17, 0.17, 1.05),
                 reward_type="dense",
                 fixed_schema=True,
                 spatial_actions=True,
@@ -129,9 +129,9 @@ if __name__ == "__main__":
         "algorithm_kwargs.lr": [3e-4, 1e-3, 5e-3],
         "algorithm_kwargs.num_mini_batch": [10, 64],
         "num_steps": [100 // 4, 500 // 4, 2048 // 4],
-        "env_kwargs.use_cube_shift_left_reward": [True, False],
-        "env_kwargs.use_reaching_reward": [True, False],
-        "env_kwargs.use_grasping_reward": [True, False],
+        # "env_kwargs.use_cube_shift_left_reward": [True, False],
+        # "env_kwargs.use_reaching_reward": [True, False],
+        # "env_kwargs.use_grasping_reward": [True, False],
     }
     sweeper = hyp.DeterministicHyperparameterSweeper(
         search_space,
