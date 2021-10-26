@@ -2,8 +2,6 @@ import argparse
 import random
 import subprocess
 
-from robosuite import load_controller_config
-
 import rlkit.util.hyperparameter as hyp
 from rlkit.launchers.launcher_util import run_experiment
 
@@ -33,7 +31,6 @@ if __name__ == "__main__":
         "interpolation": None,
         "ramp_ratio": 0.2,
     }
-    config = load_controller_config(default_controller="OSC_POSE")
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_prefix", type=str, default="test")
     parser.add_argument("--num_seeds", type=int, default=1)
@@ -78,7 +75,7 @@ if __name__ == "__main__":
             use_grasping_reward=False,
             placement_initializer_kwargs=dict(
                 name="ObjectSampler",
-                x_range=[-0.165, .165],
+                x_range=[-0.165, 0.165],
                 y_range=[0.035, 0.165],
                 rotation=0,
                 ensure_object_boundary_in_range=False,
@@ -113,9 +110,9 @@ if __name__ == "__main__":
             image_kwargs=dict(),
         ),
         actor_kwargs=dict(recurrent=False, hidden_size=64, hidden_activation="tanh"),
-        num_processes=5,
+        num_processes=4,
         num_env_steps=int(1e4),
-        num_steps=50 // 5,
+        num_steps=50 // 4,
         log_interval=1,
         eval_interval=1,
         use_raw_actions=False,
@@ -128,15 +125,13 @@ if __name__ == "__main__":
         "env_name": [
             "BinDividerPick",
         ],
-        "rollout_kwargs.gamma":[0.99, 2/3],
-        "algorithm_kwargs.lr":[3e-4, 1e-3, 5e-3],
-        "algorithm_kwargs.num_mini_batch":[10, 32, 64],
-        "num_steps":[100//5, 500//5, 2048//5],
+        "rollout_kwargs.gamma": [0.99, 2 / 3],
+        "algorithm_kwargs.lr": [3e-4, 1e-3, 5e-3],
+        "algorithm_kwargs.num_mini_batch": [10, 64],
+        "num_steps": [100 // 4, 500 // 4, 2048 // 4],
         "env_kwargs.use_cube_shift_left_reward": [True, False],
         "env_kwargs.use_reaching_reward": [True, False],
         "env_kwargs.use_grasping_reward": [True, False],
-
-
     }
     sweeper = hyp.DeterministicHyperparameterSweeper(
         search_space,
