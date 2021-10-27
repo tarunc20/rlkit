@@ -46,7 +46,7 @@ if __name__ == "__main__":
             num_train_loops_per_epoch=1,
             num_trains_per_train_loop=10,
             batch_size=30,
-            max_path_length=5,
+            max_path_length=3,
         )
         exp_prefix = "test" + args.exp_prefix
     else:
@@ -55,11 +55,11 @@ if __name__ == "__main__":
             num_eval_steps_per_epoch=30,
             min_num_steps_before_training=2500,
             num_pretrain_steps=100,
-            max_path_length=5,
-            batch_size=417,  # 417*6 = 2502
-            num_expl_steps_per_train_loop=30 * 2,  # 5*(5+1) one trajectory per vec env
-            num_train_loops_per_epoch=40 // 2,  # 1000//(5*5)
-            num_trains_per_train_loop=10 * 2,  # 400//40
+            max_path_length=3,
+            batch_size=625,  # 625*4 = 2500
+            num_expl_steps_per_train_loop=20,  # 5*(3+1) one trajectory per vec env
+            num_train_loops_per_epoch=1000//15,  # 1000//(5*3)
+            num_trains_per_train_loop=400//66,  # 400//40
         )
         exp_prefix = args.exp_prefix
     variant = dict(
@@ -79,29 +79,40 @@ if __name__ == "__main__":
             camera_heights=64,
             camera_widths=64,
             controller_configs=config,
-            horizon=5,
+            horizon=3,
             control_freq=40,
-            reward_shaping=True,
+            reward_shaping=False,
             use_cube_shift_left_reward=True,
             use_reaching_reward=True,
             use_grasping_reward=True,
+            placement_initializer_kwargs=dict(
+                name="ObjectSampler",
+                x_range=[-0.165, 0.165],
+                y_range=[0.035, 0.165],
+                rotation=0,
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=(0, 0, 0.8),
+                z_offset=0.12,
+            ),
             reset_action_space_kwargs=dict(
                 control_mode="primitives",
                 action_scale=0.3,
-                max_path_length=5,
+                max_path_length=3,
                 camera_settings={
                     "distance": 1.161288187018284,
                     "lookat": [-0.25241684, 0.11155699, 0.49791818],
                     "azimuth": 159.43359375,
                     "elevation": -53.20312497206032,
                 },
-                workspace_low=(-0.17, -0.075, 0.95),
-                workspace_high=(0.17, 0.17, 0.99),
+                workspace_low=(-0.17, -0.17, 0.95),
+                workspace_high=(0.17, 0.17, 1.05),
                 reward_type="dense",
+                fixed_schema=True,
             ),
             usage_kwargs=dict(
                 use_dm_backend=True,
-                max_path_length=5,
+                max_path_length=3,
             ),
             image_kwargs=dict(),
         ),
@@ -128,7 +139,7 @@ if __name__ == "__main__":
         ),
         trainer_kwargs=dict(
             adam_eps=1e-5,
-            discount=0.8,
+            discount=2/3,
             lam=0.95,
             forward_kl=False,
             free_nats=1.0,
@@ -144,7 +155,7 @@ if __name__ == "__main__":
             actor_entropy_loss_schedule="1e-4",
             target_update_period=100,
             detach_rewards=False,
-            imagination_horizon=5,
+            imagination_horizon=3,
         ),
         num_expl_envs=5 * 2,
         num_eval_envs=1,
@@ -154,14 +165,25 @@ if __name__ == "__main__":
     )
 
     search_space = {
-        "env_kwargs.use_cube_shift_left_reward": [True, False],
-        "env_kwargs.use_reaching_reward": [True, False],
-        "env_kwargs.use_grasping_reward": [True, False],
+        # "env_kwargs.use_cube_shift_left_reward": [True, False],
+        # "env_kwargs.use_reaching_reward": [True, False],
+        # "env_kwargs.use_grasping_reward": [True, False],
         "env_kwargs.reset_action_space_kwargs.fixed_schema": [True],
-        # "actor_kwargs.dist": ["trunc_normal"],
-        # "trainer_kwargs.discount": [0.99, 0.8],
-        # "trainer_kwargs.use_pred_discount": [True, False],
-        # "trainer_kwargs.policy_gradient_loss_scale": [1.0, 0.0],
+        "env_kwargs.reset_action_space_kwargs.action_scale": [1, 0.3],
+        "actor_kwargs.dist": ["trunc_normal"],
+        "trainer_kwargs.discount": [0.99, 2/3],
+        "trainer_kwargs.use_pred_discount": [True, False],
+        "trainer_kwargs.policy_gradient_loss_scale": [1.0, 0.0],
+        "env_kwargs.placement_initializer_kwargs.x_range": [
+            (0, 0.165),
+            (-0.165, 0),
+            (0, 0),
+            (0, 0.1),
+        ],
+        "env_kwargs.placement_initializer_kwargs.y_range": [
+            (0.035, 0.1),
+            (0.035, 0.035),
+        ],
     }
     sweeper = hyp.DeterministicHyperparameterSweeper(
         search_space,

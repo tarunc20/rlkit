@@ -49,8 +49,8 @@ if __name__ == "__main__":
             use_grasping_reward=False,
             placement_initializer_kwargs=dict(
                 name="ObjectSampler",
-                x_range=[-0.165, 0.165],
-                y_range=[0.035, 0.165],
+                x_range=[0.035, 0.07],
+                y_range=[0.035, 0.07],
                 rotation=0,
                 ensure_object_boundary_in_range=False,
                 ensure_valid_placement=True,
