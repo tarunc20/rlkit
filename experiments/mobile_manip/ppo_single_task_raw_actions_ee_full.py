@@ -64,24 +64,21 @@ if __name__ == "__main__":
 
     search_space = {
         "env_kwargs.arm_controller": [
-            # "ArmRelPosAction",
-            # "ArmEEAction",
-            # "ArmFullEEAction",
-            "ArmRAPSAction",
+            "ArmFullEEAction",
         ],
         "env_kwargs.grip_controller": [
-            "SuctionGraspAction",
-            # "MagicGraspAction",
+            "MagicGraspAction",
         ],
         "env_kwargs.gym_obs_keys": [
-            ('joint', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position', 'ee_pos'),
-            # ('ee_pos', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
+            ('ee_pos', 'ee_quat', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
         ],
-        "env_kwargs.max_episode_steps": [100],
-        "env_kwargs.ee_ctrl_lim":[0.15],
+        "env_kwargs.max_episode_steps": [200],
+        "env_kwargs.ee_ctrl_lim":[
+            0.015,
+        ],
         "env_kwargs.data_path":[
-            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
-            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
+            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
         ],
         "env_name":["pick"]
     }
