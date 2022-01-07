@@ -70,11 +70,15 @@ if __name__ == "__main__":
             "MagicGraspAction",
         ],
         "env_kwargs.gym_obs_keys": [
+            ('ee_pos', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
             ('ee_pos', 'ee_quat', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
         ],
         "env_kwargs.max_episode_steps": [200],
         "env_kwargs.ee_ctrl_lim":[
             0.015,
+        ],
+        "env_kwargs.ee_ctrl_quat_lim":[
+            .03,
         ],
         "env_kwargs.data_path":[
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
@@ -86,7 +90,10 @@ if __name__ == "__main__":
         search_space,
         default_parameters=variant,
     )
+    skip_wait=True
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
+        if exp_id % 2 == 1:
+            skip_wait=False
         for _ in range(args.num_seeds):
             seed = random.randint(0, 100000)
             variant["seed"] = seed
@@ -103,4 +110,5 @@ if __name__ == "__main__":
                 )[:-1],
                 seed=seed,
                 exp_id=exp_id,
+                skip_wait=skip_wait,
             )

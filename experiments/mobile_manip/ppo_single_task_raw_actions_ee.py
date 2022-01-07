@@ -76,6 +76,9 @@ if __name__ == "__main__":
         "env_kwargs.ee_ctrl_lim":[
             0.015,
         ],
+        "env_kwargs.ee_ctrl_quat_lim":[
+            0.015,
+        ],
         "env_kwargs.data_path":[
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
             'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
