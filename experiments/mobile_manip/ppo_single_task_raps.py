@@ -15,6 +15,24 @@ def experiment(variant):
 
     experiment(variant)
 
+def dummy_exp(variant):
+    for _ in range(variant['num_seeds']):
+        seed = random.randint(0, 100000)
+        variant["seed"] = int(seed)
+        run_experiment(
+            experiment,
+            exp_prefix=exp_prefix_,
+            mode='here_no_doodad',
+            variant=variant,
+            use_gpu=True,
+            snapshot_mode="none",
+            python_cmd=subprocess.check_output("which python", shell=True).decode(
+                "utf-8"
+            )[:-1],
+            seed=seed,
+            exp_id=int(variant['exp_id']),
+            skip_wait=not variant['debug'],
+        )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -47,6 +65,7 @@ if __name__ == "__main__":
         env_kwargs=dict(
             config='configs/tasks/rearrange/pick.yaml',
             arm_controller='ArmRelPosAction',
+            arm_type='ArmRAPSAction',
             grip_controller='SuctionGraspAction',
             max_episode_steps=200,
             data_path='data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz'
@@ -91,27 +110,21 @@ if __name__ == "__main__":
         search_space,
         default_parameters=variant,
     )
-    skip_wait=True
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        if exp_id % 2 == 1:
-            skip_wait=False
-        if args.debug:
-            skip_wait=False
-        for _ in range(args.num_seeds):
-            seed = random.randint(0, 100000)
-            variant["seed"] = seed
-            variant["exp_id"] = exp_id
-            run_experiment(
-                experiment,
-                exp_prefix=args.exp_prefix,
-                mode=args.mode,
-                variant=variant,
-                use_gpu=True,
-                snapshot_mode="none",
-                python_cmd=subprocess.check_output("which python", shell=True).decode(
-                    "utf-8"
-                )[:-1],
-                seed=seed,
-                exp_id=exp_id,
-                skip_wait=skip_wait,
-            )
+        variant['num_seeds'] = args.num_seeds
+        variant['exp_id'] = exp_id
+        variant['debug'] = args.debug
+        global exp_prefix_
+        exp_prefix_ = args.exp_prefix
+        run_experiment(
+            dummy_exp,
+            exp_prefix='test',
+            mode=args.mode,
+            variant=variant,
+            use_gpu=True,
+            snapshot_mode="none",
+            python_cmd=subprocess.check_output("which python", shell=True).decode(
+                "utf-8"
+            )[:-1],
+            exp_id=exp_id,
+        )

@@ -15,6 +15,24 @@ def experiment(variant):
 
     experiment(variant)
 
+def dummy_exp(variant):
+    for _ in range(variant['num_seeds']):
+        seed = random.randint(0, 100000)
+        variant["seed"] = int(seed)
+        run_experiment(
+            experiment,
+            exp_prefix=exp_prefix_,
+            mode='here_no_doodad',
+            variant=variant,
+            use_gpu=True,
+            snapshot_mode="none",
+            python_cmd=subprocess.check_output("which python", shell=True).decode(
+                "utf-8"
+            )[:-1],
+            seed=seed,
+            exp_id=int(variant['exp_id']),
+            skip_wait=not variant['debug'],
+        )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -52,7 +70,7 @@ if __name__ == "__main__":
             data_path='data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz'
         ),
         actor_kwargs=dict(recurrent=False, hidden_size=64, hidden_activation="tanh"),
-        num_processes=10,
+        num_processes=1,
         num_env_steps=int(1e6),
         num_steps=2048 // 10,
         log_interval=1,
@@ -87,20 +105,20 @@ if __name__ == "__main__":
         default_parameters=variant,
     )
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        for _ in range(args.num_seeds):
-            seed = random.randint(0, 100000)
-            variant["seed"] = seed
-            variant["exp_id"] = exp_id
-            run_experiment(
-                experiment,
-                exp_prefix=args.exp_prefix,
-                mode=args.mode,
-                variant=variant,
-                use_gpu=True,
-                snapshot_mode="none",
-                python_cmd=subprocess.check_output("which python", shell=True).decode(
-                    "utf-8"
-                )[:-1],
-                seed=seed,
-                exp_id=exp_id,
-            )
+        variant['num_seeds'] = args.num_seeds
+        variant['exp_id'] = exp_id
+        variant['debug'] = args.debug
+        global exp_prefix_
+        exp_prefix_ = args.exp_prefix
+        run_experiment(
+            dummy_exp,
+            exp_prefix='test',
+            mode=args.mode,
+            variant=variant,
+            use_gpu=True,
+            snapshot_mode="none",
+            python_cmd=subprocess.check_output("which python", shell=True).decode(
+                "utf-8"
+            )[:-1],
+            exp_id=exp_id,
+        )
