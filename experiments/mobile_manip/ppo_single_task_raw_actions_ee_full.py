@@ -67,10 +67,10 @@ if __name__ == "__main__":
             # ('ee_pos', 'ee_quat', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
         ],
         "env_kwargs.ee_ctrl_lim":[
-            0.015, .01, .001, .005,
+            .005,
         ],
         "env_kwargs.ee_ctrl_quat_lim":[
-            .001, .005
+            .001,
         ],
         "env_kwargs.data_path":[
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',

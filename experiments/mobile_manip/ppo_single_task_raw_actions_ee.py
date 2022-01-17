@@ -63,7 +63,7 @@ if __name__ == "__main__":
         "env_kwargs.ee_ctrl_lim":[
             0.015, .01, .005, .001,
         ],
-        "env_kwargs.max_episode_steps":[100, 200, 300, 500],
+        # "env_kwargs.max_episode_steps":[100, 200, 300, 500],
         "env_kwargs.data_path":[
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
             'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',

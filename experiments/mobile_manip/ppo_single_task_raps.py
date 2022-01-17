@@ -55,9 +55,8 @@ if __name__ == "__main__":
             goto_pose_iterations=50,
         ),
         actor_kwargs=dict(recurrent=False, hidden_size=64, hidden_activation="tanh"),
-        num_processes=10,
-        num_env_steps=int(1e5),
-        num_steps=2048 // 10,
+        num_processes=16,
+        num_env_steps=int(1e7),
         log_interval=1,
         eval_interval=1,
         env_suite="habitat",
@@ -72,9 +71,15 @@ if __name__ == "__main__":
         "env_kwargs.ee_ctrl_quat_lim":[
             0.015,
         ],
+        "num_processes":[16],
         "env_kwargs.data_path":[
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
-            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyreceptacle.json.gz',
+            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyreceptacle_1000.json.gz',
+            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyobject_1000.json.gz',
+            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickeverything_1000.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/train/train_counter_L_analysis_5000_500.json.gz',
         ],
         "env_name":["pick"]
     }
@@ -88,6 +93,7 @@ if __name__ == "__main__":
         variant['debug'] = args.debug
         global exp_prefix_
         exp_prefix_ = args.exp_prefix
+        variant['num_steps'] = 2048 // variant['num_processes']
         variant['python_cmd'] = subprocess.check_output("which python", shell=True).decode(
                 "utf-8"
             )[:-1]
