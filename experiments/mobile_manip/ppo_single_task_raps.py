@@ -50,15 +50,15 @@ if __name__ == "__main__":
             grip_controller='MagicGraspAction',
             max_episode_steps=5,
             data_path='data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
-            gym_obs_keys=('ee_pos', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
+            gym_obs_keys=('ee_pos', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position', 'robot_head_depth'),
             action_scale=0.5,
             goto_pose_iterations=50,
         ),
-        actor_kwargs=dict(recurrent=False, hidden_size=64, hidden_activation="tanh"),
+        actor_kwargs=dict(recurrent=True, hidden_size=64, hidden_activation="tanh"),
         num_processes=16,
         num_env_steps=int(1e7),
-        log_interval=1,
-        eval_interval=1,
+        log_interval=10,
+        eval_interval=10,
         env_suite="habitat",
         use_linear_lr_decay=False,
         use_raw_actions=False,
@@ -72,13 +72,15 @@ if __name__ == "__main__":
             0.015,
         ],
         "num_processes":[16],
+        "actor_kwargs.recurrent":[False],
+        "base_type":['MLPCNN'],
         "env_kwargs.data_path":[
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
-            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyreceptacle.json.gz',
-            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyreceptacle_1000.json.gz',
-            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyobject_1000.json.gz',
-            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickeverything_1000.json.gz',
+            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyreceptacle.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyreceptacle_1000.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickanyobject_1000.json.gz',
+            # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pickeverything_1000.json.gz',
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/train/train_counter_L_analysis_5000_500.json.gz',
         ],
         "env_name":["pick"]
@@ -94,6 +96,8 @@ if __name__ == "__main__":
         global exp_prefix_
         exp_prefix_ = args.exp_prefix
         variant['num_steps'] = 2048 // variant['num_processes']
+        if args.debug:
+            variant['num_steps'] = 5
         variant['python_cmd'] = subprocess.check_output("which python", shell=True).decode(
                 "utf-8"
             )[:-1]
