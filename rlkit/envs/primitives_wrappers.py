@@ -984,13 +984,15 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         self.num_primitives = len(self.primitive_name_to_func)
         self.control_mode = control_mode
         self.fixed_schema = fixed_schema
-        self.schema = {0:0, 1:1, 2:2, 3:4, 4:8}
+        self.schema = {0: 0, 1: 1, 2: 2, 3: 4, 4: 8}
 
         if self.control_mode == "primitives":
             if self.fixed_schema:
-                action_space_low =  -1 * np.ones(self.max_arg_len)
+                action_space_low = -1 * np.ones(self.max_arg_len)
                 action_space_high = np.ones(self.max_arg_len)
-                self.action_space = Box(action_space_low, action_space_high, dtype=np.float32)
+                self.action_space = Box(
+                    action_space_low, action_space_high, dtype=np.float32
+                )
             else:
                 action_space_low = -1 * np.ones(self.max_arg_len)
                 action_space_high = np.ones(self.max_arg_len)
@@ -1256,7 +1258,7 @@ class RobosuitePrimitives(DMControlBackendMetaworldRobosuiteEnv):
         a = a * self.action_scale
         if self.fixed_schema:
             primitive_args = a
-            primitive_idx = self.schema[self.timestep%5]
+            primitive_idx = self.schema[self.timestep % 5]
         else:
             primitive_idx, primitive_args = (
                 np.argmax(a[: self.num_primitives]),

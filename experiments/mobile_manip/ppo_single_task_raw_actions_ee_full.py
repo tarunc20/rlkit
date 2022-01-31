@@ -15,6 +15,7 @@ def experiment(variant):
 
     experiment(variant)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_prefix", type=str, default="test")
@@ -44,11 +45,11 @@ if __name__ == "__main__":
             use_proper_time_limits=True,
         ),
         env_kwargs=dict(
-            config='configs/tasks/rearrange/pick.yaml',
-            arm_controller='ArmFullEEAction',
-            grip_controller='MagicGraspAction',
+            config="configs/tasks/rearrange/pick.yaml",
+            arm_controller="ArmFullEEAction",
+            grip_controller="MagicGraspAction",
             max_episode_steps=200,
-            data_path='data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz'
+            data_path="data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz",
         ),
         actor_kwargs=dict(recurrent=False, hidden_size=64, hidden_activation="tanh"),
         num_processes=10,
@@ -63,35 +64,40 @@ if __name__ == "__main__":
 
     search_space = {
         "env_kwargs.gym_obs_keys": [
-            ('ee_pos', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
+            (
+                "ee_pos",
+                "is_holding",
+                "obj_goal_pos_sensor",
+                "relative_resting_position",
+            ),
             # ('ee_pos', 'ee_quat', 'is_holding', 'obj_goal_pos_sensor', 'relative_resting_position'),
         ],
-        "env_kwargs.ee_ctrl_lim":[
-            .005,
+        "env_kwargs.ee_ctrl_lim": [
+            0.005,
         ],
-        "env_kwargs.ee_ctrl_quat_lim":[
-            .001,
+        "env_kwargs.ee_ctrl_quat_lim": [
+            0.001,
         ],
-        "env_kwargs.data_path":[
+        "env_kwargs.data_path": [
             # 'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick.json.gz',
-            'data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz',
+            "data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0/pick_andrew2.json.gz",
         ],
-        "env_name":["pick"]
+        "env_name": ["pick"],
     }
     sweeper = hyp.DeterministicHyperparameterSweeper(
         search_space,
         default_parameters=variant,
     )
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        variant['num_seeds'] = args.num_seeds
-        variant['exp_id'] = exp_id
-        variant['debug'] = args.debug
+        variant["num_seeds"] = args.num_seeds
+        variant["exp_id"] = exp_id
+        variant["debug"] = args.debug
         global exp_prefix_
         exp_prefix_ = args.exp_prefix
-        variant['python_cmd'] = subprocess.check_output("which python", shell=True).decode(
-                "utf-8"
-            )[:-1]
-        for _ in range(variant['num_seeds']):
+        variant["python_cmd"] = subprocess.check_output(
+            "which python", shell=True
+        ).decode("utf-8")[:-1]
+        for _ in range(variant["num_seeds"]):
             seed = random.randint(0, 100000)
             variant["seed"] = int(seed)
             run_experiment(
@@ -101,8 +107,8 @@ if __name__ == "__main__":
                 variant=variant,
                 use_gpu=True,
                 snapshot_mode="none",
-                python_cmd=variant['python_cmd'],
+                python_cmd=variant["python_cmd"],
                 seed=seed,
-                exp_id=int(variant['exp_id']),
+                exp_id=int(variant["exp_id"]),
                 skip_wait=False,
             )
