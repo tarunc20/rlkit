@@ -2,6 +2,7 @@ from rlkit.data_management.simple_replay_buffer import SimpleReplayBuffer
 from rlkit.envs.env_utils import get_dim
 
 import warnings
+import numpy as np
 
 class EpisodeReplayBuffer(SimpleReplayBuffer):
     def __init__(
@@ -37,7 +38,7 @@ class EpisodeReplayBuffer(SimpleReplayBuffer):
         )
 
         self._terminals = np.zeros(
-            max_replay_buffer_size, max_path_length, 1)
+            (max_replay_buffer_size, max_path_length, 1)
         )
         
         self._replace = replace
@@ -57,7 +58,7 @@ class EpisodeReplayBuffer(SimpleReplayBuffer):
     
     def _advance(self):
         # TODO: Find out when _top goes beyond replay buffer size, but size does not
-        self._top = (self._top + self.env.n_envs) % self._max_replay_buffer_size:
+        self._top = (self._top + self.env.n_envs) % self._max_replay_buffer_size
         
         if self.size < self._max_replay_buffer_size:
             self._size += self.env.n_envs
