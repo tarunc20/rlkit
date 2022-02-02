@@ -72,11 +72,11 @@ class VectorizedMdpPathCollector(PathCollector):
                         log_paths[count][key] = path[key][1:, env_idx]
 
                     # TODO: Figure out what each dimension means
-                    log_paths[count]["agent_info"] = [{}] * path["rewards"][
+                    log_paths[count]["agent_infos"] = [{}] * path["rewards"][
                         1:, env_idx
                     ].shape[0]
 
-                    env_info_key = "env_info"
+                    env_info_key = "env_infos"
                     log_paths[count][env_info_key] = [{}] * path["rewards"][
                         1:, env_idx
                     ].shape[0]
