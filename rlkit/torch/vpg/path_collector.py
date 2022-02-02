@@ -2,7 +2,7 @@ from collections import OrderedDict, deque
 
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.samplers.data_collector.base import PathCollector
-
+from rlkit.torch.vpg.rollout_functions import vec_rollout
 
 class VectorizedMdpPathCollector(PathCollector):
     def __init__(
@@ -58,7 +58,7 @@ class VectorizedMdpPathCollector(PathCollector):
 
             self._num_paths_total += len(paths) * self._env.n_envs
             self._num_steps_total += num_steps_collected
-            log_paths = [{} for _ in range(len(paths) * self_env.n_envs)]
+            log_paths = [{} for _ in range(len(paths) * self.env.n_envs)]
 
             count = 0
             for path in paths:

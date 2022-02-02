@@ -1,5 +1,5 @@
 import copy
-
+import numpy as np
 def vec_rollout(
     env,
     agent,
@@ -14,7 +14,7 @@ def vec_rollout(
 
     observations = [policy_obs]
     rewards = [np.zeros(num_envs)]
-    actions = [np.zeros((num_envs, env_actions_space.low.size))]
+    actions = [np.zeros((num_envs, env.actions_space.low.size))]
     terminals = [[False] * num_envs]
     agent_infos = [{}]
     env_infos = [{}]
@@ -44,7 +44,7 @@ def vec_rollout(
     env_info_final = {}
 
     for info in env_infos[1:]:
-        for key, vlaue in info.items():
+        for key, value in info.items():
             if key not in env_info_final:
                 env_info_final[key] = []
             
