@@ -30,45 +30,49 @@ class VPGTrainer(TorchTrainer, LossFunction):
         self.discount = discount
         self.reward_scale = reward_scale
 
-def train_from_torch(self, batch):
-    gt.blank_stamp()
-    
-    stats = self.train_networks(
+    def train_from_torch(self, batch):
+        gt.blank_stamp()
+        
+        stats = self.train_networks(
+            batch,
+            skip_statistics=not self._need_to_update_eval_statistics
+        )
+
+        self._n_train_steps_total += 1
+        
+        if self._need_to_update_eval_statistics:
+            self.eval_statistics = stats
+            self._need_to_update_eval_statistics = False
+
+    @property
+    def networks(self):
+        return [self.policy]
+
+    @property
+    def optimizers(self):
+        return [self.policy]
+
+    def compute_loss(
+        self, 
         batch,
-        skip_statistics=not self._need_to_update_eval_statistics
-    )
+        skip_statistics=False
+    ):
+        # Transitions
+        rewards = batch["rewards"]
+        obs = batch["observations"]
+        actions = batch["actions"]
+        next_obs = batch["next_observations"]
 
-    self._n_train_steps_total += 1
-    
-    if self._need_to_update_eval_statistics:
-        self.eval_statistics = stats
-        self._need_to_update_eval_statistics = False
+        return 0
 
-@property
-def networks(self):
-    return [self.policy]
+    def train_networks(
+        self,
+        batch,
+        skip_statistics=False
+    )-> LossStatistics:
+        #TODO Figure out how to deal with the batches
+        #TODO Call the loss function on the returns
+        #TODO Backprop on the returns
 
-@property
-def optimizers(self):
-    return [self.policy]
-
-def compute_loss(
-    self, 
-    batch,
-    skip_statistics=False
-):
-    # Transitions
-    rewards = batch["rewards"]
-    obs = batch["observations"]
-    actions = batch["actions"]
-    next_obs = batch["next_observations"]
-
-def train_networks(
-    self,
-    batch,
-    skip_statistics=False
-)-> LossStatistics:
-    #TODO Figure out how to deal with the batches
-    #TODO Call the loss function on the returns
-    #TODO Backprop on the returns
-    pass
+        self.compute_loss(batch, False)
+        return None
