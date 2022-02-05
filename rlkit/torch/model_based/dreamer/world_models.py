@@ -13,9 +13,9 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 import rlkit.torch.pytorch_util as ptu
-from rlkit.torch.model_based.dreamer.actor_models import OneHotDist
 from rlkit.torch.model_based.dreamer.conv_networks import CNN, DCNN
 from rlkit.torch.model_based.dreamer.mlp import Mlp
+from rlkit.torch.model_based.dreamer.utils import get_indexed_arr_from_batch_indices
 
 
 class WorldModel(jit.ScriptModule):
@@ -537,6 +537,7 @@ class LowlevelRAPSWorldModel(WorldModel):
         embed = self.encode(obs)
         embedding_size = embed.shape[1]
         embed = embed.reshape(original_batch_size, obs_path_len, embedding_size)
+
         if obs_path_len < path_length:
             idxs = raps_obs_indices.tolist()
         else:
@@ -545,6 +546,7 @@ class LowlevelRAPSWorldModel(WorldModel):
                 path_length,
                 1,
             ).tolist()
+
         post, prior, low_level_action_preds = self.forward_batch(
             path_length,
             action,
@@ -568,14 +570,14 @@ class LowlevelRAPSWorldModel(WorldModel):
             feat = self.get_features(prior)
         else:
             feat = self.get_features(post)
+
         raps_obs_feat = feat[:, raps_obs_indices]
         raps_obs_feat = raps_obs_feat.reshape(-1, raps_obs_feat.shape[-1])
 
         if batch_indices.shape != raps_obs_indices.shape:
-            batch_size = batch_indices.shape[0]
-            idxs = np.arange(batch_size).reshape(-1, 1)
-            feat = feat[idxs, batch_indices]
-            feat = feat.reshape(-1, feat.shape[-1])
+            feat = get_indexed_arr_from_batch_indices(feat, batch_indices).reshape(
+                -1, feat.shape[-1]
+            )
         else:
             feat = feat[:, batch_indices]
 
@@ -585,12 +587,20 @@ class LowlevelRAPSWorldModel(WorldModel):
 
         if batch_indices.shape != raps_obs_indices.shape:
             post_dist = self.get_dist(
-                post["mean"][idxs, batch_indices].reshape(-1, post["mean"].shape[-1]),
-                post["std"][idxs, batch_indices].reshape(-1, post["std"].shape[-1]),
+                get_indexed_arr_from_batch_indices(post["mean"], batch_indices).reshape(
+                    -1, post["mean"].shape[-1]
+                ),
+                get_indexed_arr_from_batch_indices(post["std"], batch_indices).reshape(
+                    -1, post["std"].shape[-1]
+                ),
             )
             prior_dist = self.get_dist(
-                prior["mean"][idxs, batch_indices].reshape(-1, prior["mean"].shape[-1]),
-                prior["std"][idxs, batch_indices].reshape(-1, prior["std"].shape[-1]),
+                get_indexed_arr_from_batch_indices(
+                    prior["mean"], batch_indices
+                ).reshape(-1, prior["mean"].shape[-1]),
+                get_indexed_arr_from_batch_indices(prior["std"], batch_indices).reshape(
+                    -1, prior["std"].shape[-1]
+                ),
             )
         else:
             post_dist = self.get_dist(
@@ -647,7 +657,7 @@ class LowlevelRAPSWorldModel(WorldModel):
         :param use_true_actions: if true, use environment low level actions, otherwise use primitive model predictions
         :param use_obs: if true, take obs_steps, otherwise take action_steps
         """
-        low_level_action_pred = []
+        low_level_action_preds = []
         new_state = state
         for idx in range(0, num_low_level_actions_per_primitive):
             phase = (
@@ -660,7 +670,7 @@ class LowlevelRAPSWorldModel(WorldModel):
                 [hl, self.get_features(new_state)],
                 dim=1,
             )
-            a = self.primitive_model(inp)
+            low_level_action_pred = self.primitive_model(inp)
             if use_obs:
                 embed = self.encode(observation[:, idx])
                 if use_raps_obs:
@@ -670,28 +680,34 @@ class LowlevelRAPSWorldModel(WorldModel):
                                 new_state, low_level_action[:, idx], embed
                             )
                         else:
-                            new_state, _ = self.obs_step(new_state, a, embed)
+                            new_state, _ = self.obs_step(
+                                new_state, low_level_action_pred, embed
+                            )
                     else:
                         if use_true_actions:
                             new_state = self.action_step(
                                 new_state, low_level_action[:, idx]
                             )
                         else:
-                            new_state = self.action_step(new_state, a)
+                            new_state = self.action_step(
+                                new_state, low_level_action_pred
+                            )
                 else:
                     if use_true_actions:
                         new_state, _ = self.obs_step(
                             new_state, low_level_action[:, idx], embed
                         )
                     else:
-                        new_state, _ = self.obs_step(new_state, a, embed)
+                        new_state, _ = self.obs_step(
+                            new_state, low_level_action_pred, embed
+                        )
             else:
                 if use_true_actions:
                     new_state = self.action_step(new_state, low_level_action[:, idx])
                 else:
-                    new_state = self.action_step(new_state, a)
-            low_level_action_pred.append(a)
-        return new_state, low_level_action_pred
+                    new_state = self.action_step(new_state, low_level_action_pred)
+            low_level_action_preds.append(low_level_action_pred)
+        return new_state, low_level_action_preds
 
 
 class StateConcatObsWorldModel(WorldModel):
