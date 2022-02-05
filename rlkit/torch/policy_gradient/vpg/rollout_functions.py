@@ -39,7 +39,7 @@ def vec_rollout(
     actions = np.array(actions)
 
     if len(actions.shape) == 1:
-        actoins = np.expand_dims(actions, 1)
+        actions = np.expand_dims(actions, 1)
     
     env_info_final = {}
 

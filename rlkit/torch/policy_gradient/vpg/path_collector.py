@@ -2,7 +2,7 @@ from collections import OrderedDict, deque
 
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.samplers.data_collector.base import PathCollector
-from rlkit.torch.vpg.rollout_functions import vec_rollout
+from rlkit.torch.policy_gradient.vpg import vec_rollout
 
 class VectorizedMdpPathCollector(PathCollector):
     def __init__(

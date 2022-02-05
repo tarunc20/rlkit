@@ -43,3 +43,13 @@ def compute_loss(
     obs = batch["observations"]
     actions = batch["actions"]
     next_obs = batch["next_observations"]
+
+def train_networks(
+    self,
+    batch,
+    skip_statistics=False
+)-> LossStatistics:
+    #TODO Figure out how to deal with the batches
+    #TODO Call the loss function on the returns
+    #TODO Backprop on the returns
+    pass
