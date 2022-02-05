@@ -22,9 +22,8 @@ class VectorizedMdpPathCollector(PathCollector):
         self._epoch_paths = deque(maxlen=self._max_num_epoch_paths_saved)
         self._rollout_fn = rollout_fn
 
-
         self._num_steps_total = 0
-        self._num_path_total = 0
+        self._num_paths_total = 0
 
         self._save_env_in_snapshot = save_env_in_snapshot
         self.env_params = env_params
