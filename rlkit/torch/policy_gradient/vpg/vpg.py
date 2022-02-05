@@ -26,12 +26,31 @@ class VPGTrainer(TorchTrainer, LossFunction):
             lr=policy_lr
         )
 
+        self._need_to_update_eval_statistics = False
         self.discount = discount
         self.reward_scale = reward_scale
 
 def train_from_torch(self, batch):
     gt.blank_stamp()
-    pass
+    
+    stats = self.train_networks(
+        batch,
+        skip_statistics=not self._need_to_update_eval_statistics
+    )
+
+    self._n_train_steps_total += 1
+    
+    if self._need_to_update_eval_statistics:
+        self.eval_statistics = stats
+        self._need_to_update_eval_statistics = False
+
+@property
+def networks(self):
+    return [self.policy]
+
+@property
+def optimizers(self):
+    return [self.policy]
 
 def compute_loss(
     self, 
