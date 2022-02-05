@@ -3,7 +3,6 @@ from enum import unique
 import time
 from typing import OrderedDict
 import gtimer as gt
-from matplotlib.collections import PathCollection
 from pyparsing import with_attribute
 
 from rlkit.core import eval_util, logger
@@ -29,17 +28,13 @@ class BaseRLAlgorithm(metaclass=abc.ABCMeta):
     def __init__(
         self,
         trainer,
-        exploration_env,
-        evalutation_env,
-        exploration_data_collector: DataCollector,
-        evaluation_data_collector: DataCollector,
+        env,
+        data_collector: DataCollector,
         replay_buffer: ReplayBuffer
     ):
-        self.trainer = self.trainer
-        self.expl_env = exploration_env
-        self.eval_env = evalutation_env
-        self.expl_data_collector = exploration_data_collector
-        self.eval_data_collector = evaluation_data_collector
+        self.trainer = trainer
+        self.env = env
+        self.data_collector = data_collector
         self.replay_buffer = replay_buffer
         self._start_epoch= 0
 
@@ -152,10 +147,8 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
     def __init__(
         self,
         trainer,
-        exploration_env, 
-        evaluation_env,
-        exploration_data_collector: PathCollector,
-        evaluation_data_collector: PathCollector,
+        env,
+        data_collector: PathCollector,
         replay_buffer: ReplayBuffer,
         batch_size,
         max_path_length,
@@ -172,10 +165,8 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
     ):
         super().__init__(
             trainer,
-            exploration_env,
-            evaluation_env,
-            exploration_data_collector,
-            evaluation_data_collector,
+            env,
+            data_collector,
             replay_buffer
         )
 
@@ -193,7 +184,7 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         else:
             self.pretrain_policy = None
         
-        self.num_pretrain_steps = None
+        self.num_pretrain_steps = num_pretrain_steps
         self.total_train_expl_time = 0
         self.eval_buffer = eval_buffer
 
@@ -202,7 +193,7 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         st = time.time()
 
         if self.min_num_steps_before_training > 0:
-            init_expl_paths = self.expl_data_collector.collect_new_paths(
+            init_expl_paths = self.data_collector.collect_new_paths(
                 self.max_path_length,
                 self.min_num_steps_before_training,
                 runtime_policy=self.pretrain_policy
@@ -212,11 +203,12 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 init_expl_paths
             )
 
-            self.expl_data_collector.end_epoch(-1)
+            self.data_collector.end_epoch(-1)
 
-        self.total_train_expl_time += time.time() - st
+        self.total_train_time += time.time() - st
         self.trainer.buffer = self.replay_buffer
 
+        #TODO: Do I still need this?
         self.training_mode(True)
         for _ in range(self.num_pretrain_steps):
             train_data = self.replay_buffer.random_batch(self.batch_size)
@@ -227,38 +219,26 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             range(self._start_epoch, self.num_epochs),
             save_itrs=True
         ):
-            self.eval_data_collector.collect_new_paths(
-                self.max_path_length,
-                self.num_eval_steps_per_epoch
-            )
-
-            gt.stamp("evaluation sampling")
             st = time.time()
 
             for _ in range(self.num_train_loops_per_epoch):
-                new_expl_paths = self.expl_data_collector.collect_new_paths(
+                new_paths = self.data_collector.collect_new_paths(
                     self.max_path_length,
                     self.num_expl_steps_per_train_loop
                 )
 
-                gt.stamp('exploration sampling', unique=False)
+                gt.stamp('environment sampling', unique=False)
 
-                self.replay_buffer.add_paths(new_expl_paths)
+                self.replay_buffer.add_paths(new_paths)
                 gt.stamp("data storing", unique=False)
 
                 self.training_mode(True)
                 for train_step in range(self.num_trains_per_train_loop):
                     train_data = self.replay_buffer.random_batch(self.batch_size)
-                    self.train.train(train_data)
+                    self.trainer.train(train_data)
                 
                 gt.stamp('training', unique=False)
                 self.training_mode(False)
-
-            if self.eval_buffer:
-                eval_data = self.eval_buffer.random_batch(self.batch_size)
-                self.trainer.evaluate(eval_data, buffer_data=False)
-                eval_data = self.replay_buffer.random_batch(self.batch_size)
-                self.trainer.evaluate(eval_data, buffer_data=True)
             
             self.total_train_expl_time += time.time() - st
 
