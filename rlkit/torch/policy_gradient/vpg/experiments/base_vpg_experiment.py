@@ -1,3 +1,6 @@
+from os import replace
+from rlkit.torch.policy_gradient.vpg.episode_replay_buffer import EpisodeReplayBuffer
+from rlkit.torch.policy_gradient.vpg.path_collector import VectorizedMdpPathCollector
 import rlkit.torch.pytorch_util as ptu
 from gym.envs.mujoco import HalfCheetahEnv
 from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
@@ -12,10 +15,9 @@ from rlkit.torch.policy_gradient.rl_algorithm import TorchBatchRLAlgorithm
 
 def experiment(variant):
     
-    expl_env = NormalizedBoxEnv(HalfCheetahEnv())
-    eval_env = NormalizedBoxEnv(HalfCheetahEnv())
-    obs_dim = expl_env.observation_space.low.size
-    action_dim = expl_env.action_space.low.size
+    env = NormalizedBoxEnv(HalfCheetahEnv())
+    obs_dim = env.observation_space.low.size
+    action_dim = env.action_space.low.size
 
     layer_size = variant["layer_size"]
 
@@ -25,33 +27,31 @@ def experiment(variant):
         hidden_sizes=[layer_size, layer_size]        
     )
 
-    eval_path_collector = MdpPathCollector(
-        eval_env,
+    
+
+    path_collector = VectorizedMdpPathCollector(
+        env,
         policy
     )
 
-    expl_path_collector = MdpPathCollector(
-        expl_env,
-        policy
-    )
-
-    replay_buffer = EnvReplayBuffer(
-        variant["replay_buffer_size"],
-        expl_env
+    replay_buffer = EpisodeReplayBuffer(
+        max_replay_buffer_size=variant["replay_buffer_size"],
+        env=env,
+        max_path_length=501,
+        replace=True,
+        use_batch_length=False
     )
 
     trainer = VPGTrainer(
-        env=eval_env,
+        env=env,
         policy=policy,
         **variant["trainer_kwargs"]
     )
 
     algorithm = TorchBatchRLAlgorithm(
         trainer=trainer,
-        exploration_env=expl_env,
-        evaluation_env=eval_env,
-        exploration_data_collector=expl_path_collector,
-        evaluation_data_collector=eval_path_collector,
+        env=env,
+        exploration_data_collector=path_collector,
         replay_buffer=replay_buffer,
         **variant["algorithm_kwargs"]
     )
