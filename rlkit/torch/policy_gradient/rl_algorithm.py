@@ -97,6 +97,25 @@ class BaseRLAlgorithm(metaclass=abc.ABCMeta):
                 prefix="exploration/"
             )
         
+        # Evaluation
+        logger.record_dict(
+            self.eval_data_collector.get_diagnostics(),
+            prefix="evaluation/"
+        )
+
+        eval_paths = self.eval_data_collector.get_epoch_paths()
+        
+        if hasattr(self.eval_env, "get_diagnostics"):
+            logger.record_dict(
+                self.eval_env.get_diagnostics(eval_paths),
+                prefix="evaluation/",
+            )
+        
+        logger.record_dict(
+            eval_util.get_generic_path_information(eval_paths),
+            prefix="evaluation/"
+        )
+
         # Misc
         gt.stamp("logging")
         timings = _get_epoch_timings()
@@ -198,31 +217,62 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.total_train_expl_time += time.time() - st
         self.trainer.buffer = self.replay_buffer
 
-        for _ in range(self.num_train_loops_per_epoch):
-            new_expl_paths = self.expl_data_collector.collect_new_paths(
+        self.training_mode(True)
+        for _ in range(self.num_pretrain_steps):
+            train_data = self.replay_buffer.random_batch(self.batch_size)
+            self.trainer.train(train_data)
+        self.training_mode(False)        
+
+        for epoch in gt.timed_for(
+            range(self._start_epoch, self.num_epochs),
+            save_itrs=True
+        ):
+            self.eval_data_collector.collect_new_paths(
                 self.max_path_length,
-                self.num_expl_steps_per_train_loop
+                self.num_eval_steps_per_epoch
             )
 
-            gt.stamp('exploration sampling', unique=False)
+            gt.stamp("evaluation sampling")
+            st = time.time()
 
-            self.replay_buffer.add_paths(new_expl_paths)
-            gt.stamp("data storing", unique=False)
+            for _ in range(self.num_train_loops_per_epoch):
+                new_expl_paths = self.expl_data_collector.collect_new_paths(
+                    self.max_path_length,
+                    self.num_expl_steps_per_train_loop
+                )
 
-            self.training_mode(True)
-            for train_step in range(self.num_trains_per_train_loop):
-                train_data = self.replay_buffer.random_batch(self.batch_size)
-                self.train.train(train_data)
+                gt.stamp('exploration sampling', unique=False)
+
+                self.replay_buffer.add_paths(new_expl_paths)
+                gt.stamp("data storing", unique=False)
+
+                self.training_mode(True)
+                for train_step in range(self.num_trains_per_train_loop):
+                    train_data = self.replay_buffer.random_batch(self.batch_size)
+                    self.train.train(train_data)
+                
+                gt.stamp('training', unique=False)
+                self.training_mode(False)
+
+            if self.eval_buffer:
+                eval_data = self.eval_buffer.random_batch(self.batch_size)
+                self.trainer.evaluate(eval_data, buffer_data=False)
+                eval_data = self.replay_buffer.random_batch(self.batch_size)
+                self.trainer.evaluate(eval_data, buffer_data=True)
             
-            gt.stamp('training', unique=False)
-            self.training_mode(False)
+            self.total_train_expl_time += time.time() - st
 
-        if self.eval_buffer:
-            eval_data = self.eval_buffer.random_batch(self.batch_size)
-            self.trainer.evaluate(eval_data, buffer_data=False)
-            eval_data = self.replay_buffer.random_batch(self.batch_size)
+            self._end_epoch(epoch)
 
-
+class TorchBatchRLAlgorithm(BatchRLAlgorithm):
+    def to(self, device):
+        for net in self.trainer.networks:
+            net.to(device)
+    
+    def training_mode(self, mode):
+        for net in self.trainer.networks:
+            for net in self.trainer.networks:
+                net.train(mode)
 
 
 
