@@ -1,4 +1,5 @@
 import abc
+from enum import unique
 import time
 from typing import OrderedDict
 import gtimer as gt
@@ -185,8 +186,42 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             init_expl_paths = self.expl_data_collector.collect_new_paths(
                 self.max_path_length,
                 self.min_num_steps_before_training,
-                
+                runtime_policy=self.pretrain_policy
             )
+
+            self.replay_buffer.add_paths(
+                init_expl_paths
+            )
+
+            self.expl_data_collector.end_epoch(-1)
+
+        self.total_train_expl_time += time.time() - st
+        self.trainer.buffer = self.replay_buffer
+
+        for _ in range(self.num_train_loops_per_epoch):
+            new_expl_paths = self.expl_data_collector.collect_new_paths(
+                self.max_path_length,
+                self.num_expl_steps_per_train_loop
+            )
+
+            gt.stamp('exploration sampling', unique=False)
+
+            self.replay_buffer.add_paths(new_expl_paths)
+            gt.stamp("data storing", unique=False)
+
+            self.training_mode(True)
+            for train_step in range(self.num_trains_per_train_loop):
+                train_data = self.replay_buffer.random_batch(self.batch_size)
+                self.train.train(train_data)
+            
+            gt.stamp('training', unique=False)
+            self.training_mode(False)
+
+        if self.eval_buffer:
+            eval_data = self.eval_buffer.random_batch(self.batch_size)
+            self.trainer.evaluate(eval_data, buffer_data=False)
+            eval_data = self.replay_buffer.random_batch(self.batch_size)
+
 
 
 
