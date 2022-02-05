@@ -1,13 +1,12 @@
 import rlkit.torch.pytorch_util as ptu
 from gym.envs.mujoco import HalfCheetahEnv
-from rlkit.data_management import replay_buffer
 from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
 from rlkit.envs.wrappers import NormalizedBoxEnv
-from rlkit.launchers.launcher_util import setup_logger
+# from rlkit.launchers.launcher_util import setup_logger
 from rlkit.samplers.data_collector import MdpPathCollector
 from rlkit.torch.networks.mlp import ConcatMlp
 from rlkit.torch.policy_gradient.vpg.vpg import VPGTrainer
-from rlkit.torch.torch_rl_algorithm import TorchBatchRLAlgorithm
+from rlkit.torch.policy_gradient.rl_algorithm import TorchBatchRLAlgorithm
 
 
 
@@ -23,7 +22,7 @@ def experiment(variant):
     policy = ConcatMlp(
         input_size=obs_dim + action_dim,
         output_size=1,
-        hidden_size=[layer_size, layer_size]        
+        hidden_sizes=[layer_size, layer_size]        
     )
 
     eval_path_collector = MdpPathCollector(
@@ -82,5 +81,5 @@ if __name__ == '__main__':
         )
     )
 
-    setup_logger("Vanilla-Policy-Gradient", variant=variant)
+    # setup_logger("Vanilla-Policy-Gradient", variant=variant)
     experiment(variant)
