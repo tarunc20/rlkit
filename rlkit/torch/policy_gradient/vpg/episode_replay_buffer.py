@@ -50,7 +50,7 @@ class EpisodeReplayBuffer(SimpleReplayBuffer):
 
     def add_path(self, path):
         new_data = slice(self._top, self._top + self.env.n_envs)
-        self._observations[new_data] = path["observatoins"]
+        self._observations[new_data] = path["observations"]
         self._actions[new_data] = path["actions"]
         self._rewards[new_data] = path["terminals"]
 
