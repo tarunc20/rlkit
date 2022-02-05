@@ -2,7 +2,7 @@ from collections import OrderedDict, deque
 
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.samplers.data_collector.base import PathCollector
-from rlkit.torch.policy_gradient.vpg import vec_rollout
+from rlkit.torch.policy_gradient.vpg.rollout_functions import vec_rollout
 
 class VectorizedMdpPathCollector(PathCollector):
     def __init__(
@@ -93,28 +93,28 @@ class VectorizedMdpPathCollector(PathCollector):
 
                 return paths
 
-def get_epoch_paths(self):
-    return self._epoch_paths
+    def get_epoch_paths(self):
+        return self._epoch_paths
 
-def end_epoch(self, epoch):
-    self._epoch_paths = deque(maxlen=self._max_num_epoch_paths_saved)
+    def end_epoch(self, epoch):
+        self._epoch_paths = deque(maxlen=self._max_num_epoch_paths_saved)
 
-def get_diagnostics(self):
-    path_lens = [len(path["actions"]) for path in self._epoch_paths]
+    def get_diagnostics(self):
+        path_lens = [len(path["actions"]) for path in self._epoch_paths]
 
-    stats = OrderedDict(
-        [
-            ("num steps total", self._num_steps_total),
-            ("num paths total", self._num_paths_total)
-        ]
-    )
-
-    stats.update(
-        create_stats_ordered_dict(
-            "path length",
-            path_lens, 
-            always_show_all_stats=True
+        stats = OrderedDict(
+            [
+                ("num steps total", self._num_steps_total),
+                ("num paths total", self._num_paths_total)
+            ]
         )
-    )
 
-    return stats
+        stats.update(
+            create_stats_ordered_dict(
+                "path length",
+                path_lens, 
+                always_show_all_stats=True
+            )
+        )
+
+        return stats
