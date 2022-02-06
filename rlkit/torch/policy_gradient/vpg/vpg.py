@@ -22,7 +22,7 @@ class VPGTrainer(TorchTrainer, LossFunction):
         self.plotter = plotter
         
         self.policy_optimizer = optimizer_class(
-            self.policy_parameters(),
+            self.policy.parameters(),
             lr=policy_lr
         )
 
