@@ -1,5 +1,5 @@
 from collections import OrderedDict, deque
-
+import pdb
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.samplers.data_collector.base import PathCollector
 from rlkit.torch.policy_gradient.vpg.rollout_functions import vec_rollout
@@ -36,6 +36,18 @@ class VectorizedMdpPathCollector(PathCollector):
         num_steps,
         runtime_policy=None
     ):
+        '''
+        Collect paths with the help of the `runtime_policy`
+        
+        Attributes:
+            max_path_length (int): The maximum length of the trajectory to be sampled
+            num_steps (int): The maximum number of steps for which paths should be collected
+            runtime_policy: The policy to be used in rollouts. Defaults to the policy in the constructor
+            if not defined
+
+        Returns:
+        All the paths explored by the current rollouts. 
+        '''
         paths = []
         num_steps_collected = 0
 
@@ -44,6 +56,8 @@ class VectorizedMdpPathCollector(PathCollector):
             if not runtime_policy:
                 runtime_policy = self._policy
             
+            # Shape: num_steps + 1, n_envs, dim
+            # Note: We store an extra init step 
             path = self._rollout_fn(
                 self._env, 
                 runtime_policy,
@@ -55,42 +69,43 @@ class VectorizedMdpPathCollector(PathCollector):
             num_steps_collected += path_len * self._env.n_envs
             paths.append(path)
 
-            self._num_paths_total += len(paths) * self._env.n_envs
-            self._num_steps_total += num_steps_collected
-            log_paths = [{} for _ in range(len(paths) * self.env.n_envs)]
+        self._num_paths_total += len(paths) * self._env.n_envs
+        self._num_steps_total += num_steps_collected
+        log_paths = [{} for _ in range(len(paths) * self._env.n_envs)]
 
-            count = 0
-            for path in paths:
-                for env_idx in range(self._env.n_envs):
-                    for key in [
-                        "actions",
-                        "terminals",
-                        "rewards"
-                    ]:
-                        # Skip the first action as it is null
-                        log_paths[count][key] = path[key][1:, env_idx]
+        # Index each path independently
+        # Add them to a common index `log_paths`
+        count = 0
+        for path in paths:
+            for env_idx in range(self._env.n_envs):
+                for key in [
+                    "actions",
+                    "terminals",
+                    "rewards"
+                ]:
+                    # Skip the first action as it is null
+                    log_paths[count][key] = path[key][1:, env_idx]
 
-                    # TODO: Figure out what each dimension means
-                    log_paths[count]["agent_infos"] = [{}] * path["rewards"][
-                        1:, env_idx
-                    ].shape[0]
+                # initialize a dict equal to the number of paths
+                log_paths[count]["agent_infos"] = [{}] * path["rewards"][
+                    1:, env_idx
+                ].shape[0]
 
-                    env_info_key = "env_infos"
-                    log_paths[count][env_info_key] = [{}] * path["rewards"][
-                        1:, env_idx
-                    ].shape[0]
+                env_info_key = "env_infos"
+                log_paths[count][env_info_key] = [{}] * path["rewards"][
+                    1:, env_idx
+                ].shape[0]
 
-                    for key, value in path[env_info_key].items():
-                        for value_idx in range(value[env_idx].shape[0]):
-                            log_paths[count][env_info_key][value_idx][key] = value[env_idx][
-                                value_idx
-                            ]
-                    
-                    count += 1
+                for key, value in path[env_info_key].items():
+                    for value_idx in range(value[env_idx].shape[0]):
+                        log_paths[count][env_info_key][value_idx][key] = value[env_idx][
+                            value_idx
+                        ]
+                
+                count += 1
 
-                self._epoch_paths.extend(log_paths)
-
-                return paths
+        self._epoch_paths.extend(log_paths)
+        return paths
 
     def get_epoch_paths(self):
         return self._epoch_paths
