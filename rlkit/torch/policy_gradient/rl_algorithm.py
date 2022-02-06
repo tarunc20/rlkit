@@ -1,4 +1,5 @@
 import abc
+import pdb
 from enum import unique
 import time
 from typing import OrderedDict
@@ -126,8 +127,7 @@ class BaseRLAlgorithm(metaclass=abc.ABCMeta):
         gt.stamp("saving")
         self._log_stats(epoch)
 
-        self.expl_data_collector.end_epoch(epoch)
-        self.eval_data_collector.end_epoch(epoch)
+        self.data_collector.end_epoch(epoch)
         self.replay_buffer.end_epoch(epoch)
         self.trainer.end_epoch(epoch)
 
@@ -185,7 +185,7 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.pretrain_policy = None
         
         self.num_pretrain_steps = num_pretrain_steps
-        self.total_train_expl_time = 0
+        self.total_train_time = 0
         self.eval_buffer = eval_buffer
 
     def _train(self):
