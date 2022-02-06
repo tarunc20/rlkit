@@ -1,5 +1,7 @@
 import copy
 import numpy as np
+import pdb
+
 def vec_rollout(
     env,
     agent,
@@ -10,18 +12,18 @@ def vec_rollout(
     num_envs = env.n_envs
 
     policy_obs = env.reset()
-    agent.reset(policy_obs)
+    agent.reset()
 
     observations = [policy_obs]
     rewards = [np.zeros(num_envs)]
-    actions = [np.zeros((num_envs, env.actions_space.low.size))]
+    actions = [np.zeros((num_envs, env.action_space.low.size))]
     terminals = [[False] * num_envs]
     agent_infos = [{}]
     env_infos = [{}]
 
     for step in range(0, max_path_length):
         action, agent_info = agent.get_action(policy_obs)
-
+        pdb.set_trace()
         obs, reward, done, info = env.step(copy.deepcopy(action))
         
         observations.append(obs)
