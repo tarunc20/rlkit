@@ -1,6 +1,7 @@
 from rlkit.data_management.simple_replay_buffer import SimpleReplayBuffer
 from rlkit.envs.env_utils import get_dim
 
+import pdb
 import warnings
 import numpy as np
 
@@ -49,10 +50,22 @@ class EpisodeReplayBuffer(SimpleReplayBuffer):
         self._size = 0
 
     def add_path(self, path):
+        # TODO Account for multiple path lengths
+        # path has the shape (path_length, n_env, dim)
+        # buffer format has the shape(index, path_length, dim)
+        # We discard the data at index 0
         new_data = slice(self._top, self._top + self.env.n_envs)
-        self._observations[new_data] = path["observations"]
-        self._actions[new_data] = path["actions"]
-        self._rewards[new_data] = path["terminals"]
+        self._observations[new_data] = path["observations"][1:].transpose(1, 0, 2)
+        self._actions[new_data] = path["actions"][1:].transpose(1, 0, 2)
+
+        # path['rewards'] has the shape (path_length, n_env)
+        # buffer format has the shape (index, path_length, 1)
+        self._rewards[new_data] = np.expand_dims(
+            path["rewards"][1:].transpose(1, 0), -1
+        )
+        self._terminals[new_data] = np.expand_dims(
+            path["terminals"][1:].transpose(1, 0), -1
+        )
 
         self._advance()
     
@@ -60,7 +73,7 @@ class EpisodeReplayBuffer(SimpleReplayBuffer):
         # TODO: Find out when _top goes beyond replay buffer size, but size does not
         self._top = (self._top + self.env.n_envs) % self._max_replay_buffer_size
         
-        if self.size < self._max_replay_buffer_size:
+        if self._size < self._max_replay_buffer_size:
             self._size += self.env.n_envs
     
     def random_batch(self, batch_size):
