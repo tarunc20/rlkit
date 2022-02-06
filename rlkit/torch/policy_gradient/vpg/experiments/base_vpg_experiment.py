@@ -1,33 +1,32 @@
-from os import replace
+import gym
+import pdb
+from numpy import var
 from rlkit.torch.policy_gradient.vpg.episode_replay_buffer import EpisodeReplayBuffer
 from rlkit.torch.policy_gradient.vpg.path_collector import VectorizedMdpPathCollector
 import rlkit.torch.pytorch_util as ptu
-from gym.envs.mujoco import HalfCheetahEnv
-from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
 from rlkit.envs.wrappers import NormalizedBoxEnv
 # from rlkit.launchers.launcher_util import setup_logger
 from rlkit.samplers.data_collector import MdpPathCollector
-from rlkit.torch.networks.mlp import ConcatMlp
+from rlkit.torch.networks.mlp import ConcatMlp, MlpPolicy
 from rlkit.torch.policy_gradient.vpg.vpg import VPGTrainer
 from rlkit.torch.policy_gradient.rl_algorithm import TorchBatchRLAlgorithm
-
+from rlkit.envs.wrappers.mujoco_vec_wrappers import StableBaselinesVecEnv
 
 
 def experiment(variant):
-    
-    env = NormalizedBoxEnv(HalfCheetahEnv())
+    env_func = lambda:gym.make(variant["env_id"])
+    env = StableBaselinesVecEnv(env_fns=[env_func], start_method="fork")
+    env = NormalizedBoxEnv(env)
     obs_dim = env.observation_space.low.size
     action_dim = env.action_space.low.size
 
     layer_size = variant["layer_size"]
 
-    policy = ConcatMlp(
-        input_size=obs_dim + action_dim,
-        output_size=1,
+    policy = MlpPolicy(
+        input_size=obs_dim,
+        output_size=action_dim,
         hidden_sizes=[layer_size, layer_size]        
     )
-
-    
 
     path_collector = VectorizedMdpPathCollector(
         env,
@@ -51,7 +50,7 @@ def experiment(variant):
     algorithm = TorchBatchRLAlgorithm(
         trainer=trainer,
         env=env,
-        exploration_data_collector=path_collector,
+        data_collector=path_collector,
         replay_buffer=replay_buffer,
         **variant["algorithm_kwargs"]
     )
@@ -63,6 +62,7 @@ if __name__ == '__main__':
     variant = dict(
         algorithm="VPG",
         version="normal",
+        env_id="CartPole-v0",
         layer_size=256,
         replay_buffer_size=int(1e6),
         algorithm_kwargs=dict(
