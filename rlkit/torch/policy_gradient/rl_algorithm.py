@@ -154,7 +154,7 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         max_path_length,
         num_epochs,
         num_eval_steps_per_epoch,
-        num_explt_steps_per_train_loop,
+        num_expl_steps_per_train_loop,
         num_trains_per_train_loop,
         num_train_loops_per_epoch=1,
         min_num_steps_before_training=0,
@@ -176,7 +176,7 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.num_eval_steps_per_epoch = num_eval_steps_per_epoch
         self.num_trains_per_train_loop = num_trains_per_train_loop
         self.num_train_loops_per_epoch = num_train_loops_per_epoch
-        self.num_expl_steps_per_train_loop = num_explt_steps_per_train_loop
+        self.num_expl_steps_per_train_loop = num_expl_steps_per_train_loop
         self.min_num_steps_before_training = min_num_steps_before_training
 
         if use_pretrain_policy_for_initial_data:
