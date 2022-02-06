@@ -36,7 +36,7 @@ def experiment(variant):
     replay_buffer = EpisodeReplayBuffer(
         max_replay_buffer_size=variant["replay_buffer_size"],
         env=env,
-        max_path_length=501,
+        max_path_length=variant['algorithm_kwargs']['max_path_length'],
         replace=True,
         use_batch_length=False
     )
@@ -62,9 +62,9 @@ if __name__ == '__main__':
     variant = dict(
         algorithm="VPG",
         version="normal",
-        env_id="CartPole-v0",
+        env_id="HalfCheetah-v2",
         layer_size=256,
-        replay_buffer_size=int(1e6),
+        replay_buffer_size=int(1e4),
         algorithm_kwargs=dict(
             num_epochs=3000,
             num_eval_steps_per_epoch=5000,
