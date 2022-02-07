@@ -29,6 +29,7 @@ class VPGTrainer(TorchTrainer, LossFunction):
         self._need_to_update_eval_statistics = False
         self.discount = discount
         self.reward_scale = reward_scale
+        self._n_train_steps_total = 0
 
     def train_from_torch(self, batch):
         gt.blank_stamp()
@@ -61,7 +62,6 @@ class VPGTrainer(TorchTrainer, LossFunction):
         rewards = batch["rewards"]
         obs = batch["observations"]
         actions = batch["actions"]
-        next_obs = batch["next_observations"]
 
         return 0
 
