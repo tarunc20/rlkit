@@ -1,8 +1,8 @@
 import gym
 import pdb
 from numpy import var
-from rlkit.torch.policy_gradient.vpg.episode_replay_buffer import EpisodeReplayBuffer
-from rlkit.torch.policy_gradient.vpg.path_collector import VectorizedMdpPathCollector
+from rlkit.torch.policy_gradient.utils.episode_replay_buffer import EpisodeReplayBuffer
+from rlkit.torch.policy_gradient.utils.path_collector import VectorizedMdpPathCollector
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers import NormalizedBoxEnv
 # from rlkit.launchers.launcher_util import setup_logger
