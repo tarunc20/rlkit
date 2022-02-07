@@ -1,6 +1,8 @@
 from rlkit.torch.torch_rl_algorithm import TorchTrainer
 from rlkit.core.loss import LossFunction, LossStatistics
 
+import pdb
+import torch
 import torch.optim as optim
 import gtimer as gt
 
@@ -62,17 +64,24 @@ class VPGTrainer(TorchTrainer, LossFunction):
         rewards = batch["rewards"]
         obs = batch["observations"]
         actions = batch["actions"]
+        pdb.set_trace()
 
-        return 0
+        dist = self.policy(obs)
+        log_prob = dist.log_prob(actions)
+        batch_weight = torch.sum(rewards)
+
+        return -(log_prob * batch_weight)
 
     def train_networks(
         self,
         batch,
         skip_statistics=False
     )-> LossStatistics:
-        #TODO Figure out how to deal with the batches
         #TODO Call the loss function on the returns
         #TODO Backprop on the returns
 
-        self.compute_loss(batch, False)
+        batch_loss = self.compute_loss(batch, False)
+        batch_loss.backward()
+        self.policy_optimizer.step()
+
         return None
