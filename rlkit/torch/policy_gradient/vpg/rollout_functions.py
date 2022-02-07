@@ -23,7 +23,6 @@ def vec_rollout(
 
     for step in range(0, max_path_length):
         action, agent_info = agent.get_action(policy_obs)
-        pdb.set_trace()
         obs, reward, done, info = env.step(copy.deepcopy(action))
         
         observations.append(obs)
@@ -39,9 +38,14 @@ def vec_rollout(
         policy_obs = obs
 
     actions = np.array(actions)
+    observations = np.array(observations)
+    rewards = np.array(rewards)
 
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
+    
+    if len(rewards.shape) == 1:
+        rewards = np.expand_dims(rewards, 1)
     
     env_info_final = {}
 
