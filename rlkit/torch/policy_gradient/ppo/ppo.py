@@ -69,16 +69,7 @@ class PPOTrainer(TorchTrainer, LossFunction):
         skip_statistics=False
     ):
         # Transitions
-        rewards = batch["rewards"]
-        obs = batch["observations"]
-        actions = batch["actions"]
-        pdb.set_trace()
-
-        dist = self.policy(obs)
-        log_prob = dist.log_prob(actions)
-        batch_weight = torch.sum(rewards)
-
-        return -(log_prob * batch_weight)
+        raise NotImplementedError()
 
     def train_networks(
         self,
@@ -87,7 +78,7 @@ class PPOTrainer(TorchTrainer, LossFunction):
     )-> LossStatistics:
         #TODO Call the loss function on the returns
         #TODO Backprop on the returns
-
+        self.policy_optimizer.zero_grad()
         batch_loss = self.compute_loss(batch, False)
         batch_loss.backward()
         self.policy_optimizer.step()
