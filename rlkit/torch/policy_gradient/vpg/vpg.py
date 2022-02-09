@@ -66,8 +66,8 @@ class VPGTrainer(TorchTrainer, LossFunction):
         actions = batch["actions"]
         pdb.set_trace()
 
-        dist = self.policy(obs)
-        log_prob = dist.log_prob(actions)
+        dist = self.policy(obs.reshape(-1, obs.shape[-1]))
+        log_prob = dist.log_prob(actions.reshape(-1, actions.shape[-1]))
         batch_weight = torch.sum(rewards)
 
         return -(log_prob * batch_weight)
@@ -77,9 +77,7 @@ class VPGTrainer(TorchTrainer, LossFunction):
         batch,
         skip_statistics=False
     )-> LossStatistics:
-        #TODO Call the loss function on the returns
-        #TODO Backprop on the returns
-
+        self.policy_optimizer.zero_grad()
         batch_loss = self.compute_loss(batch, False)
         batch_loss.backward()
         self.policy_optimizer.step()
