@@ -132,6 +132,14 @@ class EpisodeReplayBuffer(SimpleReplayBuffer):
             actions = self._actions[indices]
             rewards = self._rewards[indices]
             terminals = self._terminals[indices]
+        
+        assert (
+            observations.shape[0] 
+            == actions.shape[0]
+            == rewards.shape[0]
+            == terminals.shape[0]
+            == batch_size
+        )
 
         batch = dict(
             observations=observations,
