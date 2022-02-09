@@ -53,7 +53,7 @@ class VPGTrainer(TorchTrainer, LossFunction):
 
     @property
     def optimizers(self):
-        return [self.policy]
+        return [self.policy_optimizer]
 
     def compute_loss(
         self, 
