@@ -11,21 +11,29 @@ class PPOTrainer(TorchTrainer, LossFunction):
         self, 
         env,
         policy,
+        qfunc,
         discount=0.99,
         reward_scale=1.0,
         policy_lr=1e-2,
+        qfunc_lr=1e-3,
         optimizer_class=optim.Adam,
         plotter=None
     ):
         super().__init__()
         self.env = env
         self.policy = policy
+        self.qfunc = qfunc
 
         self.plotter = plotter
         
         self.policy_optimizer = optimizer_class(
             self.policy.parameters(),
             lr=policy_lr
+        )
+
+        self.qfunc_optimizer = optimizer_class(
+            self.qfunc.parameters(),
+            lr=qfunc_lr
         )
 
         self._need_to_update_eval_statistics = False
@@ -49,11 +57,11 @@ class PPOTrainer(TorchTrainer, LossFunction):
 
     @property
     def networks(self):
-        return [self.policy]
+        return [self.policy, self.qfunc]
 
     @property
     def optimizers(self):
-        return [self.policy]
+        return [self.policy_optimizer, self.qfunc_optimizer]
 
     def compute_loss(
         self, 
