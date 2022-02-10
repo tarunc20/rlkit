@@ -1,11 +1,7 @@
-import random
-import subprocess
-
-import rlkit.util.hyperparameter as hyp
-from rlkit.launchers.launcher_util import run_experiment
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
     preprocess_variant_llraps,
+    setup_sweep_and_launch_exp,
 )
 from rlkit.torch.model_based.dreamer.experiments.ll_raps_experiment import experiment
 
@@ -24,7 +20,7 @@ if __name__ == "__main__":
         )
     else:
         algorithm_kwargs = dict(
-            num_epochs=250,
+            num_epochs=100,
             num_eval_steps_per_epoch=30,
             min_num_steps_before_training=2500,
             num_pretrain_steps=100,
@@ -38,6 +34,7 @@ if __name__ == "__main__":
         version="normal",
         algorithm_kwargs=algorithm_kwargs,
         env_suite="kitchen",
+        env_name="hinge_cabinet",
         env_kwargs=dict(
             reward_type="sparse",
             use_image_obs=True,
@@ -114,29 +111,4 @@ if __name__ == "__main__":
         pass_render_kwargs=True,
         max_path_length=5,
     )
-    search_space = {
-        key: value for key, value in zip(args.search_keys, args.search_values)
-    }
-    sweeper = hyp.DeterministicHyperparameterSweeper(
-        search_space,
-        default_parameters=variant,
-    )
-    for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        variant = preprocess_variant_llraps(variant)
-        for _ in range(args.num_seeds):
-            seed = random.randint(0, 100000)
-            variant["seed"] = seed
-            variant["exp_id"] = exp_id
-            run_experiment(
-                experiment,
-                exp_prefix=args.exp_prefix,
-                mode=args.mode,
-                variant=variant,
-                use_gpu=True,
-                snapshot_mode="none",
-                python_cmd=subprocess.check_output("which python", shell=True).decode(
-                    "utf-8"
-                )[:-1],
-                seed=seed,
-                exp_id=exp_id,
-            )
+    setup_sweep_and_launch_exp(preprocess_variant_llraps, variant, experiment, args)
