@@ -930,6 +930,10 @@ class DreamerV2Trainer(TorchTrainer, LossFunction):
 
         return trainer
 
+    def to(self, device):
+        for net in self.networks:
+            net.to(device)
+
 
 class DreamerV2LowLevelRAPSTrainer(DreamerV2Trainer):
     def __init__(

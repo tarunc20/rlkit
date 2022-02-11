@@ -111,6 +111,8 @@ def _worker(
                 remote.send(getattr(env, data))
             elif cmd == "set_attr":
                 remote.send(setattr(env, data[0], data[1]))
+            elif cmd == "set_process_gpu_device_id":
+                os.environ["EGL_DEVICE_ID"] = str(data)
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -118,7 +120,8 @@ def _worker(
 
 
 class StableBaselinesVecEnv(SubprocVecEnv):
-    def __init__(self, env_fns, start_method=None, reload_state_args=None):
+    def __init__(self, env_fns, start_method=None, reload_state_args=None, device_id=0):
+        self.device_id = 0
         self.waiting = False
         self.closed = False
         self.reload_state_args = reload_state_args
@@ -148,6 +151,8 @@ class StableBaselinesVecEnv(SubprocVecEnv):
             work_remote.close()
         self.remotes[0].send(("get_spaces", None))
         observation_space, action_space = self.remotes[0].recv()
+        for remote in self.remotes:
+            remote.send(("set_process_gpu_device_id", device_id))
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
 
     def step(self, actions):
@@ -171,6 +176,14 @@ class StableBaselinesVecEnv(SubprocVecEnv):
             else:
                 new_info[key] = value
         return obs, rewards, dones, new_info
+
+    def __getattr__(self, name):
+        if name != "env":
+            self.remotes[0].send(("get_attr", name))
+            attr = self.remotes[0].recv()
+            return attr
+        else:
+            raise AttributeError("")
 
     def save(self, path, suffix):
         n_envs, make_env, make_env_args = self.reload_state_args
