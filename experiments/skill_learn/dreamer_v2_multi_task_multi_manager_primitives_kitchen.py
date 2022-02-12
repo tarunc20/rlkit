@@ -104,7 +104,7 @@ if __name__ == "__main__":
             use_batch_length=False,
             max_replay_buffer_size=int(5e5),
         ),
-        num_expl_envs=2,
+        num_expl_envs=10,
         num_eval_envs=1,
         expl_amount=0.3,
         save_video=True,
