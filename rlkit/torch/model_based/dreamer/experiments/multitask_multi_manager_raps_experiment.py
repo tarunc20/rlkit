@@ -6,16 +6,13 @@ def experiment(variant):
 
     os.environ["D4RL_SUPPRESS_IMPORT_ERROR"] = "1"
 
-    import torch
     import torch.nn as nn
 
     import rlkit.envs.primitives_make_env as primitives_make_env
     import rlkit.torch.pytorch_util as ptu
-    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
-        DummyVecEnv,
-        StableBaselinesVecEnv,
-    )
+    from rlkit.envs.wrappers.mujoco_vec_wrappers import StableBaselinesVecEnv
     from rlkit.torch.model_based.dreamer.actor_models import ActorModel
+    from rlkit.torch.model_based.dreamer.bc_trainer import BCTrainer
     from rlkit.torch.model_based.dreamer.dreamer_policy import (
         ActionSpaceSamplePolicy,
         DreamerPolicy,
@@ -23,12 +20,15 @@ def experiment(variant):
     from rlkit.torch.model_based.dreamer.dreamer_v2 import DreamerV2Trainer
     from rlkit.torch.model_based.dreamer.episode_replay_buffer import (
         EpisodeReplayBuffer,
+        EpisodeReplayBufferSkillLearn,
     )
     from rlkit.torch.model_based.dreamer.mlp import Mlp
     from rlkit.torch.model_based.dreamer.path_collector import VecMdpPathCollector
+    from rlkit.torch.model_based.dreamer.rollout_functions import (
+        vec_rollout_skill_learn,
+    )
     from rlkit.torch.model_based.dreamer.visualization import post_epoch_visualize_func
     from rlkit.torch.model_based.dreamer.world_models import WorldModel
-    from rlkit.torch.model_based.rl_algorithm import TorchBatchRLAlgorithm
 
     num_managers = len(variant["env_names"])
     trainers = []
@@ -39,13 +39,15 @@ def experiment(variant):
     eval_envs = []
     rand_policies = []
 
+    num_low_level_actions_per_primitive = variant["num_low_level_actions_per_primitive"]
+    low_level_action_dim = variant["low_level_action_dim"]
+
     for manager_idx in range(num_managers):
         ptu.set_gpu_mode(True, gpu_id=manager_idx)
         os.environ["EGL_DEVICE_ID"] = str(manager_idx)
         env_suite = variant.get("env_suite", "kitchen")
         env_name = variant["env_names"][manager_idx]
         env_kwargs = variant["env_kwargs"]
-        use_raw_actions = variant["use_raw_actions"]
         num_expl_envs = variant["num_expl_envs"]
         env_fns = [
             lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)
@@ -75,23 +77,15 @@ def experiment(variant):
                 (env_suite, env_name, env_kwargs),
             ),
         )
-        if use_raw_actions:
-            discrete_continuous_dist = False
-            continuous_action_dim = eval_env.action_space.low.size
+        num_primitives = eval_env.num_primitives
+        discrete_continuous_dist = variant["actor_kwargs"]["discrete_continuous_dist"]
+        continuous_action_dim = expl_env.max_arg_len
+        discrete_action_dim = expl_env.num_primitives
+        if not discrete_continuous_dist:
+            continuous_action_dim = continuous_action_dim + discrete_action_dim
             discrete_action_dim = 0
-            use_batch_length = True
-            action_dim = continuous_action_dim
-        else:
-            discrete_continuous_dist = variant["actor_kwargs"][
-                "discrete_continuous_dist"
-            ]
-            continuous_action_dim = expl_env.max_arg_len
-            discrete_action_dim = expl_env.num_primitives
-            if not discrete_continuous_dist:
-                continuous_action_dim = continuous_action_dim + discrete_action_dim
-                discrete_action_dim = 0
-            action_dim = continuous_action_dim + discrete_action_dim
-            use_batch_length = False
+        action_dim = continuous_action_dim + discrete_action_dim
+        use_batch_length = False
         obs_dim = expl_env.observation_space.low.size
 
         world_model = WorldModel(
@@ -121,15 +115,6 @@ def experiment(variant):
             input_size=world_model.feature_size,
             hidden_activation=nn.ELU,
         )
-        if variant.get("models_path", None) is not None:
-            filename = variant["models_path"]
-            actor.load_state_dict(torch.load(osp.join(filename, "actor.ptc")))
-            vf.load_state_dict(torch.load(osp.join(filename, "vf.ptc")))
-            target_vf.load_state_dict(torch.load(osp.join(filename, "target_vf.ptc")))
-            world_model.load_state_dict(
-                torch.load(osp.join(filename, "world_model.ptc"))
-            )
-            print("LOADED MODELS")
 
         expl_policy = DreamerPolicy(
             world_model,
@@ -156,16 +141,26 @@ def experiment(variant):
 
         rand_policy = ActionSpaceSamplePolicy(expl_env)
 
+        rollout_function_kwargs = dict(
+            num_low_level_actions_per_primitive=num_low_level_actions_per_primitive,
+            low_level_action_dim=low_level_action_dim,
+            num_primitives=num_primitives,
+        )
+
         expl_path_collector = VecMdpPathCollector(
             expl_env,
             expl_policy,
             save_env_in_snapshot=False,
+            rollout_fn=vec_rollout_skill_learn,
+            rollout_function_kwargs=rollout_function_kwargs,
         )
 
         eval_path_collector = VecMdpPathCollector(
             eval_env,
             eval_policy,
             save_env_in_snapshot=False,
+            rollout_fn=vec_rollout_skill_learn,
+            rollout_function_kwargs=rollout_function_kwargs,
         )
 
         variant["replay_buffer_kwargs"]["use_batch_length"] = use_batch_length
@@ -191,6 +186,30 @@ def experiment(variant):
         rand_policies.append(rand_policy)
         expl_envs.append(expl_env)
         eval_envs.append(eval_env)
+
+    ptu.set_gpu_mode(True, gpu_id=0)
+    primitive_model = Mlp(
+        output_size=variant["low_level_action_dim"],
+        input_size=variant["model_kwargs"]["stochastic_state_size"]
+        + variant["model_kwargs"]["deterministic_state_size"]
+        + eval_env.action_space.low.shape[0]
+        + 1,
+        hidden_activation=nn.ReLU,
+        num_embeddings=num_primitives,
+        embedding_dim=num_primitives,
+        embedding_slice=num_primitives,
+        **variant["primitive_model_kwargs"],
+    ).to(ptu.device)
+
+    primitive_model_buffer = EpisodeReplayBufferSkillLearn(
+        num_expl_envs,
+        obs_dim,
+        action_dim,
+        **variant["primitive_model_replay_buffer_kwargs"],
+    )
+    primitive_model_pretrain_trainer = BCTrainer(
+        primitive_model, **variant["primitive_model_trainer_kwargs"]
+    )
     algorithm = TorchMultiManagerBatchRLAlgorithm(
         trainers=trainers,
         exploration_envs=expl_envs,
@@ -201,6 +220,9 @@ def experiment(variant):
         pretrain_policies=rand_policies,
         eval_buffers=[None] * num_managers,
         env_names=variant["env_names"],
+        primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
+        primitive_model_trainer=primitive_model_pretrain_trainer,
+        primitive_model_buffer=primitive_model_buffer,
         **variant["algorithm_kwargs"],
     )
     algorithm.low_level_primitives = False

@@ -4,6 +4,7 @@ from torch import nn as nn
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.pythonplusplus import identity
+from rlkit.torch.model_based.dreamer.mlp import Mlp
 
 
 class CNN(jit.ScriptModule):
@@ -180,3 +181,38 @@ class DCNN(jit.ScriptModule):
         return output.to(
             memory_format=torch.channels_last, device=ptu.device, dtype=torch.float16
         )
+
+
+class CNNMLP(jit.ScriptModule):
+    def __init__(
+        self,
+        image_encoder_args,
+        image_encoder_kwargs,
+        state_encoder_args,
+        state_encoder_kwargs,
+        hidden_sizes,
+        output_size,
+        input_size,
+        hidden_activation=F.elu,
+        output_activation=identity,
+        hidden_init=torch.nn.init.xavier_uniform_,
+        b_init_value=0.0,
+        apply_embedding=False,
+        embedding_dim=0,
+        num_embeddings=0,
+        embedding_slice=0,
+        image_dim=64 * 64 * 3,
+        state_dim=1,
+    ):
+        self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
+        self.state_encoder = Mlp(*state_encoder_args, **state_encoder_kwargs)
+        self.joint_processor = Mlp(
+            hidden_sizes=hidden_sizes,
+            output_size=output_size,
+        )
+
+    @jit.script_method
+    def forward(self, input_):
+        image, state = input_[:, : self.image_dim], input_[:, self.image_dim :]
+        image_encoding = self.image_encoder(image)
+        state_encoding = self.state_encoder(state)

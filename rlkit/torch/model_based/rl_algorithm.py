@@ -351,6 +351,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         use_pretrain_policy_for_initial_data=True,
         eval_buffers=None,
         env_names=None,
+        primitive_model_pretrain_trainer=None,
+        primitive_model_trainer=None,
+        primitive_model_buffer=None,
     ):
         self.trainers = trainers
         self.expl_envs = exploration_envs
@@ -378,6 +381,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.eval_buffers = eval_buffers
         self.num_managers = len(self.trainers)
         self.env_names = env_names
+        self.primitive_model_pretrain_trainer = primitive_model_pretrain_trainer
+        self.primitive_model_trainer = primitive_model_trainer
+        self.primitive_model_buffer = primitive_model_buffer
 
     def _train(self):
         st = time.time()
@@ -392,7 +398,20 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     self.min_num_steps_before_training,
                     runtime_policy=self.pretrain_policies[manager_idx],
                 )
-                self.replay_buffers[manager_idx].add_paths(init_expl_paths)
+                manager_keys = ["observations", "actions", "rewards", "terminals"]
+                primitive_model_keys = [
+                    "low_level_observations",
+                    "high_level_actions",
+                    "low_level_actions",
+                    "low_level_rewards",
+                    "low_level_terminals",
+                ]
+                self.replay_buffers[manager_idx].add_paths(
+                    {k: init_expl_paths[k] for k in manager_keys}
+                )
+                self.primitive_model_buffer.add_paths(
+                    {k: init_expl_paths[k] for k in primitive_model_keys}
+                )
                 self.expl_data_collectors[manager_idx].end_epoch(-1)
         self.total_train_expl_time += time.time() - st
         for manager_idx in range(self.num_managers):
@@ -408,6 +427,10 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 )
                 self.trainers[manager_idx].train(train_data)
             self.training_mode(False)
+        ptu.set_gpu_mode(True, gpu_id=0)
+        for _ in range(self.num_pretrain_steps):
+            self.primitive_model_buffer.random_batch(self.batch_size)
+            self.primitive_model_pretrain_trainer.train(train_data)
 
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
@@ -431,7 +454,20 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     )
                     gt.stamp("exploration sampling", unique=False)
 
-                    self.replay_buffers[manager_idx].add_paths(new_expl_paths)
+                    manager_keys = ["observations", "actions", "rewards", "terminals"]
+                    primitive_model_keys = [
+                        "low_level_observations",
+                        "high_level_actions",
+                        "low_level_actions",
+                        "low_level_rewards",
+                        "low_level_terminals",
+                    ]
+                    self.replay_buffers[manager_idx].add_paths(
+                        {k: new_expl_paths[k] for k in manager_keys}
+                    )
+                    self.primitive_model_buffer.add_paths(
+                        {k: new_expl_paths[k] for k in primitive_model_keys}
+                    )
                     gt.stamp("data storing", unique=False)
 
                     self.training_mode(True)
@@ -453,6 +489,13 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     )
                     self.trainers[manager_idx].evaluate(eval_data, buffer_data=True)
                 self.total_train_expl_time += time.time() - st
+
+            st = time.time()
+            ptu.set_gpu_mode(True, gpu_id=0)
+            for train_step in range(self.num_trains_per_train_loop):
+                self.primitive_model_buffer.random_batch(self.batch_size)
+                self.primitive_model_pretrain_trainer.train(train_data)
+            self.total_train_expl_time += time.time() - st
 
             self._end_epoch(epoch)
 

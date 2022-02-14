@@ -57,6 +57,8 @@ if __name__ == "__main__":
                 unflatten_images=False,
             ),
             action_space_kwargs=dict(),
+            collect_primitives_info=True,
+            render_intermediate_obs_to_info=True,
         ),
         actor_kwargs=dict(
             discrete_continuous_dist=True,
@@ -109,6 +111,20 @@ if __name__ == "__main__":
         expl_amount=0.3,
         save_video=True,
         max_path_length=5,
+        num_low_level_actions_per_primitive=5,
+        low_level_action_dim=9,
+        primitive_model_kwargs=dict(
+            hidden_sizes=[512, 512],
+            apply_embedding=False,
+        ),
+        primitive_model_replay_buffer_kwargs=dict(
+            batch_length=50,
+            use_batch_length=False,
+            max_replay_buffer_size=int(1.44e5),
+            num_low_level_actions_per_primitive=5,
+            low_level_action_dim=9,
+            max_path_length=5,
+        ),
     )
 
     setup_sweep_and_launch_exp(preprocess_variant_raps, variant, experiment, args)
