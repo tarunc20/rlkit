@@ -15,9 +15,9 @@ if __name__ == "__main__":
             num_eval_steps_per_epoch=60,
             num_expl_steps_per_train_loop=60,
             min_num_steps_before_training=60,
-            num_pretrain_steps=10,
+            num_pretrain_steps=1,
             num_train_loops_per_epoch=1,
-            num_trains_per_train_loop=10,
+            num_trains_per_train_loop=1,
             batch_size=417,
         )
     else:
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             state_encoder_args=(),
             state_encoder_kwargs=dict(hidden_sizes=[64, 64], output_size=64),
             joint_processor_args=(),
-            joint_processor_kwargs=dict(hidden_sizes=[512, 512]),
+            joint_processor_kwargs=dict(hidden_sizes=[512, 256]),
             image_dim=64 * 64 * 3,
         ),
         primitive_model_replay_buffer_kwargs=dict(

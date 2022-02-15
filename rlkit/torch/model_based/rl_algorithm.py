@@ -437,10 +437,11 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.trainers[manager_idx].train(train_data)
             self.training_mode(False)
         ptu.set_gpu_mode(True, gpu_id=3)
+        self.training_mode(True)
         for _ in range(self.num_pretrain_steps * self.num_managers):
             train_data = self.primitive_model_buffer.random_batch(self.batch_size)
             self.primitive_model_pretrain_trainer.train(train_data)
-
+        self.training_mode(False)
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,
@@ -510,6 +511,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
 
             st = time.time()
             ptu.set_gpu_mode(True, gpu_id=3)
+            self.training_mode(True)
             for train_step in range(
                 self.num_trains_per_train_loop
                 * self.num_train_loops_per_epoch
@@ -517,6 +519,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             ):
                 train_data = self.primitive_model_buffer.random_batch(self.batch_size)
                 self.primitive_model_trainer.train(train_data)
+            self.training_mode(False)
             self.total_train_expl_time += time.time() - st
 
             self._end_epoch(epoch)

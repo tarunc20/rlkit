@@ -411,35 +411,35 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self._low_level_observations = np.zeros(
             (
                 max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive + 1,
+                max_path_length * num_low_level_actions_per_primitive,
                 observation_dim,
             )
         )
         self._high_level_actions = np.zeros(
             (
                 max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive + 1,
+                max_path_length * num_low_level_actions_per_primitive,
                 action_dim + 1,
             )
         )
         self._low_level_actions = np.zeros(
             (
                 max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive + 1,
+                max_path_length * num_low_level_actions_per_primitive,
                 low_level_action_dim,
             )
         )
         self._low_level_rewards = np.zeros(
             (
                 max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive + 1,
+                max_path_length * num_low_level_actions_per_primitive,
                 1,
             )
         )
         self._low_level_terminals = np.zeros(
             (
                 max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive + 1,
+                max_path_length * num_low_level_actions_per_primitive,
                 1,
             )
         )

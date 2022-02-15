@@ -222,7 +222,7 @@ def vec_rollout_skill_learn(
     low_level_actions = np.zeros(
         (
             num_envs,
-            (max_path_length * num_low_level_actions_per_primitive) + 1,
+            (max_path_length * num_low_level_actions_per_primitive),
             low_level_action_dim,
         ),
         dtype=np.float32,
@@ -230,7 +230,7 @@ def vec_rollout_skill_learn(
     high_level_actions = np.zeros(
         (
             num_envs,
-            (max_path_length * num_low_level_actions_per_primitive) + 1,
+            (max_path_length * num_low_level_actions_per_primitive),
             env.action_space.low.shape[0] + 1,  # Plus 1 includes phase variable.
         ),
         dtype=np.float32,
@@ -238,7 +238,7 @@ def vec_rollout_skill_learn(
     low_level_observations = np.zeros(
         (
             num_envs,
-            (max_path_length * num_low_level_actions_per_primitive) + 1,
+            (max_path_length * num_low_level_actions_per_primitive),
             env.observation_space.low.shape[0],
         ),
         dtype=np.uint8,
@@ -247,7 +247,7 @@ def vec_rollout_skill_learn(
     low_level_rewards = np.zeros(
         (
             num_envs,
-            (max_path_length * num_low_level_actions_per_primitive) + 1,
+            (max_path_length * num_low_level_actions_per_primitive),
             1,
         )
     )
@@ -255,7 +255,7 @@ def vec_rollout_skill_learn(
     low_level_terminals = np.zeros(
         (
             num_envs,
-            (max_path_length * num_low_level_actions_per_primitive) + 1,
+            (max_path_length * num_low_level_actions_per_primitive),
             1,
         )
     )
@@ -268,9 +268,6 @@ def vec_rollout_skill_learn(
     terminals = [[False] * num_envs]
 
     low_level_observations[:, 0] = obs
-    high_level_actions[:, 0] = np.zeros((num_envs, env.action_space.low.size + 1))
-    low_level_actions[:, 0] = np.zeros((num_envs, low_level_action_dim))
-    terminals = [[False] * num_envs]
     agent_infos = [{}]
     env_infos = [{}]
 
@@ -313,16 +310,16 @@ def vec_rollout_skill_learn(
         env_infos.append(info)
         low_level_actions[
             :,
-            step * num_low_level_actions_per_primitive
-            + 1 : (step + 1) * num_low_level_actions_per_primitive
-            + 1,
+            step
+            * num_low_level_actions_per_primitive : (step + 1)
+            * num_low_level_actions_per_primitive,
         ] = np.array(low_level_action)
         low_level_observations[
             :,
-            step * num_low_level_actions_per_primitive
-            + 1 : step * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive
-            + 1,
+            step
+            * num_low_level_actions_per_primitive : step
+            * num_low_level_actions_per_primitive
+            + num_low_level_actions_per_primitive,
         ] = low_level_obs
 
         high_level_action = np.repeat(
@@ -335,26 +332,26 @@ def vec_rollout_skill_learn(
         )
         high_level_actions[
             :,
-            step * num_low_level_actions_per_primitive
-            + 1 : step * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive
-            + 1,
+            step
+            * num_low_level_actions_per_primitive : step
+            * num_low_level_actions_per_primitive
+            + num_low_level_actions_per_primitive,
         ] = high_level_action
 
         low_level_rewards[
             :,
-            step * num_low_level_actions_per_primitive
-            + 1 : step * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive
-            + 1,
+            step
+            * num_low_level_actions_per_primitive : step
+            * num_low_level_actions_per_primitive
+            + num_low_level_actions_per_primitive,
         ] = low_level_reward
 
         low_level_terminals[
             :,
-            step * num_low_level_actions_per_primitive
-            + 1 : step * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive
-            + 1,
+            step
+            * num_low_level_actions_per_primitive : step
+            * num_low_level_actions_per_primitive
+            + num_low_level_actions_per_primitive,
         ] = low_level_terminal
 
         if done.all():

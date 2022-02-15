@@ -203,8 +203,14 @@ class CNNMLP(jit.ScriptModule):
     @jit.script_method
     def forward(self, input_):
         image, state = input_[:, : self.image_dim], input_[:, self.image_dim :]
+        image = self.preprocess(image)
         image_encoding = self.image_encoder(image)
         state_encoding = self.state_encoder(state)
         joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
         output = self.joint_processor(joint_encoding)
         return output
+
+    @jit.script_method
+    def preprocess(self, obs):
+        obs = obs / 255.0 - 0.5
+        return obs
