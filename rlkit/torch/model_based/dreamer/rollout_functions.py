@@ -264,7 +264,7 @@ def vec_rollout_skill_learn(
     agent.reset(obs)
     observations = [obs]
     actions = [np.zeros((num_envs, env.action_space.low.size))]
-    rewards = [np.zeros(num_envs, 1)]
+    rewards = [np.zeros((num_envs,))]
     terminals = [[False] * num_envs]
 
     low_level_observations[:, 0] = obs

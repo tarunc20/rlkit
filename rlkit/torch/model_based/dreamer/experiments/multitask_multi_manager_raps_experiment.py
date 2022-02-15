@@ -1,7 +1,7 @@
 def experiment(variant):
     import os
-    import os.path as osp
 
+    from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
     from rlkit.torch.model_based.rl_algorithm import TorchMultiManagerBatchRLAlgorithm
 
     os.environ["D4RL_SUPPRESS_IMPORT_ERROR"] = "1"
@@ -187,19 +187,25 @@ def experiment(variant):
         expl_envs.append(expl_env)
         eval_envs.append(eval_env)
 
-    ptu.set_gpu_mode(True, gpu_id=0)
-    primitive_model = Mlp(
-        output_size=variant["low_level_action_dim"],
-        input_size=variant["model_kwargs"]["stochastic_state_size"]
-        + variant["model_kwargs"]["deterministic_state_size"]
-        + eval_env.action_space.low.shape[0]
-        + 1,
-        hidden_activation=nn.ReLU,
-        num_embeddings=num_primitives,
-        embedding_dim=num_primitives,
-        embedding_slice=num_primitives,
-        **variant["primitive_model_kwargs"],
-    ).to(ptu.device)
+    ptu.set_gpu_mode(True, gpu_id=3)
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "output_size"
+    ] = variant["low_level_action_dim"]
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"]["input_size"] = 512 + 64
+
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
+        eval_env.action_space.low.shape[0] + 1
+    )
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
 
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         num_expl_envs,

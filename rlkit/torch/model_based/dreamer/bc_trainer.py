@@ -45,8 +45,9 @@ class BCTrainer(TorchTrainer, LossFunction):
         """
         Update networks
         """
-        losses.policy_loss.backward()
+        self.scaler.scale(losses.policy_loss).backward()
         update_network(self.policy, self.policy_optimizer, 0, self.scaler)
+        self.scaler.update()
 
         self._n_train_steps_total += 1
 
@@ -68,8 +69,10 @@ class BCTrainer(TorchTrainer, LossFunction):
         """
         Policy and Alpha Loss
         """
-        action_preds = self.policy(obs)
-        loss = self.policy_criterion(action_preds, actions)
+        action_preds = self.policy(obs.reshape(-1, obs.shape[-1]))
+        loss = self.policy_criterion(
+            action_preds, actions.reshape(-1, actions.shape[-1])
+        )
         eval_statistics = OrderedDict()
         if not skip_statistics:
             eval_statistics["Policy Loss"] = loss.item()

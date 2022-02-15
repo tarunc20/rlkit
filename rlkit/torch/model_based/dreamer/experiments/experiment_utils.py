@@ -71,6 +71,20 @@ def preprocess_variant_llraps(variant):
     return variant
 
 
+def preprocess_variant_multi_task_multi_manager_raps(variant):
+    variant = variant.copy()
+    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
+    variant["replay_buffer_kwargs"]["max_path_length"] = variant["max_path_length"]
+
+    variant["env_kwargs"]["usage_kwargs"]["max_path_length"] = variant[
+        "max_path_length"
+    ]
+    variant["env_kwargs"]["action_space_kwargs"][
+        "num_low_level_actions_per_primitive"
+    ] = variant["num_low_level_actions_per_primitive"]
+    return variant
+
+
 def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, args):
     import random
     import subprocess

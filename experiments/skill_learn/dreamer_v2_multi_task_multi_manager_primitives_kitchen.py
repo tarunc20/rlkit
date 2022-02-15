@@ -1,6 +1,6 @@
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
-    preprocess_variant_raps,
+    preprocess_variant_multi_task_multi_manager_raps,
     setup_sweep_and_launch_exp,
 )
 from rlkit.torch.model_based.dreamer.experiments.multitask_multi_manager_raps_experiment import (
@@ -106,7 +106,7 @@ if __name__ == "__main__":
             use_batch_length=False,
             max_replay_buffer_size=int(5e5),
         ),
-        num_expl_envs=10,
+        num_expl_envs=5,
         num_eval_envs=1,
         expl_amount=0.3,
         save_video=True,
@@ -114,8 +114,21 @@ if __name__ == "__main__":
         num_low_level_actions_per_primitive=5,
         low_level_action_dim=9,
         primitive_model_kwargs=dict(
-            hidden_sizes=[512, 512],
-            apply_embedding=False,
+            image_encoder_args=(),
+            image_encoder_kwargs=dict(
+                input_width=64,
+                input_height=64,
+                input_channels=3,
+                kernel_sizes=[4] * 4,
+                n_channels=[16, 16 * 2, 16 * 4, 16 * 8],
+                strides=[2] * 4,
+                paddings=[0] * 4,
+            ),
+            state_encoder_args=(),
+            state_encoder_kwargs=dict(hidden_sizes=[64, 64], output_size=64),
+            joint_processor_args=(),
+            joint_processor_kwargs=dict(hidden_sizes=[512, 512]),
+            image_dim=64 * 64 * 3,
         ),
         primitive_model_replay_buffer_kwargs=dict(
             batch_length=50,
@@ -125,6 +138,9 @@ if __name__ == "__main__":
             low_level_action_dim=9,
             max_path_length=5,
         ),
+        primitive_model_trainer_kwargs=dict(),
     )
 
-    setup_sweep_and_launch_exp(preprocess_variant_raps, variant, experiment, args)
+    setup_sweep_and_launch_exp(
+        preprocess_variant_multi_task_multi_manager_raps, variant, experiment, args
+    )

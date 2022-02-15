@@ -190,29 +190,21 @@ class CNNMLP(jit.ScriptModule):
         image_encoder_kwargs,
         state_encoder_args,
         state_encoder_kwargs,
-        hidden_sizes,
-        output_size,
-        input_size,
-        hidden_activation=F.elu,
-        output_activation=identity,
-        hidden_init=torch.nn.init.xavier_uniform_,
-        b_init_value=0.0,
-        apply_embedding=False,
-        embedding_dim=0,
-        num_embeddings=0,
-        embedding_slice=0,
-        image_dim=64 * 64 * 3,
-        state_dim=1,
+        joint_processor_args,
+        joint_processor_kwargs,
+        image_dim,
     ):
+        super().__init__()
         self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
         self.state_encoder = Mlp(*state_encoder_args, **state_encoder_kwargs)
-        self.joint_processor = Mlp(
-            hidden_sizes=hidden_sizes,
-            output_size=output_size,
-        )
+        self.joint_processor = Mlp(*joint_processor_args, **joint_processor_kwargs)
+        self.image_dim = image_dim
 
     @jit.script_method
     def forward(self, input_):
         image, state = input_[:, : self.image_dim], input_[:, self.image_dim :]
         image_encoding = self.image_encoder(image)
         state_encoding = self.state_encoder(state)
+        joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
+        output = self.joint_processor(joint_encoding)
+        return output

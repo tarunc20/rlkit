@@ -408,19 +408,11 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
 
         self.max_path_length = max_path_length
         self._max_replay_buffer_size = max_replay_buffer_size
-        self._observations = np.zeros(
+        self._low_level_observations = np.zeros(
             (
                 max_replay_buffer_size,
                 max_path_length * num_low_level_actions_per_primitive + 1,
                 observation_dim,
-            ),
-            dtype=np.uint8,
-        )
-        self._low_level_actions = np.zeros(
-            (
-                max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive + 1,
-                low_level_action_dim,
             )
         )
         self._high_level_actions = np.zeros(
@@ -428,6 +420,13 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
                 max_replay_buffer_size,
                 max_path_length * num_low_level_actions_per_primitive + 1,
                 action_dim + 1,
+            )
+        )
+        self._low_level_actions = np.zeros(
+            (
+                max_replay_buffer_size,
+                max_path_length * num_low_level_actions_per_primitive + 1,
+                low_level_action_dim,
             )
         )
         self._low_level_rewards = np.zeros(
@@ -454,19 +453,21 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
 
     def add_path(self, path):
         # TODO: reshape input paths so that each primitive trajectory becomes a separate path
-        self._observations[self._top : self._top + self.n_envs] = path["observations"]
-        self._low_level_actions[self._top : self._top + self.n_envs] = path[
-            "low_level_actions"
+        self._low_level_observations[self._top : self._top + self.n_envs] = path[
+            "low_level_observations"
         ]
         self._high_level_actions[self._top : self._top + self.n_envs] = path[
             "high_level_actions"
         ]
-        self._low_level_rewards[self._top : self._top + self.n_envs] = np.expand_dims(
-            path["low_level_rewards"].transpose(1, 0), -1
-        )
-        self._low_level_terminals[self._top : self._top + self.n_envs] = np.expand_dims(
-            path["low_level_terminals"].transpose(1, 0), -1
-        )
+        self._low_level_actions[self._top : self._top + self.n_envs] = path[
+            "low_level_actions"
+        ]
+        self._low_level_rewards[self._top : self._top + self.n_envs] = path[
+            "low_level_rewards"
+        ]
+        self._low_level_terminals[self._top : self._top + self.n_envs] = path[
+            "low_level_terminals"
+        ]
 
         self._advance()
 
@@ -477,10 +478,10 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
             replace=self._replace or self._size < batch_size,
         )
 
-        observations = self._observations[indices]
+        low_level_observations = self._low_level_observations[indices]
         high_level_actions = self._high_level_actions[indices]
         combined_observations = np.concatenate(
-            (observations, high_level_actions), axis=-1
+            (low_level_observations, high_level_actions), axis=-1
         )
         low_level_actions = self._low_level_actions[indices]
         rewards = self._low_level_rewards[indices]

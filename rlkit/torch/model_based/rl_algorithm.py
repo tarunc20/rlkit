@@ -406,12 +406,21 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     "low_level_rewards",
                     "low_level_terminals",
                 ]
-                self.replay_buffers[manager_idx].add_paths(
-                    {k: init_expl_paths[k] for k in manager_keys}
-                )
-                self.primitive_model_buffer.add_paths(
-                    {k: init_expl_paths[k] for k in primitive_model_keys}
-                )
+                manager_paths = []
+                primitive_model_paths = []
+                for path in init_expl_paths:
+                    manager_path = {}
+                    primitive_model_path = {}
+                    for manager_key in manager_keys:
+                        manager_path[manager_key] = path[manager_key]
+                    for primitive_model_key in primitive_model_keys:
+                        primitive_model_path[primitive_model_key] = path[
+                            primitive_model_key
+                        ]
+                    manager_paths.append(manager_path)
+                    primitive_model_paths.append(primitive_model_path)
+                self.replay_buffers[manager_idx].add_paths(manager_paths)
+                self.primitive_model_buffer.add_paths(primitive_model_paths)
                 self.expl_data_collectors[manager_idx].end_epoch(-1)
         self.total_train_expl_time += time.time() - st
         for manager_idx in range(self.num_managers):
@@ -427,9 +436,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 )
                 self.trainers[manager_idx].train(train_data)
             self.training_mode(False)
-        ptu.set_gpu_mode(True, gpu_id=0)
-        for _ in range(self.num_pretrain_steps):
-            self.primitive_model_buffer.random_batch(self.batch_size)
+        ptu.set_gpu_mode(True, gpu_id=3)
+        for _ in range(self.num_pretrain_steps * self.num_managers):
+            train_data = self.primitive_model_buffer.random_batch(self.batch_size)
             self.primitive_model_pretrain_trainer.train(train_data)
 
         for epoch in gt.timed_for(
@@ -462,12 +471,21 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                         "low_level_rewards",
                         "low_level_terminals",
                     ]
-                    self.replay_buffers[manager_idx].add_paths(
-                        {k: new_expl_paths[k] for k in manager_keys}
-                    )
-                    self.primitive_model_buffer.add_paths(
-                        {k: new_expl_paths[k] for k in primitive_model_keys}
-                    )
+                    manager_paths = []
+                    primitive_model_paths = []
+                    for path in init_expl_paths:
+                        manager_path = {}
+                        primitive_model_path = {}
+                        for manager_key in manager_keys:
+                            manager_path[manager_key] = path[manager_key]
+                        for primitive_model_key in primitive_model_keys:
+                            primitive_model_path[primitive_model_key] = path[
+                                primitive_model_key
+                            ]
+                        manager_paths.append(manager_path)
+                        primitive_model_paths.append(primitive_model_path)
+                    self.replay_buffers[manager_idx].add_paths(manager_paths)
+                    self.primitive_model_buffer.add_paths(primitive_model_paths)
                     gt.stamp("data storing", unique=False)
 
                     self.training_mode(True)
@@ -491,10 +509,14 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.total_train_expl_time += time.time() - st
 
             st = time.time()
-            ptu.set_gpu_mode(True, gpu_id=0)
-            for train_step in range(self.num_trains_per_train_loop):
-                self.primitive_model_buffer.random_batch(self.batch_size)
-                self.primitive_model_pretrain_trainer.train(train_data)
+            ptu.set_gpu_mode(True, gpu_id=3)
+            for train_step in range(
+                self.num_trains_per_train_loop
+                * self.num_train_loops_per_epoch
+                * self.num_managers
+            ):
+                train_data = self.primitive_model_buffer.random_batch(self.batch_size)
+                self.primitive_model_trainer.train(train_data)
             self.total_train_expl_time += time.time() - st
 
             self._end_epoch(epoch)
@@ -566,6 +588,11 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 eval_util.get_generic_path_information(eval_paths),
                 prefix=f"{self.env_names[manager_idx]}/evaluation/",
             )
+
+        logger.record_dict(
+            self.primitive_model_trainer.get_diagnostics(),
+            prefix=f"primitive_model_trainer/trainer/",
+        )
 
         """
         Misc
