@@ -67,7 +67,7 @@ class BCTrainer(TorchTrainer, LossFunction):
         actions = batch["actions"]
 
         """
-        Policy and Alpha Loss
+        Policy Loss
         """
         action_preds = self.policy(obs.reshape(-1, obs.shape[-1]))
         loss = self.policy_criterion(

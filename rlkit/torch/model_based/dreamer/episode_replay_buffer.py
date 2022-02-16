@@ -410,36 +410,37 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self._max_replay_buffer_size = max_replay_buffer_size
         self._low_level_observations = np.zeros(
             (
-                max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive,
+                max_replay_buffer_size * max_path_length,
+                num_low_level_actions_per_primitive + 1,
                 observation_dim,
-            )
+            ),
+            dtype=np.uint8,
         )
         self._high_level_actions = np.zeros(
             (
-                max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive,
+                max_replay_buffer_size * max_path_length,
+                num_low_level_actions_per_primitive,
                 action_dim + 1,
             )
         )
         self._low_level_actions = np.zeros(
             (
-                max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive,
+                max_replay_buffer_size * max_path_length,
+                num_low_level_actions_per_primitive,
                 low_level_action_dim,
             )
         )
         self._low_level_rewards = np.zeros(
             (
-                max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive,
+                max_replay_buffer_size * max_path_length,
+                num_low_level_actions_per_primitive,
                 1,
             )
         )
         self._low_level_terminals = np.zeros(
             (
-                max_replay_buffer_size,
-                max_path_length * num_low_level_actions_per_primitive,
+                max_replay_buffer_size * max_path_length,
+                num_low_level_actions_per_primitive,
                 1,
             )
         )
@@ -451,23 +452,29 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self.prioritize_fraction = prioritize_fraction
         self.uniform_priorities = uniform_priorities
 
+    def _advance(self):
+        self._top = (
+            self._top + self.n_envs * self.max_path_length
+        ) % self._max_replay_buffer_size
+        if self._size < self._max_replay_buffer_size:
+            self._size += self.n_envs * self.max_path_length
+
     def add_path(self, path):
-        # TODO: reshape input paths so that each primitive trajectory becomes a separate path
-        self._low_level_observations[self._top : self._top + self.n_envs] = path[
-            "low_level_observations"
-        ]
-        self._high_level_actions[self._top : self._top + self.n_envs] = path[
-            "high_level_actions"
-        ]
-        self._low_level_actions[self._top : self._top + self.n_envs] = path[
-            "low_level_actions"
-        ]
-        self._low_level_rewards[self._top : self._top + self.n_envs] = path[
-            "low_level_rewards"
-        ]
-        self._low_level_terminals[self._top : self._top + self.n_envs] = path[
-            "low_level_terminals"
-        ]
+        self._low_level_observations[
+            self._top : self._top + self.n_envs * self.max_path_length
+        ] = path["low_level_observations"]
+        self._high_level_actions[
+            self._top : self._top + self.n_envs * self.max_path_length
+        ] = path["high_level_actions"]
+        self._low_level_actions[
+            self._top : self._top + self.n_envs * self.max_path_length
+        ] = path["low_level_actions"]
+        self._low_level_rewards[
+            self._top : self._top + self.n_envs * self.max_path_length
+        ] = path["low_level_rewards"]
+        self._low_level_terminals[
+            self._top : self._top + self.n_envs * self.max_path_length
+        ] = path["low_level_terminals"]
 
         self._advance()
 
@@ -478,16 +485,21 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
             replace=self._replace or self._size < batch_size,
         )
 
-        low_level_observations = self._low_level_observations[indices]
+        low_level_observations = self._low_level_observations[indices][:, :-1]
+        next_low_level_observations = self._low_level_observations[indices][:, 1:]
         high_level_actions = self._high_level_actions[indices]
         combined_observations = np.concatenate(
             (low_level_observations, high_level_actions), axis=-1
+        )
+        next_combined_observations = np.concatenate(
+            (next_low_level_observations, high_level_actions), axis=-1
         )
         low_level_actions = self._low_level_actions[indices]
         rewards = self._low_level_rewards[indices]
         terminals = self._low_level_terminals[indices]
         batch = dict(
             observations=combined_observations,
+            next_observations=next_combined_observations,
             actions=low_level_actions,
             rewards=rewards,
             terminals=terminals,

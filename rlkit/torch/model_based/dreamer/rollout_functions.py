@@ -221,24 +221,24 @@ def vec_rollout_skill_learn(
 
     low_level_actions = np.zeros(
         (
-            num_envs,
-            (max_path_length * num_low_level_actions_per_primitive),
+            num_envs * max_path_length,
+            num_low_level_actions_per_primitive,
             low_level_action_dim,
         ),
         dtype=np.float32,
     )
     high_level_actions = np.zeros(
         (
-            num_envs,
-            (max_path_length * num_low_level_actions_per_primitive),
+            num_envs * max_path_length,
+            num_low_level_actions_per_primitive,
             env.action_space.low.shape[0] + 1,  # Plus 1 includes phase variable.
         ),
         dtype=np.float32,
     )
     low_level_observations = np.zeros(
         (
-            num_envs,
-            (max_path_length * num_low_level_actions_per_primitive),
+            num_envs * max_path_length,
+            num_low_level_actions_per_primitive + 1,
             env.observation_space.low.shape[0],
         ),
         dtype=np.uint8,
@@ -246,32 +246,32 @@ def vec_rollout_skill_learn(
 
     low_level_rewards = np.zeros(
         (
-            num_envs,
-            (max_path_length * num_low_level_actions_per_primitive),
+            num_envs * max_path_length,
+            num_low_level_actions_per_primitive,
             1,
         )
     )
 
     low_level_terminals = np.zeros(
         (
-            num_envs,
-            (max_path_length * num_low_level_actions_per_primitive),
+            num_envs * max_path_length,
+            num_low_level_actions_per_primitive,
             1,
         )
     )
 
-    obs = env.reset()
-    agent.reset(obs)
-    observations = [obs]
+    high_level_obs = env.reset()
+    start_obs = high_level_obs
+    agent.reset(high_level_obs)
+    observations = [high_level_obs]
     actions = [np.zeros((num_envs, env.action_space.low.size))]
     rewards = [np.zeros((num_envs,))]
     terminals = [[False] * num_envs]
 
-    low_level_observations[:, 0] = obs
     agent_infos = [{}]
     env_infos = [{}]
 
-    policy_obs = np.array(obs)
+    policy_obs = np.array(high_level_obs)
     phases = (
         np.linspace(
             0,
@@ -292,7 +292,7 @@ def vec_rollout_skill_learn(
 
         high_level_obs, reward, done, info = env.step(high_level_action)
 
-        observations.append(obs)
+        observations.append(high_level_obs)
         rewards.append(reward)
         terminals.append(done)
         actions.append(high_level_action)
@@ -308,19 +308,16 @@ def vec_rollout_skill_learn(
         del info["low_level_terminal"]
         gc.collect()
         env_infos.append(info)
-        low_level_actions[
-            :,
-            step
-            * num_low_level_actions_per_primitive : (step + 1)
-            * num_low_level_actions_per_primitive,
-        ] = np.array(low_level_action)
-        low_level_observations[
-            :,
-            step
-            * num_low_level_actions_per_primitive : step
-            * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive,
-        ] = low_level_obs
+
+        # add last low level obs to the start of new low level obs to account
+        # for low level obs storing the observation after the corresponding low level action.
+        low_level_obs = np.concatenate(
+            (np.expand_dims(start_obs, 1), low_level_obs), axis=1
+        )
+        low_level_actions[step * num_envs : (step + 1) * num_envs] = np.array(
+            low_level_action
+        )
+        low_level_observations[step * num_envs : (step + 1) * num_envs] = low_level_obs
 
         high_level_action = np.repeat(
             np.array(high_level_action).reshape(num_envs, 1, -1),
@@ -330,33 +327,18 @@ def vec_rollout_skill_learn(
         high_level_action = np.concatenate(
             (high_level_action, np.expand_dims(phases, -1)), axis=2
         )
-        high_level_actions[
-            :,
-            step
-            * num_low_level_actions_per_primitive : step
-            * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive,
-        ] = high_level_action
+        high_level_actions[step * num_envs : (step + 1) * num_envs] = high_level_action
 
-        low_level_rewards[
-            :,
-            step
-            * num_low_level_actions_per_primitive : step
-            * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive,
-        ] = low_level_reward
+        low_level_rewards[step * num_envs : (step + 1) * num_envs] = low_level_reward
 
         low_level_terminals[
-            :,
-            step
-            * num_low_level_actions_per_primitive : step
-            * num_low_level_actions_per_primitive
-            + num_low_level_actions_per_primitive,
+            step * num_envs : (step + 1) * num_envs
         ] = low_level_terminal
 
         if done.all():
             break
         policy_obs = high_level_obs
+        start_obs = low_level_obs[:, -1]
     rewards = np.array(rewards)
     actions = np.array(actions)
     observations = np.array(observations)
