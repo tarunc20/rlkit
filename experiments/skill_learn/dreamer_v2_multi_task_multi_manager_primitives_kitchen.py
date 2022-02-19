@@ -12,9 +12,9 @@ if __name__ == "__main__":
     if args.debug:
         algorithm_kwargs = dict(
             num_epochs=5,
-            num_eval_steps_per_epoch=60,
-            num_expl_steps_per_train_loop=60,
-            min_num_steps_before_training=60,
+            num_eval_steps_per_epoch=5,
+            num_expl_steps_per_train_loop=5,
+            min_num_steps_before_training=5,
             num_pretrain_steps=1,
             num_train_loops_per_epoch=1,
             num_trains_per_train_loop=1,
@@ -34,7 +34,6 @@ if __name__ == "__main__":
     variant = dict(
         algorithm="MultiTaskMultiManagerRAPS",
         version="normal",
-        replay_buffer_size=int(5e5),
         algorithm_kwargs=algorithm_kwargs,
         use_raw_actions=False,
         env_suite="kitchen",
@@ -102,8 +101,6 @@ if __name__ == "__main__":
             imagination_horizon=5,
         ),
         replay_buffer_kwargs=dict(
-            batch_length=50,
-            use_batch_length=False,
             max_replay_buffer_size=int(5e5),
         ),
         num_expl_envs=5,
@@ -130,15 +127,11 @@ if __name__ == "__main__":
             joint_processor_kwargs=dict(hidden_sizes=[512, 256]),
             image_dim=64 * 64 * 3,
         ),
-        primitive_model_replay_buffer_kwargs=dict(
-            batch_length=50,
-            use_batch_length=False,
-            max_replay_buffer_size=int(1.44e5),
-            num_low_level_actions_per_primitive=5,
-            low_level_action_dim=9,
-            max_path_length=5,
+        primitive_model_replay_buffer_kwargs=dict(),
+        primitive_model_trainer_kwargs=dict(
+            policy_lr=3e-4,
         ),
-        primitive_model_trainer_kwargs=dict(),
+        primitive_model_batch_size=417,
     )
 
     setup_sweep_and_launch_exp(

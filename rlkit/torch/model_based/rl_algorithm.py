@@ -354,6 +354,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         primitive_model_pretrain_trainer=None,
         primitive_model_trainer=None,
         primitive_model_buffer=None,
+        primitive_model_batch_size=0,
     ):
         self.trainers = trainers
         self.expl_envs = exploration_envs
@@ -384,6 +385,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.primitive_model_pretrain_trainer = primitive_model_pretrain_trainer
         self.primitive_model_trainer = primitive_model_trainer
         self.primitive_model_buffer = primitive_model_buffer
+        self.primitive_model_batch_size = primitive_model_batch_size
 
     def _train(self):
         st = time.time()
@@ -439,7 +441,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         ptu.set_gpu_mode(True, gpu_id=3)
         self.training_mode(True)
         for _ in range(self.num_pretrain_steps * self.num_managers):
-            train_data = self.primitive_model_buffer.random_batch(self.batch_size)
+            train_data = self.primitive_model_buffer.random_batch(
+                self.primitive_model_batch_size
+            )
             self.primitive_model_pretrain_trainer.train(train_data)
         self.training_mode(False)
         for epoch in gt.timed_for(
@@ -517,7 +521,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 * self.num_train_loops_per_epoch
                 * self.num_managers
             ):
-                train_data = self.primitive_model_buffer.random_batch(self.batch_size)
+                train_data = self.primitive_model_buffer.random_batch(
+                    self.primitive_model_batch_size
+                )
                 self.primitive_model_trainer.train(train_data)
             self.training_mode(False)
             self.total_train_expl_time += time.time() - st
@@ -535,6 +541,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.eval_data_collectors[manager_idx].end_epoch(epoch)
             self.replay_buffers[manager_idx].end_epoch(epoch)
             self.trainers[manager_idx].end_epoch(epoch)
+        self.primitive_model_buffer.end_epoch(epoch)
+        self.primitive_model_trainer.end_epoch(epoch)
 
         # for post_epoch_func in self.post_epoch_funcs:
         #     post_epoch_func(self, epoch)

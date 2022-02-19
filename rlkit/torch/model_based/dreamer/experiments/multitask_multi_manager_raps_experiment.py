@@ -229,6 +229,7 @@ def experiment(variant):
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
         primitive_model_trainer=primitive_model_pretrain_trainer,
         primitive_model_buffer=primitive_model_buffer,
+        primitive_model_batch_size=variant.get("primitive_model_batch_size", 256),
         **variant["algorithm_kwargs"],
     )
     algorithm.low_level_primitives = False

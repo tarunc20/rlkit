@@ -329,16 +329,20 @@ def vec_rollout_skill_learn(
         )
         high_level_actions[step * num_envs : (step + 1) * num_envs] = high_level_action
 
-        low_level_rewards[step * num_envs : (step + 1) * num_envs] = low_level_reward
+        low_level_rewards[step * num_envs : (step + 1) * num_envs] = np.expand_dims(
+            low_level_reward, -1
+        )
 
-        low_level_terminals[
-            step * num_envs : (step + 1) * num_envs
-        ] = low_level_terminal
+        low_level_terminals[step * num_envs : (step + 1) * num_envs] = np.expand_dims(
+            low_level_terminal, -1
+        )
 
         if done.all():
             break
         policy_obs = high_level_obs
-        start_obs = low_level_obs[:, -1]
+        # The high level obs is the effect of the latest high level action, which is the starting obs
+        # for the next primitive.
+        start_obs = high_level_obs
     rewards = np.array(rewards)
     actions = np.array(actions)
     observations = np.array(observations)

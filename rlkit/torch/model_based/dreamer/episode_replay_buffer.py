@@ -451,6 +451,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self._size = 0
         self.prioritize_fraction = prioritize_fraction
         self.uniform_priorities = uniform_priorities
+        self.num_low_level_actions_per_primitive = num_low_level_actions_per_primitive
 
     def _advance(self):
         self._top = (
@@ -460,6 +461,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
             self._size += self.n_envs * self.max_path_length
 
     def add_path(self, path):
+        # TODO: integrate in end of step high level rewards for the last step in each trajectory
         self._low_level_observations[
             self._top : self._top + self.n_envs * self.max_path_length
         ] = path["low_level_observations"]
@@ -480,23 +482,34 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
 
     def random_batch(self, batch_size):
         indices = np.random.choice(
-            self._size,
+            self._size * self.num_low_level_actions_per_primitive,
             size=batch_size,
             replace=self._replace or self._size < batch_size,
         )
 
-        low_level_observations = self._low_level_observations[indices][:, :-1]
-        next_low_level_observations = self._low_level_observations[indices][:, 1:]
-        high_level_actions = self._high_level_actions[indices]
+        # This allows us to index arbitrary transitions in the trajectories without having to
+        # reshape the entire array (much more efficient!).
+        unraveled_indices = np.unravel_index(
+            indices,
+            (
+                self.max_path_length * self._max_replay_buffer_size,
+                self.num_low_level_actions_per_primitive,
+            ),
+        )
+        low_level_observations = self._low_level_observations[:, :-1][unraveled_indices]
+        next_low_level_observations = self._low_level_observations[:, 1:][
+            unraveled_indices
+        ]
+        high_level_actions = self._high_level_actions[unraveled_indices]
         combined_observations = np.concatenate(
             (low_level_observations, high_level_actions), axis=-1
         )
         next_combined_observations = np.concatenate(
             (next_low_level_observations, high_level_actions), axis=-1
         )
-        low_level_actions = self._low_level_actions[indices]
-        rewards = self._low_level_rewards[indices]
-        terminals = self._low_level_terminals[indices]
+        low_level_actions = self._low_level_actions[unraveled_indices]
+        rewards = self._low_level_rewards[unraveled_indices]
+        terminals = self._low_level_terminals[unraveled_indices]
         batch = dict(
             observations=combined_observations,
             next_observations=next_combined_observations,

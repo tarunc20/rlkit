@@ -212,5 +212,8 @@ class CNNMLP(jit.ScriptModule):
 
     @jit.script_method
     def preprocess(self, obs):
+        assert (
+            obs.max() <= 255.0 and obs.min() >= 0.0
+        ), f"Invalid observation: max: {obs.max()}, min: {obs.min()}"
         obs = obs / 255.0 - 0.5
         return obs
