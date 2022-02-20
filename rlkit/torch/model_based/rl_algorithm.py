@@ -5,6 +5,7 @@ import time
 from collections import OrderedDict
 
 import gtimer as gt
+import torch
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.core import eval_util, logger
@@ -355,6 +356,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         primitive_model_trainer=None,
         primitive_model_buffer=None,
         primitive_model_batch_size=0,
+        primitive_model_path=None,
     ):
         self.trainers = trainers
         self.expl_envs = exploration_envs
@@ -386,8 +388,16 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.primitive_model_trainer = primitive_model_trainer
         self.primitive_model_buffer = primitive_model_buffer
         self.primitive_model_batch_size = primitive_model_batch_size
+        self.primitive_model_path = primitive_model_path
 
     def _train(self):
+        torch.save(
+            self.primitive_model_trainer.policy.state_dict(),
+            self.primitive_model_path,
+        )
+        for manager_idx in range(self.num_managers):
+            self.expl_envs[manager_idx].sync_primitive_model()
+            self.eval_envs[manager_idx].sync_primitive_model()
         st = time.time()
         if self.min_num_steps_before_training > 0:
             for manager_idx in range(self.num_managers):
@@ -438,7 +448,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 )
                 self.trainers[manager_idx].train(train_data)
             self.training_mode(False)
-        ptu.set_gpu_mode(True, gpu_id=3)
+        ptu.set_gpu_mode(True, gpu_id=0)
         self.training_mode(True)
         for _ in range(self.num_pretrain_steps * self.num_managers):
             train_data = self.primitive_model_buffer.random_batch(
@@ -446,6 +456,12 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             )
             self.primitive_model_pretrain_trainer.train(train_data)
         self.training_mode(False)
+        torch.save(
+            self.primitive_model_trainer.policy.state_dict(), self.primitive_model_path
+        )
+        for manager_idx in range(self.num_managers):
+            self.expl_envs[manager_idx].sync_primitive_model()
+            self.eval_envs[manager_idx].sync_primitive_model()
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,
@@ -478,7 +494,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     ]
                     manager_paths = []
                     primitive_model_paths = []
-                    for path in init_expl_paths:
+                    for path in new_expl_paths:
                         manager_path = {}
                         primitive_model_path = {}
                         for manager_key in manager_keys:
@@ -514,7 +530,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.total_train_expl_time += time.time() - st
 
             st = time.time()
-            ptu.set_gpu_mode(True, gpu_id=3)
+            ptu.set_gpu_mode(True, gpu_id=0)
             self.training_mode(True)
             for train_step in range(
                 self.num_trains_per_train_loop
@@ -526,6 +542,13 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 )
                 self.primitive_model_trainer.train(train_data)
             self.training_mode(False)
+            torch.save(
+                self.primitive_model_trainer.policy.state_dict(),
+                self.primitive_model_path,
+            )
+            for manager_idx in range(self.num_managers):
+                self.expl_envs[manager_idx].sync_primitive_model()
+                self.eval_envs[manager_idx].sync_primitive_model()
             self.total_train_expl_time += time.time() - st
 
             self._end_epoch(epoch)

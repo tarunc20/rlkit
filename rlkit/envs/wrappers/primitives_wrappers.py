@@ -1,6 +1,7 @@
 import gym
 import mujoco_py
 import numpy as np
+import torch
 from d4rl.kitchen.adept_envs.simulation.renderer import DMRenderer
 from gym import spaces
 from gym.spaces.box import Box
@@ -8,8 +9,10 @@ from metaworld.envs.mujoco.mujoco_env import _assert_task_is_set
 from metaworld.envs.mujoco.sawyer_xyz.sawyer_xyz_env import SawyerXYZEnv
 from robosuite.wrappers.gym_wrapper import GymWrapper
 
+import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers.dm_backend_wrappers import DMControlBackendRobosuiteEnv
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
+from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
 
 
 class TimeLimit(gym.Wrapper):
@@ -256,6 +259,8 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         open_gripper_iterations=200,
         close_gripper_iterations=300,
         pos_ctrl_action_scale=0.05,
+        primitive_model_kwargs=None,
+        primitive_model_path=None,
     ):
         self.goto_pose_iterations = goto_pose_iterations
         self.open_gripper_iterations = open_gripper_iterations
@@ -337,6 +342,19 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
         self.unset_render_every_step()
         self.collect_primitives_info = collect_primitives_info
+
+        if primitive_model_kwargs is not None:
+            primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
+                self.action_space.low.shape[0] + 1
+            )
+            self.primitive_model = CNNMLP(**primitive_model_kwargs)
+            self.primitive_model_path = primitive_model_path
+
+    def sync_primitive_model(self):
+        self.primitive_model.load_state_dict(
+            torch.load(self.primitive_model_path, map_location=ptu.device)
+        )
+        self.primitive_model.to(ptu.device)
 
     def _reset_hand(self):
         super()._reset_hand()

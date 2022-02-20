@@ -49,7 +49,7 @@ git clone git@github.com:mihdalal/viskit.git
 
 Install Ananconda environment
 ```
-conda create -n skill_learn python=3.8
+conda create -n skill_learn python=3.7.11
 source activate skill_learn
 ```
 

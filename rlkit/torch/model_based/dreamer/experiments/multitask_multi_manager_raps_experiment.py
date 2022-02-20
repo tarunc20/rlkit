@@ -1,6 +1,7 @@
 def experiment(variant):
     import os
 
+    from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
     from rlkit.torch.model_based.rl_algorithm import TorchMultiManagerBatchRLAlgorithm
 
@@ -41,6 +42,25 @@ def experiment(variant):
 
     num_low_level_actions_per_primitive = variant["num_low_level_actions_per_primitive"]
     low_level_action_dim = variant["low_level_action_dim"]
+
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["env_kwargs"]["action_space_kwargs"]["primitive_model_kwargs"] = variant[
+        "primitive_model_kwargs"
+    ]
+    primitive_model_path = os.path.join(
+        logger.get_snapshot_dir(), "primitive_model.ptc"
+    )
+    variant["env_kwargs"]["action_space_kwargs"][
+        "primitive_model_path"
+    ] = primitive_model_path
 
     for manager_idx in range(num_managers):
         ptu.set_gpu_mode(True, gpu_id=manager_idx)
@@ -187,19 +207,11 @@ def experiment(variant):
         expl_envs.append(expl_env)
         eval_envs.append(eval_env)
 
-    ptu.set_gpu_mode(True, gpu_id=3)
+    ptu.set_gpu_mode(True, gpu_id=0)
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
         eval_env.action_space.low.shape[0] + 1
     )
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
-    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
-    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
+
     primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
 
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
@@ -225,6 +237,7 @@ def experiment(variant):
         primitive_model_trainer=primitive_model_pretrain_trainer,
         primitive_model_buffer=primitive_model_buffer,
         primitive_model_batch_size=variant.get("primitive_model_batch_size", 256),
+        primitive_model_path=primitive_model_path,
         **variant["algorithm_kwargs"],
     )
     algorithm.low_level_primitives = False
