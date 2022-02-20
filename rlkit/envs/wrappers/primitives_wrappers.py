@@ -376,10 +376,13 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitives_info = {}
             self.primitives_info["low_level_action"] = []
             self.primitives_info["low_level_obs"] = []
+            self.primitives_info["low_level_reward"] = []
+            self.primitives_info["low_level_terminal"] = []
             self.primitive_step_counter = 0
             self._num_low_level_steps_total = 0
             self.combined_prev_action = np.zeros(3, dtype=np.float32)
             self.act(action)
+            self.primitives_info["low_level_terminal"][-1] = 1
 
         self.curr_path_length += 1
 
@@ -582,6 +585,16 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.call_render_every_step()
             self.primitive_step_counter += 1
             self._num_low_level_steps_total += 1
+            if (self.primitive_step_counter + 1) % (
+                self.num_low_level_steps // self.num_low_level_actions_per_primitive
+            ) == 0:
+                self.primitives_info["low_level_reward"].append(
+                    0
+                )  # TODO: change this once we have defined our low level rewards
+            if (self.primitive_step_counter + 1) % (
+                self.num_low_level_steps // self.num_low_level_actions_per_primitive
+            ) == 0:
+                self.primitives_info["low_level_terminal"].append(0)
         return action
 
     def close_gripper(self, d):

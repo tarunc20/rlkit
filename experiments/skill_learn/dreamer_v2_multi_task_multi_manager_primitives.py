@@ -22,7 +22,7 @@ if __name__ == "__main__":
         )
     else:
         algorithm_kwargs = dict(
-            num_epochs=100,
+            num_epochs=500,
             num_eval_steps_per_epoch=60,
             min_num_steps_before_training=2400,
             num_pretrain_steps=100,
@@ -63,9 +63,9 @@ if __name__ == "__main__":
                     "azimuth": 141.328125,
                     "elevation": -53.203125160653144,
                 },
+                collect_primitives_info=True,
+                render_intermediate_obs_to_info=True,
             ),
-            collect_primitives_info=True,
-            render_intermediate_obs_to_info=True,
         ),
         actor_kwargs=dict(
             discrete_continuous_dist=True,
