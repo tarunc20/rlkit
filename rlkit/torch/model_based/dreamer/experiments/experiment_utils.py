@@ -83,12 +83,6 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
         "num_low_level_actions_per_primitive"
     ] = variant["num_low_level_actions_per_primitive"]
 
-    variant["env_kwargs"]["action_space_kwargs"][
-        "num_low_level_actions_per_primitive"
-    ] = variant["num_low_level_actions_per_primitive"]
-    variant["env_kwargs"]["action_space_kwargs"]["low_level_action_dim"] = variant[
-        "low_level_action_dim"
-    ]
     variant["primitive_model_replay_buffer_kwargs"]["max_replay_buffer_size"] = int(
         3e6
         / (
@@ -99,15 +93,20 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
     variant["primitive_model_replay_buffer_kwargs"][
         "num_low_level_actions_per_primitive"
     ] = variant["num_low_level_actions_per_primitive"]
-    variant["primitive_model_replay_buffer_kwargs"]["low_level_action_dim"] = variant[
-        "low_level_action_dim"
+    variant["primitive_model_replay_buffer_kwargs"]["max_path_length"] = variant[
+        "max_path_length"
     ]
     variant["primitive_model_replay_buffer_kwargs"]["low_level_action_dim"] = variant[
-        "max_path_length"
+        "low_level_action_dim"
     ]
     variant["primitive_model_batch_size"] *= (
         variant["num_low_level_actions_per_primitive"] * variant["max_path_length"]
     )
+
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "output_size"
+    ] = variant["low_level_action_dim"]
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"]["input_size"] = 512 + 64
 
     return variant
 

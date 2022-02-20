@@ -188,17 +188,12 @@ def experiment(variant):
         eval_envs.append(eval_env)
 
     ptu.set_gpu_mode(True, gpu_id=3)
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
-        "output_size"
-    ] = variant["low_level_action_dim"]
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"]["input_size"] = 512 + 64
-
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
         eval_env.action_space.low.shape[0] + 1
     )
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
     ] = nn.ReLU

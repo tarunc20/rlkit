@@ -6,6 +6,8 @@ import numpy as np
 from gym import Env
 from stable_baselines3.common.vec_env import CloudpickleWrapper, SubprocVecEnv, VecEnv
 
+import rlkit.torch.pytorch_util as ptu
+
 
 class DummyVecEnv(Env):
     def __init__(self, envs, pass_render_kwargs=True):
@@ -113,6 +115,7 @@ def _worker(
                 remote.send(setattr(env, data[0], data[1]))
             elif cmd == "set_process_gpu_device_id":
                 os.environ["EGL_DEVICE_ID"] = str(data)
+                ptu.set_gpu_mode(True, gpu_id=int(data))
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
