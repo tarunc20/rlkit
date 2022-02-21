@@ -39,9 +39,9 @@ if __name__ == "__main__":
         env_suite="metaworld",
         pass_render_kwargs=True,
         env_names=(
-            "assembly-v2",
-            "disassemble-v2",
-            "soccer-v2",
+            # "assembly-v2",
+            # "disassemble-v2",
+            # "soccer-v2",
             "sweep-into-v2",
         ),
         env_kwargs=dict(

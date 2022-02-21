@@ -118,7 +118,7 @@ def _worker(
                 ptu.set_gpu_mode(True, gpu_id=int(data))
                 env.device_id = int(data)
             elif cmd == "sync_primitive_model":
-                env.sync_primitive_model()
+                remote.send(env.sync_primitive_model())
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -218,3 +218,5 @@ class StableBaselinesVecEnv(SubprocVecEnv):
     def sync_primitive_model(self):
         for remote in self.remotes:
             remote.send(("sync_primitive_model", None))
+        for remote in self.remotes:
+            remote.recv()

@@ -347,7 +347,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
             )
-            self.primitive_model = CNNMLP(**primitive_model_kwargs)
+            self.primitive_model = CNNMLP(**primitive_model_kwargs).to(ptu.device)
             self.primitive_model_path = primitive_model_path
 
     def sync_primitive_model(self):

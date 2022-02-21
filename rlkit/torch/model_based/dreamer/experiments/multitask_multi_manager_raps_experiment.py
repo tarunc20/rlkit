@@ -30,15 +30,9 @@ def experiment(variant):
     )
     from rlkit.torch.model_based.dreamer.visualization import post_epoch_visualize_func
     from rlkit.torch.model_based.dreamer.world_models import WorldModel
+    from rlkit.torch.model_based.vec_managers import Manager, VecManager
 
     num_managers = len(variant["env_names"])
-    trainers = []
-    expl_path_collectors = []
-    eval_path_collectors = []
-    replay_buffers = []
-    expl_envs = []
-    eval_envs = []
-    rand_policies = []
 
     num_low_level_actions_per_primitive = variant["num_low_level_actions_per_primitive"]
     low_level_action_dim = variant["low_level_action_dim"]
@@ -62,7 +56,7 @@ def experiment(variant):
         "primitive_model_path"
     ] = primitive_model_path
 
-    for manager_idx in range(num_managers):
+    def make_manager(manager_idx):
         ptu.set_gpu_mode(True, gpu_id=manager_idx)
         os.environ["EGL_DEVICE_ID"] = str(manager_idx)
         env_suite = variant.get("env_suite", "kitchen")
@@ -199,15 +193,46 @@ def experiment(variant):
             **variant["trainer_kwargs"],
         )
         trainer.to(ptu.device)
-        trainers.append(trainer)
-        expl_path_collectors.append(expl_path_collector)
-        eval_path_collectors.append(eval_path_collector)
-        replay_buffers.append(replay_buffer)
-        rand_policies.append(rand_policy)
-        expl_envs.append(expl_env)
-        eval_envs.append(eval_env)
 
-    ptu.set_gpu_mode(True, gpu_id=0)
+        return Manager(
+            expl_env,
+            eval_env,
+            expl_path_collector,
+            eval_path_collector,
+            trainer,
+            replay_buffer,
+            pretrain_policy=rand_policy,
+            **variant["algorithm_kwargs"],
+        )
+
+    manager_fns = [lambda: make_manager(i) for i in range(num_managers)]
+
+    env_suite = variant.get("env_suite", "kitchen")
+    env_name = variant["env_names"][0]
+    env_kwargs = variant["env_kwargs"]
+    env_fns = [
+        lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)
+        for _ in range(1)
+    ]
+    eval_env = StableBaselinesVecEnv(
+        env_fns=env_fns,
+        start_method="fork",
+        device_id=0,
+        reload_state_args=(
+            1,
+            primitives_make_env.make_env,
+            (env_suite, env_name, env_kwargs),
+        ),
+    )
+    discrete_continuous_dist = variant["actor_kwargs"]["discrete_continuous_dist"]
+    continuous_action_dim = eval_env.max_arg_len
+    discrete_action_dim = eval_env.num_primitives
+    if not discrete_continuous_dist:
+        continuous_action_dim = continuous_action_dim + discrete_action_dim
+        discrete_action_dim = 0
+    action_dim = continuous_action_dim + discrete_action_dim
+    obs_dim = eval_env.observation_space.low.size
+
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
         eval_env.action_space.low.shape[0] + 1
     )
@@ -215,7 +240,7 @@ def experiment(variant):
     primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
 
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
-        num_expl_envs,
+        variant["num_expl_envs"],
         obs_dim,
         action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
@@ -223,16 +248,14 @@ def experiment(variant):
     primitive_model_pretrain_trainer = BCTrainer(
         primitive_model, **variant["primitive_model_trainer_kwargs"]
     )
+    vec_manager = VecManager(
+        manager_fns,
+        variant["env_names"],
+        start_method="fork",
+        primitive_model_buffer=primitive_model_buffer,
+    )
     algorithm = TorchMultiManagerBatchRLAlgorithm(
-        trainers=trainers,
-        exploration_envs=expl_envs,
-        evaluation_envs=eval_envs,
-        exploration_data_collectors=expl_path_collectors,
-        evaluation_data_collectors=eval_path_collectors,
-        replay_buffers=replay_buffers,
-        pretrain_policies=rand_policies,
-        eval_buffers=[None] * num_managers,
-        env_names=variant["env_names"],
+        vec_manager,
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
         primitive_model_trainer=primitive_model_pretrain_trainer,
         primitive_model_buffer=primitive_model_buffer,
