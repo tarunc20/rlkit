@@ -1,3 +1,6 @@
+import copy
+
+
 def experiment(variant):
     import os
 
@@ -202,58 +205,52 @@ def experiment(variant):
             trainer,
             replay_buffer,
             pretrain_policy=rand_policy,
+            manager_idx=manager_idx,
             **variant["algorithm_kwargs"],
         )
 
-    manager_fns = [lambda: make_manager(i) for i in range(num_managers)]
+    if num_managers == 1:
+        manager_fns = [lambda: make_manager(0)]
+    elif num_managers == 2:
+        manager_fns = [lambda: make_manager(0), lambda: make_manager(1)]
+    elif num_managers == 3:
+        manager_fns = [
+            lambda: make_manager(0),
+            lambda: make_manager(1),
+            lambda: make_manager(2),
+        ]
+    elif num_managers == 4:
+        manager_fns = [
+            lambda: make_manager(0),
+            lambda: make_manager(1),
+            lambda: make_manager(2),
+            lambda: make_manager(3),
+        ]
 
-    env_suite = variant.get("env_suite", "kitchen")
-    env_name = variant["env_names"][0]
-    env_kwargs = variant["env_kwargs"]
-    env_fns = [
-        lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)
-        for _ in range(1)
-    ]
-    eval_env = StableBaselinesVecEnv(
-        env_fns=env_fns,
+    vec_manager = VecManager(
+        manager_fns,
+        variant["env_names"],
         start_method="fork",
-        device_id=0,
-        reload_state_args=(
-            1,
-            primitives_make_env.make_env,
-            (env_suite, env_name, env_kwargs),
-        ),
     )
-    discrete_continuous_dist = variant["actor_kwargs"]["discrete_continuous_dist"]
-    continuous_action_dim = eval_env.max_arg_len
-    discrete_action_dim = eval_env.num_primitives
-    if not discrete_continuous_dist:
-        continuous_action_dim = continuous_action_dim + discrete_action_dim
-        discrete_action_dim = 0
-    action_dim = continuous_action_dim + discrete_action_dim
-    obs_dim = eval_env.observation_space.low.size
-
-    variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
-        eval_env.action_space.low.shape[0] + 1
-    )
-
-    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
-
+    obs_dim, action_dim = vec_manager.get_obs_and_action_dims()
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         variant["num_expl_envs"],
         obs_dim,
         action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
+    vec_manager.set_primitive_model_buffer(primitive_model_buffer)
+
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
+        action_dim + 1
+    )
+
+    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
+
     primitive_model_pretrain_trainer = BCTrainer(
         primitive_model, **variant["primitive_model_trainer_kwargs"]
     )
-    vec_manager = VecManager(
-        manager_fns,
-        variant["env_names"],
-        start_method="fork",
-        primitive_model_buffer=primitive_model_buffer,
-    )
+
     algorithm = TorchMultiManagerBatchRLAlgorithm(
         vec_manager,
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,

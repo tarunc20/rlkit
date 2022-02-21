@@ -27,6 +27,7 @@ class Manager:
         min_num_steps_before_training=0,
         pretrain_policy=None,
         num_pretrain_steps=0,
+        manager_idx=0,
     ):
         self.expl_env = expl_env
         self.eval_env = eval_env
@@ -44,12 +45,15 @@ class Manager:
         self.min_num_steps_before_training = min_num_steps_before_training
         self.pretrain_policy = pretrain_policy
         self.num_pretrain_steps = num_pretrain_steps
+        self.manager_idx = manager_idx
 
     def training_mode(self, mode):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         for net in self.trainer.networks:
             net.train(mode)
 
     def collect_init_expl_paths(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         init_expl_paths = self.expl_env_path_collector.collect_new_paths(
             self.max_path_length,
             self.min_num_steps_before_training,
@@ -79,6 +83,7 @@ class Manager:
         return primitive_model_paths
 
     def pretrain(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.training_mode(True)
         for _ in range(self.num_pretrain_steps):
             train_data = self.replay_buffer.random_batch(self.batch_size)
@@ -86,6 +91,7 @@ class Manager:
         self.training_mode(False)
 
     def collect_eval_paths(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.eval_env_path_collector.collect_new_paths(
             self.max_path_length,
             self.num_eval_steps_per_epoch,
@@ -93,6 +99,7 @@ class Manager:
         gt.stamp("evaluation sampling", unique=False)
 
     def train(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.training_mode(True)
         for train_step in range(self.num_trains_per_train_loop):
             train_data = self.replay_buffer.random_batch(self.batch_size)
@@ -101,6 +108,7 @@ class Manager:
         self.training_mode(False)
 
     def collect_expl_paths(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         new_expl_paths = self.expl_env_path_collector.collect_new_paths(
             self.max_path_length,
             self.num_expl_steps_per_train_loop,
@@ -131,12 +139,14 @@ class Manager:
         return primitive_model_paths
 
     def _end_epoch(self, epoch):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.expl_env_path_collector.end_epoch(epoch)
         self.eval_env_path_collector.end_epoch(epoch)
         self.replay_buffer.end_epoch(epoch)
         self.trainer.end_epoch(epoch)
 
     def _log_stats(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         expl_paths = self.expl_env_path_collector.get_epoch_paths()
         eval_paths = self.eval_env_path_collector.get_epoch_paths()
         return (
@@ -149,8 +159,15 @@ class Manager:
         )
 
     def sync_primitive_model(self):
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.expl_env.sync_primitive_model()
         self.eval_env.sync_primitive_model()
+
+    def get_obs_and_action_dims(self):
+        return (
+            self.eval_env.observation_space.low.size,
+            self.eval_env.action_space.low.size,
+        )
 
 
 def _worker(
@@ -186,6 +203,8 @@ def _worker(
                 manager.device_id = int(data)
             elif cmd == "sync_primitive_model":
                 remote.send(manager.sync_primitive_model())
+            elif cmd == "get_obs_and_action_dims":
+                remote.send(manager.get_obs_and_action_dims())
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -200,7 +219,6 @@ class VecManager:
         start_method=None,
         reload_state_args=None,
         device_id=0,
-        primitive_model_buffer=None,
     ):
         self.device_id = 0
         self.waiting = False
@@ -209,7 +227,6 @@ class VecManager:
         n_managers = len(manager_fns)
         self.n_managers = n_managers
         self.env_names = env_names
-        self.primitive_model_buffer = primitive_model_buffer
 
         if start_method is None:
             # Fork is not a thread safe method (see issue #217)
@@ -235,6 +252,9 @@ class VecManager:
         for remote in self.remotes:
             remote.send(("set_process_gpu_device_id", device_id))
 
+    def set_primitive_model_buffer(self, primitive_model_buffer):
+        self.primitive_model_buffer = primitive_model_buffer
+
     def close(self) -> None:
         if self.closed:
             return
@@ -246,6 +266,13 @@ class VecManager:
         for process in self.processes:
             process.join()
         self.closed = True
+
+    def get_obs_and_action_dims(self):
+        self.remotes[0].send(("get_obs_and_action_dims", None))
+        self.waiting = True
+        out = self.remotes[0].recv()
+        self.waiting = False
+        return out
 
     def sync_primitive_model(self):
         for remote in self.remotes:

@@ -624,45 +624,20 @@ def test_vec_manager():
             **variant["algorithm_kwargs"],
         )
 
-    env_suite = variant.get("env_suite", "kitchen")
-    env_name = variant["env_names"][0]
-    env_kwargs = variant["env_kwargs"]
-    env_fns = [
-        lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)
-        for _ in range(1)
-    ]
-    eval_env = StableBaselinesVecEnv(
-        env_fns=env_fns,
+    manager_fns = [lambda: make_manager(i) for i in range(1)]
+    vec_manager = VecManager(
+        manager_fns,
+        variant["env_names"],
         start_method="fork",
-        device_id=0,
-        reload_state_args=(
-            1,
-            primitives_make_env.make_env,
-            (env_suite, env_name, env_kwargs),
-        ),
     )
-    discrete_continuous_dist = variant["actor_kwargs"]["discrete_continuous_dist"]
-    continuous_action_dim = eval_env.max_arg_len
-    discrete_action_dim = eval_env.num_primitives
-    if not discrete_continuous_dist:
-        continuous_action_dim = continuous_action_dim + discrete_action_dim
-        discrete_action_dim = 0
-    action_dim = continuous_action_dim + discrete_action_dim
-    obs_dim = eval_env.observation_space.low.size
-
+    obs_dim, action_dim = vec_manager.get_obs_and_action_dims()
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         variant["num_expl_envs"],
         obs_dim,
         action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
-    num_managers = 1
-    manager_fns = [lambda: make_manager(i) for i in range(num_managers)]
-    vec_manager = VecManager(
-        manager_fns,
-        variant["env_names"],
-        start_method="fork",
-        primitive_model_buffer=primitive_model_buffer,
-    )
+    vec_manager.set_primitive_model_buffer(primitive_model_buffer)
+
     vec_manager.collect_init_expl_paths()
     assert primitive_model_buffer._size > 0
