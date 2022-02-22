@@ -352,9 +352,8 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
     def sync_primitive_model(self):
         self.primitive_model.load_state_dict(
-            torch.load(self.primitive_model_path, map_location=ptu.device)
+            torch.load(self.primitive_model_path, "cpu")
         )
-        self.primitive_model.to(ptu.device)
 
     def _reset_hand(self):
         super()._reset_hand()
