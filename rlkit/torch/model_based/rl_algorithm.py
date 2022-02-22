@@ -384,7 +384,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.manager.collect_init_expl_paths()
         self.manager.pretrain()
         self.training_mode(True)
-        for _ in range(self.num_pretrain_steps * self.manager.n_managers):
+        for _ in range(self.num_pretrain_steps):
             train_data = self.primitive_model_buffer.random_batch(
                 self.primitive_model_batch_size
             )
@@ -408,21 +408,20 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
                 self.training_mode(True)
-                for train_step in range(
-                    self.num_trains_per_train_loop * self.manager.n_managers
-                ):
+                for train_step in range(self.num_trains_per_train_loop):
                     train_data = self.primitive_model_buffer.random_batch(
                         self.primitive_model_batch_size
                     )
                     self.primitive_model_trainer.train(train_data)
                 self.training_mode(False)
                 gt.stamp("primitive model training", unique=False)
-                self.total_train_expl_time += time.time() - st
                 torch.save(
                     self.primitive_model_trainer.policy.state_dict(),
                     self.primitive_model_path,
                 )
                 self.manager.sync_primitive_model()
+                gt.stamp("primitive model syncing", unique=False)
+            self.total_train_expl_time += time.time() - st
             self._end_epoch(epoch)
 
     def _end_epoch(self, epoch):

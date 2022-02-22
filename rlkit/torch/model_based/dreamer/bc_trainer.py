@@ -37,7 +37,6 @@ class BCTrainer(TorchTrainer, LossFunction):
         self.scaler = torch.cuda.amp.GradScaler()
 
     def train_from_torch(self, batch):
-        gt.blank_stamp()
         losses, stats = self.compute_loss(
             batch,
             skip_statistics=not self._need_to_update_eval_statistics,
@@ -55,7 +54,6 @@ class BCTrainer(TorchTrainer, LossFunction):
             self.eval_statistics = stats
             # Compute statistics using only one batch per epoch
             self._need_to_update_eval_statistics = False
-        gt.stamp("bc training", unique=False)
 
     @torch.cuda.amp.autocast()
     def compute_loss(

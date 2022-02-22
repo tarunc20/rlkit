@@ -1,6 +1,6 @@
-import multiprocessing as mp
 import os
 
+import torch.multiprocessing as mp
 from stable_baselines3.common.vec_env import CloudpickleWrapper
 
 import rlkit.torch.pytorch_util as ptu
@@ -45,14 +45,13 @@ class Manager:
         self.pretrain_policy = pretrain_policy
         self.num_pretrain_steps = num_pretrain_steps
         self.manager_idx = manager_idx
+        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
 
     def training_mode(self, mode):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         for net in self.trainer.networks:
             net.train(mode)
 
     def collect_init_expl_paths(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         init_expl_paths = self.expl_env_path_collector.collect_new_paths(
             self.max_path_length,
             self.min_num_steps_before_training,
@@ -82,7 +81,6 @@ class Manager:
         return primitive_model_paths
 
     def pretrain(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.training_mode(True)
         for _ in range(self.num_pretrain_steps):
             train_data = self.replay_buffer.random_batch(self.batch_size)
@@ -90,14 +88,12 @@ class Manager:
         self.training_mode(False)
 
     def collect_eval_paths(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.eval_env_path_collector.collect_new_paths(
             self.max_path_length,
             self.num_eval_steps_per_epoch,
         )
 
     def train(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.training_mode(True)
         for train_step in range(self.num_trains_per_train_loop):
             train_data = self.replay_buffer.random_batch(self.batch_size)
@@ -105,7 +101,6 @@ class Manager:
         self.training_mode(False)
 
     def collect_expl_paths(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         new_expl_paths = self.expl_env_path_collector.collect_new_paths(
             self.max_path_length,
             self.num_expl_steps_per_train_loop,
@@ -133,14 +128,12 @@ class Manager:
         return primitive_model_paths
 
     def _end_epoch(self, epoch):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.expl_env_path_collector.end_epoch(epoch)
         self.eval_env_path_collector.end_epoch(epoch)
         self.replay_buffer.end_epoch(epoch)
         self.trainer.end_epoch(epoch)
 
     def _log_stats(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         expl_paths = self.expl_env_path_collector.get_epoch_paths()
         eval_paths = self.eval_env_path_collector.get_epoch_paths()
         return (
@@ -153,7 +146,6 @@ class Manager:
         )
 
     def sync_primitive_model(self):
-        ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
         self.expl_env.sync_primitive_model()
         self.eval_env.sync_primitive_model()
 
@@ -165,8 +157,8 @@ class Manager:
 
 
 def _worker(
-    remote: mp.connection.Connection,
-    parent_remote: mp.connection.Connection,
+    remote,
+    parent_remote,
     manager_fn_wrapper: CloudpickleWrapper,
 ) -> None:
     parent_remote.close()
@@ -193,7 +185,6 @@ def _worker(
                 remote.send(manager._log_stats())
             elif cmd == "set_process_gpu_device_id":
                 os.environ["EGL_DEVICE_ID"] = str(data)
-                ptu.set_gpu_mode(True, gpu_id=int(data))
                 manager.device_id = int(data)
             elif cmd == "sync_primitive_model":
                 remote.send(manager.sync_primitive_model())

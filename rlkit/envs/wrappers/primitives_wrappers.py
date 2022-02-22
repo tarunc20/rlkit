@@ -342,7 +342,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
         self.unset_render_every_step()
         self.collect_primitives_info = collect_primitives_info
-
         if primitive_model_kwargs is not None:
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
