@@ -338,7 +338,7 @@ class VecManager:
             self.waiting = True
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        for result in results:
+        for manager_idx, result in enumerate(results):
             (
                 buffer_diagnostics,
                 trainer_diagnostics,
