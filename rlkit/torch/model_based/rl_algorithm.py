@@ -381,7 +381,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.manager.sync_primitive_model()
         st = time.time()
         if self.min_num_steps_before_training > 0:
-            self.manager.collect_init_expl_paths()
+            init_expl_paths = self.manager.collect_init_expl_paths()
+            for paths in init_expl_paths:
+                self.primitive_model_buffer.add_paths(paths)
         self.manager.pretrain()
         self.training_mode(True)
         for _ in range(self.num_pretrain_steps):
@@ -403,8 +405,11 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             gt.stamp("evaluation sampling")
             st = time.time()
             for _ in range(self.num_train_loops_per_epoch):
-                self.manager.collect_expl_paths()
+                expl_paths = self.manager.collect_expl_paths()
                 gt.stamp("exploration sampling", unique=False)
+                for paths in expl_paths:
+                    self.primitive_model_buffer.add_paths(paths)
+                gt.stamp("storing", unique=False)
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
                 self.training_mode(True)

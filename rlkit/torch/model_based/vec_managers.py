@@ -1,4 +1,5 @@
 import os
+import time
 
 import torch.multiprocessing as mp
 from stable_baselines3.common.vec_env import CloudpickleWrapper
@@ -57,28 +58,9 @@ class Manager:
             self.min_num_steps_before_training,
             runtime_policy=self.pretrain_policy,
         )
-        manager_keys = ["observations", "actions", "rewards", "terminals"]
-        primitive_model_keys = [
-            "low_level_observations",
-            "high_level_actions",
-            "low_level_actions",
-            "low_level_rewards",
-            "low_level_terminals",
-        ]
-        manager_paths = []
-        primitive_model_paths = []
-        for path in init_expl_paths:
-            manager_path = {}
-            primitive_model_path = {}
-            for manager_key in manager_keys:
-                manager_path[manager_key] = path[manager_key]
-            for primitive_model_key in primitive_model_keys:
-                primitive_model_path[primitive_model_key] = path[primitive_model_key]
-            manager_paths.append(manager_path)
-            primitive_model_paths.append(primitive_model_path)
-        self.replay_buffer.add_paths(manager_paths)
+        self.replay_buffer.add_paths(init_expl_paths)
         self.expl_env_path_collector.end_epoch(-1)
-        return primitive_model_paths
+        return init_expl_paths
 
     def pretrain(self):
         self.training_mode(True)
@@ -105,27 +87,8 @@ class Manager:
             self.max_path_length,
             self.num_expl_steps_per_train_loop,
         )
-        manager_keys = ["observations", "actions", "rewards", "terminals"]
-        primitive_model_keys = [
-            "low_level_observations",
-            "high_level_actions",
-            "low_level_actions",
-            "low_level_rewards",
-            "low_level_terminals",
-        ]
-        manager_paths = []
-        primitive_model_paths = []
-        for path in new_expl_paths:
-            manager_path = {}
-            primitive_model_path = {}
-            for manager_key in manager_keys:
-                manager_path[manager_key] = path[manager_key]
-            for primitive_model_key in primitive_model_keys:
-                primitive_model_path[primitive_model_key] = path[primitive_model_key]
-            manager_paths.append(manager_path)
-            primitive_model_paths.append(primitive_model_path)
-        self.replay_buffer.add_paths(manager_paths)
-        return primitive_model_paths
+        self.replay_buffer.add_paths(new_expl_paths)
+        return new_expl_paths
 
     def _end_epoch(self, epoch):
         self.expl_env_path_collector.end_epoch(epoch)
@@ -273,8 +236,7 @@ class VecManager:
             self.waiting = True
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        for result in results:
-            self.primitive_model_buffer.add_paths(result)
+        return results
 
     def pretrain(self):
         for remote in self.remotes:
@@ -306,8 +268,7 @@ class VecManager:
             self.waiting = True
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        for result in results:
-            self.primitive_model_buffer.add_paths(result)
+        return results
 
     def _end_epoch(self, epoch):
         for remote in self.remotes:

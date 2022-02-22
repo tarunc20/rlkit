@@ -230,7 +230,7 @@ def experiment(variant):
     vec_manager = VecManager(
         manager_fns,
         variant["env_names"],
-        start_method="spawn",
+        start_method="forkserver",
     )
     obs_dim, action_dim = vec_manager.get_obs_and_action_dims()
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
