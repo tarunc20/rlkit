@@ -22,7 +22,7 @@ if __name__ == "__main__":
         )
     else:
         algorithm_kwargs = dict(
-            num_epochs=100,
+            num_epochs=250,
             num_eval_steps_per_epoch=60,
             min_num_steps_before_training=2400,
             num_pretrain_steps=100,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         primitive_model_trainer_kwargs=dict(
             policy_lr=3e-4,
         ),
-        primitive_model_batch_size=417,
+        primitive_model_batch_size=1024,
     )
 
     setup_sweep_and_launch_exp(
