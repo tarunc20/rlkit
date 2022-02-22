@@ -1,7 +1,6 @@
 import multiprocessing as mp
 import os
 
-import gtimer as gt
 from stable_baselines3.common.vec_env import CloudpickleWrapper
 
 import rlkit.torch.pytorch_util as ptu
@@ -96,7 +95,6 @@ class Manager:
             self.max_path_length,
             self.num_eval_steps_per_epoch,
         )
-        gt.stamp("evaluation sampling", unique=False)
 
     def train(self):
         ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
@@ -104,7 +102,6 @@ class Manager:
         for train_step in range(self.num_trains_per_train_loop):
             train_data = self.replay_buffer.random_batch(self.batch_size)
             self.trainer.train(train_data)
-        gt.stamp("training", unique=False)
         self.training_mode(False)
 
     def collect_expl_paths(self):
@@ -113,8 +110,6 @@ class Manager:
             self.max_path_length,
             self.num_expl_steps_per_train_loop,
         )
-        gt.stamp("exploration sampling", unique=False)
-
         manager_keys = ["observations", "actions", "rewards", "terminals"]
         primitive_model_keys = [
             "low_level_observations",
@@ -135,7 +130,6 @@ class Manager:
             manager_paths.append(manager_path)
             primitive_model_paths.append(primitive_model_path)
         self.replay_buffer.add_paths(manager_paths)
-        gt.stamp("data storing", unique=False)
         return primitive_model_paths
 
     def _end_epoch(self, epoch):
