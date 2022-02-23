@@ -248,7 +248,7 @@ def experiment(variant):
     primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
 
     primitive_model_pretrain_trainer = BCTrainer(
-        primitive_model, **variant["primitive_model_trainer_kwargs"]
+        primitive_model, **variant["primitive_model_pretrain_trainer_kwargs"]
     )
 
     algorithm = TorchMultiManagerBatchRLAlgorithm(
@@ -256,9 +256,9 @@ def experiment(variant):
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
         primitive_model_trainer=primitive_model_pretrain_trainer,
         primitive_model_buffer=primitive_model_buffer,
-        primitive_model_batch_size=variant.get("primitive_model_batch_size", 256),
         primitive_model_path=primitive_model_path,
         **variant["algorithm_kwargs"],
+        **variant["primitive_model_algorithm_kwargs"],
     )
     algorithm.low_level_primitives = False
     if variant.get("generate_video", False):

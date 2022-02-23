@@ -348,6 +348,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         primitive_model_trainer=None,
         primitive_model_buffer=None,
         primitive_model_batch_size=0,
+        primitive_model_num_pretrain_steps=0,
+        primitive_model_num_trains_per_train_loop=1,
         primitive_model_path=None,
     ):
         self._start_epoch = 0
@@ -371,6 +373,10 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.primitive_model_trainer = primitive_model_trainer
         self.primitive_model_buffer = primitive_model_buffer
         self.primitive_model_batch_size = primitive_model_batch_size
+        self.primitive_model_num_pretrain_steps = primitive_model_num_pretrain_steps
+        self.primitive_model_num_trains_per_train_loop = (
+            primitive_model_num_trains_per_train_loop
+        )
         self.primitive_model_path = primitive_model_path
 
     def _train(self):
@@ -386,7 +392,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.primitive_model_buffer.add_paths(paths)
         self.manager.pretrain()
         self.training_mode(True)
-        for _ in range(self.num_pretrain_steps):
+        for train_step in range(self.primitive_model_num_pretrain_steps):
             train_data = self.primitive_model_buffer.random_batch(
                 self.primitive_model_batch_size
             )
@@ -413,7 +419,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
                 self.training_mode(True)
-                for train_step in range(self.num_trains_per_train_loop):
+                for train_step in range(self.primitive_model_num_trains_per_train_loop):
                     train_data = self.primitive_model_buffer.random_batch(
                         self.primitive_model_batch_size
                     )
