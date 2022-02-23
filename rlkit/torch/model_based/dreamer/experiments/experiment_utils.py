@@ -99,9 +99,6 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
     variant["primitive_model_replay_buffer_kwargs"]["low_level_action_dim"] = variant[
         "low_level_action_dim"
     ]
-    variant["primitive_model_batch_size"] *= (
-        variant["num_low_level_actions_per_primitive"] * variant["max_path_length"]
-    )
 
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "output_size"

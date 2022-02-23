@@ -342,7 +342,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
         self.unset_render_every_step()
         self.collect_primitives_info = collect_primitives_info
-
         if primitive_model_kwargs is not None:
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
@@ -351,8 +350,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitive_model_path = primitive_model_path
 
     def sync_primitive_model(self):
+        # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
         self.primitive_model.load_state_dict(
-            torch.load(self.primitive_model_path, "cpu")
+            torch.load(self.primitive_model_path, map_location="cpu")
         )
 
     def _reset_hand(self):

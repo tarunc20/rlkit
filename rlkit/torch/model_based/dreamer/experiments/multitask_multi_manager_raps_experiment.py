@@ -1,3 +1,6 @@
+import copy
+
+
 def experiment(variant):
     import os
 
@@ -30,15 +33,9 @@ def experiment(variant):
     )
     from rlkit.torch.model_based.dreamer.visualization import post_epoch_visualize_func
     from rlkit.torch.model_based.dreamer.world_models import WorldModel
+    from rlkit.torch.model_based.vec_managers import Manager, VecManager
 
     num_managers = len(variant["env_names"])
-    trainers = []
-    expl_path_collectors = []
-    eval_path_collectors = []
-    replay_buffers = []
-    expl_envs = []
-    eval_envs = []
-    rand_policies = []
 
     num_low_level_actions_per_primitive = variant["num_low_level_actions_per_primitive"]
     low_level_action_dim = variant["low_level_action_dim"]
@@ -62,7 +59,7 @@ def experiment(variant):
         "primitive_model_path"
     ] = primitive_model_path
 
-    for manager_idx in range(num_managers):
+    def make_manager(manager_idx):
         ptu.set_gpu_mode(True, gpu_id=manager_idx)
         os.environ["EGL_DEVICE_ID"] = str(manager_idx)
         env_suite = variant.get("env_suite", "kitchen")
@@ -199,40 +196,63 @@ def experiment(variant):
             **variant["trainer_kwargs"],
         )
         trainer.to(ptu.device)
-        trainers.append(trainer)
-        expl_path_collectors.append(expl_path_collector)
-        eval_path_collectors.append(eval_path_collector)
-        replay_buffers.append(replay_buffer)
-        rand_policies.append(rand_policy)
-        expl_envs.append(expl_env)
-        eval_envs.append(eval_env)
 
-    ptu.set_gpu_mode(True, gpu_id=0)
-    variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
-        eval_env.action_space.low.shape[0] + 1
+        return Manager(
+            expl_env,
+            eval_env,
+            expl_path_collector,
+            eval_path_collector,
+            trainer,
+            replay_buffer,
+            pretrain_policy=rand_policy,
+            manager_idx=manager_idx,
+            **variant["algorithm_kwargs"],
+        )
+
+    if num_managers == 1:
+        manager_fns = [lambda: make_manager(0)]
+    elif num_managers == 2:
+        manager_fns = [lambda: make_manager(0), lambda: make_manager(1)]
+    elif num_managers == 3:
+        manager_fns = [
+            lambda: make_manager(0),
+            lambda: make_manager(1),
+            lambda: make_manager(2),
+        ]
+    elif num_managers == 4:
+        manager_fns = [
+            lambda: make_manager(0),
+            lambda: make_manager(1),
+            lambda: make_manager(2),
+            lambda: make_manager(3),
+        ]
+
+    vec_manager = VecManager(
+        manager_fns,
+        variant["env_names"],
+        start_method="forkserver",
     )
-
-    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
-
+    obs_dim, action_dim = vec_manager.get_obs_and_action_dims()
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
-        num_expl_envs,
+        variant["num_expl_envs"],
         obs_dim,
         action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
+    vec_manager.set_primitive_model_buffer(primitive_model_buffer)
+
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
+        action_dim + 1
+    )
+
+    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
+
     primitive_model_pretrain_trainer = BCTrainer(
         primitive_model, **variant["primitive_model_trainer_kwargs"]
     )
+
     algorithm = TorchMultiManagerBatchRLAlgorithm(
-        trainers=trainers,
-        exploration_envs=expl_envs,
-        evaluation_envs=eval_envs,
-        exploration_data_collectors=expl_path_collectors,
-        evaluation_data_collectors=eval_path_collectors,
-        replay_buffers=replay_buffers,
-        pretrain_policies=rand_policies,
-        eval_buffers=[None] * num_managers,
-        env_names=variant["env_names"],
+        vec_manager,
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
         primitive_model_trainer=primitive_model_pretrain_trainer,
         primitive_model_buffer=primitive_model_buffer,

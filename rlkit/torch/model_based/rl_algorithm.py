@@ -7,7 +7,6 @@ from collections import OrderedDict
 import gtimer as gt
 import torch
 
-import rlkit.torch.pytorch_util as ptu
 from rlkit.core import eval_util, logger
 from rlkit.data_management.replay_buffer import ReplayBuffer
 from rlkit.samplers.data_collector import DataCollector, PathCollector
@@ -333,12 +332,7 @@ class TorchBatchRLAlgorithm(BatchRLAlgorithm):
 class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
     def __init__(
         self,
-        trainers,
-        exploration_envs,
-        evaluation_envs,
-        exploration_data_collectors,
-        evaluation_data_collectors,
-        replay_buffers,
+        manager,
         batch_size,
         max_path_length,
         num_epochs,
@@ -350,22 +344,14 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         pretrain_policies=None,
         num_pretrain_steps=0,
         use_pretrain_policy_for_initial_data=True,
-        eval_buffers=None,
-        env_names=None,
         primitive_model_pretrain_trainer=None,
         primitive_model_trainer=None,
         primitive_model_buffer=None,
         primitive_model_batch_size=0,
         primitive_model_path=None,
     ):
-        self.trainers = trainers
-        self.expl_envs = exploration_envs
-        self.eval_envs = evaluation_envs
-        self.expl_data_collectors = exploration_data_collectors
-        self.eval_data_collectors = evaluation_data_collectors
-        self.replay_buffers = replay_buffers
         self._start_epoch = 0
-
+        self.manager = manager
         self.post_epoch_funcs = []
         self.batch_size = batch_size
         self.max_path_length = max_path_length
@@ -381,9 +367,6 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.pretrain_policies = None
         self.num_pretrain_steps = num_pretrain_steps
         self.total_train_expl_time = 0
-        self.eval_buffers = eval_buffers
-        self.num_managers = len(self.trainers)
-        self.env_names = env_names
         self.primitive_model_pretrain_trainer = primitive_model_pretrain_trainer
         self.primitive_model_trainer = primitive_model_trainer
         self.primitive_model_buffer = primitive_model_buffer
@@ -395,162 +378,55 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.primitive_model_trainer.policy.state_dict(),
             self.primitive_model_path,
         )
-        for manager_idx in range(self.num_managers):
-            self.expl_envs[manager_idx].sync_primitive_model()
-            self.eval_envs[manager_idx].sync_primitive_model()
+        self.manager.sync_primitive_model()
         st = time.time()
         if self.min_num_steps_before_training > 0:
-            for manager_idx in range(self.num_managers):
-                ptu.set_gpu_mode(True, gpu_id=manager_idx)
-                os.environ["EGL_DEVICE_ID"] = str(manager_idx)
-                init_expl_paths = self.expl_data_collectors[
-                    manager_idx
-                ].collect_new_paths(
-                    self.max_path_length,
-                    self.min_num_steps_before_training,
-                    runtime_policy=self.pretrain_policies[manager_idx],
-                )
-                manager_keys = ["observations", "actions", "rewards", "terminals"]
-                primitive_model_keys = [
-                    "low_level_observations",
-                    "high_level_actions",
-                    "low_level_actions",
-                    "low_level_rewards",
-                    "low_level_terminals",
-                ]
-                manager_paths = []
-                primitive_model_paths = []
-                for path in init_expl_paths:
-                    manager_path = {}
-                    primitive_model_path = {}
-                    for manager_key in manager_keys:
-                        manager_path[manager_key] = path[manager_key]
-                    for primitive_model_key in primitive_model_keys:
-                        primitive_model_path[primitive_model_key] = path[
-                            primitive_model_key
-                        ]
-                    manager_paths.append(manager_path)
-                    primitive_model_paths.append(primitive_model_path)
-                self.replay_buffers[manager_idx].add_paths(manager_paths)
-                self.primitive_model_buffer.add_paths(primitive_model_paths)
-                self.expl_data_collectors[manager_idx].end_epoch(-1)
-        self.total_train_expl_time += time.time() - st
-        for manager_idx in range(self.num_managers):
-            ptu.set_gpu_mode(True, gpu_id=manager_idx)
-            os.environ["EGL_DEVICE_ID"] = str(manager_idx)
-            self.trainers[manager_idx].buffer = self.replay_buffers[
-                manager_idx
-            ]  # TODO: make a cleaner of doing this
-            self.training_mode(True)
-            for _ in range(self.num_pretrain_steps):
-                train_data = self.replay_buffers[manager_idx].random_batch(
-                    self.batch_size
-                )
-                self.trainers[manager_idx].train(train_data)
-            self.training_mode(False)
-        ptu.set_gpu_mode(True, gpu_id=0)
+            init_expl_paths = self.manager.collect_init_expl_paths()
+            for paths in init_expl_paths:
+                self.primitive_model_buffer.add_paths(paths)
+        self.manager.pretrain()
         self.training_mode(True)
-        for _ in range(self.num_pretrain_steps * self.num_managers):
+        for _ in range(self.num_pretrain_steps):
             train_data = self.primitive_model_buffer.random_batch(
                 self.primitive_model_batch_size
             )
             self.primitive_model_pretrain_trainer.train(train_data)
         self.training_mode(False)
+        self.total_train_expl_time += time.time() - st
         torch.save(
             self.primitive_model_trainer.policy.state_dict(), self.primitive_model_path
         )
-        for manager_idx in range(self.num_managers):
-            self.expl_envs[manager_idx].sync_primitive_model()
-            self.eval_envs[manager_idx].sync_primitive_model()
+        self.manager.sync_primitive_model()
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,
         ):
-            for manager_idx in range(self.num_managers):
-                ptu.set_gpu_mode(True, gpu_id=manager_idx)
-                os.environ["EGL_DEVICE_ID"] = str(manager_idx)
-                self.eval_data_collectors[manager_idx].collect_new_paths(
-                    self.max_path_length,
-                    self.num_eval_steps_per_epoch,
-                )
-                gt.stamp("evaluation sampling", unique=False)
-                st = time.time()
-                for _ in range(self.num_train_loops_per_epoch):
-                    new_expl_paths = self.expl_data_collectors[
-                        manager_idx
-                    ].collect_new_paths(
-                        self.max_path_length,
-                        self.num_expl_steps_per_train_loop,
-                    )
-                    gt.stamp("exploration sampling", unique=False)
-
-                    manager_keys = ["observations", "actions", "rewards", "terminals"]
-                    primitive_model_keys = [
-                        "low_level_observations",
-                        "high_level_actions",
-                        "low_level_actions",
-                        "low_level_rewards",
-                        "low_level_terminals",
-                    ]
-                    manager_paths = []
-                    primitive_model_paths = []
-                    for path in new_expl_paths:
-                        manager_path = {}
-                        primitive_model_path = {}
-                        for manager_key in manager_keys:
-                            manager_path[manager_key] = path[manager_key]
-                        for primitive_model_key in primitive_model_keys:
-                            primitive_model_path[primitive_model_key] = path[
-                                primitive_model_key
-                            ]
-                        manager_paths.append(manager_path)
-                        primitive_model_paths.append(primitive_model_path)
-                    self.replay_buffers[manager_idx].add_paths(manager_paths)
-                    self.primitive_model_buffer.add_paths(primitive_model_paths)
-                    gt.stamp("data storing", unique=False)
-
-                    self.training_mode(True)
-                    for train_step in range(self.num_trains_per_train_loop):
-                        train_data = self.replay_buffers[manager_idx].random_batch(
-                            self.batch_size
-                        )
-                        self.trainers[manager_idx].train(train_data)
-                    gt.stamp("training", unique=False)
-                    self.training_mode(False)
-
-                if self.eval_buffers[0] is not None:
-                    eval_data = self.eval_buffers[manager_idx].random_batch(
-                        self.batch_size
-                    )
-                    self.trainers[manager_idx].evaluate(eval_data, buffer_data=False)
-                    eval_data = self.replay_buffers[manager_idx].random_batch(
-                        self.batch_size
-                    )
-                    self.trainers[manager_idx].evaluate(eval_data, buffer_data=True)
-                self.total_train_expl_time += time.time() - st
-
+            self.manager.collect_eval_paths()
+            gt.stamp("evaluation sampling")
             st = time.time()
-            ptu.set_gpu_mode(True, gpu_id=0)
-            self.training_mode(True)
-            for train_step in range(
-                self.num_trains_per_train_loop
-                * self.num_train_loops_per_epoch
-                * self.num_managers
-            ):
-                train_data = self.primitive_model_buffer.random_batch(
-                    self.primitive_model_batch_size
+            for _ in range(self.num_train_loops_per_epoch):
+                expl_paths = self.manager.collect_expl_paths()
+                gt.stamp("exploration sampling", unique=False)
+                for paths in expl_paths:
+                    self.primitive_model_buffer.add_paths(paths)
+                gt.stamp("storing", unique=False)
+                self.manager.train()
+                gt.stamp("manager training", unique=False)
+                self.training_mode(True)
+                for train_step in range(self.num_trains_per_train_loop):
+                    train_data = self.primitive_model_buffer.random_batch(
+                        self.primitive_model_batch_size
+                    )
+                    self.primitive_model_trainer.train(train_data)
+                self.training_mode(False)
+                gt.stamp("primitive model training", unique=False)
+                torch.save(
+                    self.primitive_model_trainer.policy.state_dict(),
+                    self.primitive_model_path,
                 )
-                self.primitive_model_trainer.train(train_data)
-            self.training_mode(False)
-            torch.save(
-                self.primitive_model_trainer.policy.state_dict(),
-                self.primitive_model_path,
-            )
-            for manager_idx in range(self.num_managers):
-                self.expl_envs[manager_idx].sync_primitive_model()
-                self.eval_envs[manager_idx].sync_primitive_model()
+                self.manager.sync_primitive_model()
+                gt.stamp("primitive model syncing", unique=False)
             self.total_train_expl_time += time.time() - st
-
             self._end_epoch(epoch)
 
     def _end_epoch(self, epoch):
@@ -559,16 +435,10 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         gt.stamp("saving")
         self._log_stats(epoch)
 
-        for manager_idx in range(self.num_managers):
-            self.expl_data_collectors[manager_idx].end_epoch(epoch)
-            self.eval_data_collectors[manager_idx].end_epoch(epoch)
-            self.replay_buffers[manager_idx].end_epoch(epoch)
-            self.trainers[manager_idx].end_epoch(epoch)
+        self.manager._end_epoch(epoch)
+
         self.primitive_model_buffer.end_epoch(epoch)
         self.primitive_model_trainer.end_epoch(epoch)
-
-        # for post_epoch_func in self.post_epoch_funcs:
-        #     post_epoch_func(self, epoch)
 
     def _get_snapshot(self):
         snapshot = {}
@@ -577,51 +447,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
     def _log_stats(self, epoch):
         logger.log(f"Epoch {epoch} finished", with_timestamp=True)
 
-        for manager_idx in range(self.num_managers):
-            """
-            Replay Buffer
-            """
-            logger.record_dict(
-                self.replay_buffers[manager_idx].get_diagnostics(),
-                prefix=f"{self.env_names[manager_idx]}/replay_buffer/",
-            )
-
-            """
-            Trainer
-            """
-            logger.record_dict(
-                self.trainers[manager_idx].get_diagnostics(),
-                prefix=f"{self.env_names[manager_idx]}/trainer/",
-            )
-
-            """
-            Exploration
-            """
-            logger.record_dict(
-                self.expl_data_collectors[manager_idx].get_diagnostics(),
-                prefix=f"{self.env_names[manager_idx]}/exploration/",
-            )
-
-            expl_paths = self.expl_data_collectors[manager_idx].get_epoch_paths()
-            if len(expl_paths) > 0:
-                logger.record_dict(
-                    eval_util.get_generic_path_information(expl_paths),
-                    prefix=f"{self.env_names[manager_idx]}/exploration/",
-                )
-
-            """
-            Evaluation
-            """
-            logger.record_dict(
-                self.eval_data_collectors[manager_idx].get_diagnostics(),
-                prefix=f"{self.env_names[manager_idx]}/evaluation/",
-            )
-            eval_paths = self.eval_data_collectors[manager_idx].get_epoch_paths()
-
-            logger.record_dict(
-                eval_util.get_generic_path_information(eval_paths),
-                prefix=f"{self.env_names[manager_idx]}/evaluation/",
-            )
+        self.manager._log_stats()
 
         logger.record_dict(
             self.primitive_model_trainer.get_diagnostics(),
@@ -633,19 +459,19 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         """
         gt.stamp("logging")
         timings = _get_epoch_timings()
-        logger.record_dict(timings)
         timings["time/training and exploration (s)"] = self.total_train_expl_time
+        logger.record_dict(timings)
         logger.record_tabular("Epoch", epoch)
         logger.dump_tabular(with_prefix=False, with_timestamp=False)
 
 
 class TorchMultiManagerBatchRLAlgorithm(MultiManagerBatchRLAlgorithm):
     def to(self, device):
-        for trainer in self.trainers:
-            for net in trainer.networks:
-                net.to(device)
+        self.primitive_model_trainer.to(device)
+        self.primitive_model_pretrain_trainer.to(device)
 
     def training_mode(self, mode):
-        for trainer in self.trainers:
-            for net in trainer.networks:
-                net.train(mode)
+        for net in self.primitive_model_pretrain_trainer.networks:
+            net.train(mode)
+        for net in self.primitive_model_trainer.networks:
+            net.train(mode)
