@@ -141,8 +141,8 @@ if __name__ == "__main__":
         ),
         primitive_model_algorithm_kwargs=dict(
             primitive_model_batch_size=1024,
-            primitive_model_num_pretrain_steps=10000,
-            primitive_model_num_trains_per_train_loop=100,
+            primitive_model_num_pretrain_steps=2500,
+            primitive_model_num_trains_per_train_loop=50,
         ),
     )
 
