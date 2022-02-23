@@ -1,9 +1,17 @@
 import torch
+import torch.nn.functional as F
 from torch import jit
 from torch import nn as nn
+from torch.distributions import Normal, TransformedDistribution
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.pythonplusplus import identity
+from rlkit.torch.distributions import MultivariateDiagonalNormal, TanhNormal
+from rlkit.torch.model_based.dreamer.actor_models import (
+    Independent,
+    SampleDist,
+    TanhBijector,
+)
 from rlkit.torch.model_based.dreamer.mlp import Mlp
 
 
@@ -217,3 +225,59 @@ class CNNMLP(jit.ScriptModule):
         ), f"Invalid observation: max: {obs.max()}, min: {obs.min()}"
         obs = obs / 255.0 - 0.5
         return obs
+
+
+class CNNMLPGaussian(jit.ScriptModule):
+    """
+    Usage:
+
+    ```
+    policy = TanhCNNMLPGaussianPolicy(...)
+    assumes joint processor outputs 2*output_size
+    """
+
+    def __init__(
+        self,
+        image_encoder_args,
+        image_encoder_kwargs,
+        state_encoder_args,
+        state_encoder_kwargs,
+        joint_processor_args,
+        joint_processor_kwargs,
+        image_dim,
+        min_std=0.1,
+        init_std=0.0,
+    ):
+        super().__init__()
+        self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
+        self.state_encoder = Mlp(*state_encoder_args, **state_encoder_kwargs)
+        self.joint_processor = Mlp(*joint_processor_args, **joint_processor_kwargs)
+        self.image_dim = image_dim
+        self.raw_init_std = torch.log(torch.exp(ptu.tensor(init_std)) - 1)
+        self._min_std = min_std
+
+    @jit.script_method
+    def preprocess(self, obs):
+        assert (
+            obs.max() <= 255.0 and obs.min() >= 0.0
+        ), f"Invalid observation: max: {obs.max()}, min: {obs.min()}"
+        obs = obs / 255.0 - 0.5
+        return obs
+
+    @jit.script_method
+    def forward_net(self, input_):
+        image, state = input_[:, : self.image_dim], input_[:, self.image_dim :]
+        image = self.preprocess(image)
+        image_encoding = self.image_encoder(image)
+        state_encoding = self.state_encoder(state)
+        joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
+        output = self.joint_processor(joint_encoding)
+        mean, std = output.split(self.joint_processor.output_size // 2, dim=-1)
+        std = F.softplus(std + self.raw_init_std) + self._min_std
+        assert std.min() >= 0.0, "std should not be negative anywhere"
+        return mean, std
+
+    def forward(self, input_):
+        mean, std = self.forward_net(input_)
+        dist = MultivariateDiagonalNormal(mean, std)
+        return dist

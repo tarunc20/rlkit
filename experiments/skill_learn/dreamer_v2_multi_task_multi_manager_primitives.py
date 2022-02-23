@@ -20,6 +20,11 @@ if __name__ == "__main__":
             num_trains_per_train_loop=1,
             batch_size=417,
         )
+        primitive_model_algorithm_kwargs = dict(
+            primitive_model_batch_size=1024,
+            primitive_model_num_pretrain_steps=1,
+            primitive_model_num_trains_per_train_loop=1,
+        )
     else:
         algorithm_kwargs = dict(
             num_epochs=250,
@@ -30,6 +35,11 @@ if __name__ == "__main__":
             num_expl_steps_per_train_loop=60,
             num_train_loops_per_epoch=20,
             num_trains_per_train_loop=20,
+        )
+        primitive_model_algorithm_kwargs = dict(
+            primitive_model_batch_size=1024,
+            primitive_model_num_pretrain_steps=2500,
+            primitive_model_num_trains_per_train_loop=50,
         )
     variant = dict(
         algorithm="MultiTaskMultiManagerRAPS",
@@ -139,10 +149,15 @@ if __name__ == "__main__":
         primitive_model_pretrain_trainer_kwargs=dict(
             policy_lr=1e-3,
         ),
-        primitive_model_algorithm_kwargs=dict(
-            primitive_model_batch_size=1024,
-            primitive_model_num_pretrain_steps=2500,
-            primitive_model_num_trains_per_train_loop=50,
+        primitive_model_algorithm_kwargs=primitive_model_algorithm_kwargs,
+        primitive_model_trainer_kwargs=dict(
+            discount=0.99,
+            soft_target_tau=5e-3,
+            target_update_period=1,
+            policy_lr=3e-4,
+            qf_lr=3e-4,
+            reward_scale=1,
+            use_automatic_entropy_tuning=True,
         ),
     )
 

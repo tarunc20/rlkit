@@ -1,8 +1,8 @@
 from collections import OrderedDict, namedtuple
 from typing import Tuple
 
-import gtimer as gt
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
 from torch import nn as nn
 
@@ -67,13 +67,13 @@ class BCTrainer(TorchTrainer, LossFunction):
         """
         Policy Loss
         """
-        action_preds = self.policy(obs.reshape(-1, obs.shape[-1]))
-        loss = self.policy_criterion(
-            action_preds, actions.reshape(-1, actions.shape[-1])
-        )
+        action_dist = self.policy(obs)
+        loss = -1 * action_dist.log_prob(actions).mean()
         eval_statistics = OrderedDict()
         if not skip_statistics:
-            eval_statistics["Policy Loss"] = loss.item()
+            eval_statistics["Policy Loss"] = F.mse_loss(
+                action_dist.mean, actions
+            ).item()
 
         loss = BCLosses(
             policy_loss=loss,

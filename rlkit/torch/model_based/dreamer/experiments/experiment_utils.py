@@ -100,9 +100,9 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
         "low_level_action_dim"
     ]
 
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
-        "output_size"
-    ] = variant["low_level_action_dim"]
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"]["output_size"] = (
+        variant["low_level_action_dim"] * 2
+    )
     variant["primitive_model_kwargs"]["joint_processor_kwargs"]["input_size"] = 512 + 64
 
     return variant

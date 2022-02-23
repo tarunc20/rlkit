@@ -1,11 +1,11 @@
-import copy
+from rlkit.torch.model_based.dreamer.sac import SACTrainer
 
 
 def experiment(variant):
     import os
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
+    from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP, CNNMLPGaussian
     from rlkit.torch.model_based.rl_algorithm import TorchMultiManagerBatchRLAlgorithm
 
     os.environ["D4RL_SUPPRESS_IMPORT_ERROR"] = "1"
@@ -232,7 +232,7 @@ def experiment(variant):
         variant["env_names"],
         start_method="forkserver",
     )
-    obs_dim, action_dim = vec_manager.get_obs_and_action_dims()
+    obs_dim, action_dim, action_space = vec_manager.get_obs_and_action_dims()
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         variant["num_expl_envs"],
         obs_dim,
@@ -245,16 +245,37 @@ def experiment(variant):
         action_dim + 1
     )
 
-    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
+    primitive_model = CNNMLPGaussian(**variant["primitive_model_kwargs"]).to(ptu.device)
 
     primitive_model_pretrain_trainer = BCTrainer(
         primitive_model, **variant["primitive_model_pretrain_trainer_kwargs"]
     )
 
+    qf_kwargs = variant["primitive_model_kwargs"].copy()
+    qf_kwargs["state_encoder_kwargs"]["input_size"] += variant["low_level_action_dim"]
+    qf_kwargs["joint_processor_kwargs"]["output_size"] = 1
+    qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
+    qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
+    target_qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
+    target_qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
+
+    if variant.get("use_sac_to_train_primitive_model", False):
+        primitive_model_trainer = SACTrainer(
+            action_space,
+            policy=primitive_model,
+            qf1=qf1,
+            qf2=qf2,
+            target_qf1=target_qf1,
+            target_qf2=target_qf2,
+            **variant["primitive_model_trainer_kwargs"],
+        )
+    else:
+        primitive_model_trainer = primitive_model_pretrain_trainer
+
     algorithm = TorchMultiManagerBatchRLAlgorithm(
         vec_manager,
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
-        primitive_model_trainer=primitive_model_pretrain_trainer,
+        primitive_model_trainer=primitive_model_trainer,
         primitive_model_buffer=primitive_model_buffer,
         primitive_model_path=primitive_model_path,
         **variant["algorithm_kwargs"],

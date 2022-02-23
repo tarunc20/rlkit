@@ -116,6 +116,7 @@ class Manager:
         return (
             self.eval_env.observation_space.low.size,
             self.eval_env.action_space.low.size,
+            self.eval_env.action_space,
         )
 
 

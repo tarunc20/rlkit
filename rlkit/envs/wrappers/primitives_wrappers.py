@@ -12,7 +12,7 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers.dm_backend_wrappers import DMControlBackendRobosuiteEnv
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
+from rlkit.torch.model_based.dreamer.conv_networks import CNNMLPGaussian
 
 
 class TimeLimit(gym.Wrapper):
@@ -346,7 +346,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
             )
-            self.primitive_model = CNNMLP(**primitive_model_kwargs)
+            self.primitive_model = CNNMLPGaussian(**primitive_model_kwargs)
             self.primitive_model_path = primitive_model_path
 
     def sync_primitive_model(self):
