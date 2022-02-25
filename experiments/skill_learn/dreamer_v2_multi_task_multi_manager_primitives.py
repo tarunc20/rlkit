@@ -21,7 +21,7 @@ if __name__ == "__main__":
             batch_size=417,
         )
         primitive_model_algorithm_kwargs = dict(
-            primitive_model_batch_size=1024,
+            primitive_model_batch_size=256,
             primitive_model_num_pretrain_steps=1,
             primitive_model_num_trains_per_train_loop=1,
         )
@@ -37,7 +37,7 @@ if __name__ == "__main__":
             num_trains_per_train_loop=20,
         )
         primitive_model_algorithm_kwargs = dict(
-            primitive_model_batch_size=1024,
+            primitive_model_batch_size=256,
             primitive_model_num_pretrain_steps=2500,
             primitive_model_num_trains_per_train_loop=50,
         )
@@ -75,6 +75,7 @@ if __name__ == "__main__":
                 },
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
+                low_level_reward_type="none",
             ),
         ),
         actor_kwargs=dict(
@@ -121,7 +122,7 @@ if __name__ == "__main__":
         replay_buffer_kwargs=dict(
             max_replay_buffer_size=int(5e5),
         ),
-        num_expl_envs=10,
+        num_expl_envs=3,
         num_eval_envs=1,
         expl_amount=0.3,
         save_video=True,
@@ -145,7 +146,7 @@ if __name__ == "__main__":
             joint_processor_kwargs=dict(hidden_sizes=[512, 256]),
             image_dim=64 * 64 * 3,
         ),
-        primitive_model_replay_buffer_kwargs=dict(),
+        primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
             policy_lr=1e-3,
         ),
@@ -159,6 +160,7 @@ if __name__ == "__main__":
             reward_scale=1,
             use_automatic_entropy_tuning=True,
         ),
+        use_sac_to_train_primitive_model=False,
     )
 
     setup_sweep_and_launch_exp(

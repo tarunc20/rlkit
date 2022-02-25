@@ -380,17 +380,21 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.primitive_model_path = primitive_model_path
 
     def _train(self):
+        print("Initial Primitive Model Sync")
         torch.save(
             self.primitive_model_trainer.policy.state_dict(),
             self.primitive_model_path,
         )
         self.manager.sync_primitive_model()
         st = time.time()
+        print("Initial RAPS Data Collection")
         if self.min_num_steps_before_training > 0:
             init_expl_paths = self.manager.collect_init_expl_paths()
             for paths in init_expl_paths:
                 self.primitive_model_buffer.add_paths(paths)
+        print("Manager Pretraining")
         self.manager.pretrain()
+        print("Primitive Model Pretraining")
         self.training_mode(True)
         for train_step in range(self.primitive_model_num_pretrain_steps):
             train_data = self.primitive_model_buffer.random_batch(
@@ -399,25 +403,31 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.primitive_model_pretrain_trainer.train(train_data)
         self.training_mode(False)
         self.total_train_expl_time += time.time() - st
+        print("Primitive Model Sync")
         torch.save(
             self.primitive_model_trainer.policy.state_dict(), self.primitive_model_path
         )
         self.manager.sync_primitive_model()
+        self.manager.set_use_primitive_model()
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,
         ):
+            print("Eval Data Collection")
             self.manager.collect_eval_paths()
             gt.stamp("evaluation sampling")
             st = time.time()
             for _ in range(self.num_train_loops_per_epoch):
+                print("Expl Data Collection")
                 expl_paths = self.manager.collect_expl_paths()
                 gt.stamp("exploration sampling", unique=False)
                 for paths in expl_paths:
                     self.primitive_model_buffer.add_paths(paths)
                 gt.stamp("storing", unique=False)
+                print("Manager Training")
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
+                print("Primitive Model Training")
                 self.training_mode(True)
                 for train_step in range(self.primitive_model_num_trains_per_train_loop):
                     train_data = self.primitive_model_buffer.random_batch(

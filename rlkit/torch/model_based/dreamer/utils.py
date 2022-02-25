@@ -63,6 +63,37 @@ def lambda_return(reward, value, discount, bootstrap, lambda_: float = 0.95):
     return returns
 
 
+def lambda_return_np(reward, value, discount, bootstrap, lambda_: float = 0.95):
+    # from: https://github.com/yusukeurakami/dreamer-pytorch
+    # Setting lambda=1 gives a discounted Monte Carlo return.
+    # Setting lambda=0 gives a fixed 1-step return.
+    """
+    Compute the discounted reward for a batch of data.
+    arguments:
+        reward: [horizon - 1, batch, 1]
+        value: [horizon - 1, batch, 1]
+        discount: [horizon - 1, batch, 1]
+        bootstrap: [batch, 1]
+    returns:
+        returns: [horizon - 1, batch, 1]
+    """
+    assert reward.shape[0] == value.shape[0] == discount.shape[0]
+    assert reward.shape[1] == value.shape[1] == discount.shape[1]
+    assert reward.shape[1] == bootstrap.shape[0]
+    assert reward.shape[0] > 0
+    next_values = np.concatenate([value[1:], np.expand_dims(bootstrap, 0)], 0)
+    target = reward + discount * next_values * (1 - lambda_)
+    outputs = []
+    accumulated_reward = bootstrap
+    for t in range(reward.shape[0] - 1, -1, -1):
+        inp = target[t]
+        discount_factor = discount[t]
+        accumulated_reward = inp + discount_factor * lambda_ * accumulated_reward
+        outputs.append(accumulated_reward)
+    returns = np.flip(np.stack(outputs), [0])
+    return returns
+
+
 @torch.jit.script
 def compute_weights_from_discount(discount):
     weights = torch.cumprod(

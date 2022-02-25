@@ -173,6 +173,7 @@ class SampleDist:
     def __getattr__(self, name):
         return getattr(self._dist, name)
 
+    @property
     def mean(self):
         sample = self._dist.rsample()
         return torch.mean(sample, 0)

@@ -261,6 +261,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         pos_ctrl_action_scale=0.05,
         primitive_model_kwargs=None,
         primitive_model_path=None,
+        low_level_reward_type="none",
     ):
         self.goto_pose_iterations = goto_pose_iterations
         self.open_gripper_iterations = open_gripper_iterations
@@ -346,14 +347,22 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
             )
-            self.primitive_model = CNNMLPGaussian(**primitive_model_kwargs)
+            self.primitive_model = CNNMLPGaussian(**primitive_model_kwargs).to(
+                ptu.device
+            )
             self.primitive_model_path = primitive_model_path
+        self.use_primitive_model = False
+        self.low_level_reward_type = low_level_reward_type
 
     def sync_primitive_model(self):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
         self.primitive_model.load_state_dict(
-            torch.load(self.primitive_model_path, map_location="cpu")
+            torch.load(self.primitive_model_path, map_location=ptu.device)
         )
+        self.primitive_model = self.primitive_model.to(ptu.device)
+
+    def set_use_primitive_model(self):
+        self.use_primitive_model = True
 
     def _reset_hand(self):
         super()._reset_hand()
@@ -513,21 +522,24 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.mocap_set_action(self.sim, action)
         self.ctrl_set_action(self.sim, gripper_ctrl)
 
-    def low_level_step(self, action):
+    def low_level_step(self, action, render_obs=False):
         self.mocap_set_action(self.sim, action[:7])
         self.ctrl_set_action(self.sim, action[7:])
         self.sim.step()
         self._last_stable_obs = self._get_obs()
         reward, info = self.evaluate_state(self._last_stable_obs, action)
-        obs = (
-            self.render(
-                "rgb_array",
-                64,
-                64,
+        if render_obs:
+            obs = (
+                self.render(
+                    "rgb_array",
+                    64,
+                    64,
+                )
+                .transpose(2, 0, 1)
+                .flatten()
             )
-            .transpose(2, 0, 1)
-            .flatten()
-        )
+        else:
+            obs = None
         return obs, reward, False, info
 
     def reset_mocap2body_xpos(self, sim):
@@ -594,41 +606,140 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         return (finger_right - finger_left)[:2]
 
-    def execute_primitive(self, compute_action, num_iterations):
-        for _ in range(num_iterations):
-            action = compute_action()
-            self._set_action(action)
-            self.sim.step()
-            self.call_render_every_step()
-            self.primitive_step_counter += 1
-            self._num_low_level_steps_total += 1
-            if (self.primitive_step_counter + 1) % (
-                self.num_low_level_steps // self.num_low_level_actions_per_primitive
-            ) == 0:
-                self.primitives_info["low_level_reward"].append(
-                    0
-                )  # TODO: change this once we have defined our low level rewards
-            if (self.primitive_step_counter + 1) % (
-                self.num_low_level_steps // self.num_low_level_actions_per_primitive
-            ) == 0:
-                self.primitives_info["low_level_terminal"].append(0)
+    def get_endeff_quat(self):
+        return self.sim.data.get_body_xquat("hand")
+
+    def get_endeff_pose(self):
+        ee_pos = self.get_endeff_pos()
+        ee_quat = self.get_endeff_quat()
+        return np.concatenate((ee_pos, ee_quat))
+
+    def compute_low_level_reward(self, low_level_action, target):
+        current = np.concatenate(
+            (self.get_endeff_pose(), low_level_action[-2:])
+        )  # 7DOF pose and gripper ctrl
+        if self.low_level_reward_type == "argument_achievement":
+            reward = -1 * np.linalg.norm(current - target)
+        else:
+            reward = 0
+        return reward
+
+    @torch.no_grad()
+    @torch.cuda.amp.autocast()
+    def unsubsample_and_execute_ll(
+        self,
+        num_subsample_steps,
+        target,
+    ):
+        for sample_step in range(self.num_low_level_actions_per_primitive):
+            observation = (
+                self.render(
+                    "rgb_array",
+                    64,
+                    64,
+                )
+                .transpose(2, 0, 1)
+                .flatten()
+            )
+            obs_torch = ptu.from_numpy(observation).unsqueeze(0)
+            action_torch = ptu.from_numpy(
+                np.concatenate((self.high_level_action, [1 / (sample_step + 1)]))
+            ).unsqueeze(0)
+            low_level_action = (
+                self.primitive_model(torch.cat((obs_torch, action_torch), dim=1))
+                .mean.cpu()
+                .numpy()[0]
+            )
+            low_level_action = np.clip(low_level_action, -15, 15)
+            target = self.get_endeff_pos() + low_level_action[:3]
+            for step in range(num_subsample_steps):
+                a = (target - self.get_endeff_pos()) / num_subsample_steps
+                a = np.concatenate(
+                    (a, low_level_action[3:])
+                )  # assume rotation should not be subsampled/unsubsampled
+                self.mocap_set_action(self.sim, a[:7])
+                self.ctrl_set_action(self.sim, a[7:])
+                self.sim.step()
+                self.primitive_step_counter += 1
+                self._num_low_level_steps_total += 1
+            observation = (
+                self.render(
+                    "rgb_array",
+                    self.render_im_shape[0],
+                    self.render_im_shape[1],
+                )
+                .transpose(2, 0, 1)
+                .flatten()
+            )
+            self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
+            self.primitives_info["low_level_action"].append(low_level_action)
+            reward = self.compute_low_level_reward(low_level_action, target)
+            self.primitives_info["low_level_reward"].append(reward)
+            self.primitives_info["low_level_terminal"].append(0)
+        return low_level_action
+
+    def execute_primitive_model(self, target):
+        (
+            _,
+            _,
+            primitive_idx,
+        ) = self.get_primitive_info_from_high_level_action(self.high_level_action)
+        num_subsample_steps = (
+            self.primitive_idx_to_num_low_level_steps[primitive_idx]
+            // self.num_low_level_actions_per_primitive
+        )
+        action = self.unsubsample_and_execute_ll(
+            num_subsample_steps,
+            target,
+        )
+        self.prev_low_level_action = action
         return action
 
-    def close_gripper(self, d):
+    def execute_primitive(self, compute_action, num_iterations, target):
+        if self.use_primitive_model:
+            action = self.execute_primitive_model(target)
+        else:
+            for _ in range(num_iterations):
+                action = compute_action()
+                self._set_action(action)
+                self.sim.step()
+                self.call_render_every_step()
+                self.primitive_step_counter += 1
+                self._num_low_level_steps_total += 1
+                if (self.primitive_step_counter + 1) % (
+                    self.num_low_level_steps // self.num_low_level_actions_per_primitive
+                ) == 0:
+                    low_level_reward = self.compute_low_level_reward(action, target)
+                    self.primitives_info["low_level_reward"].append(low_level_reward)
+                if (self.primitive_step_counter + 1) % (
+                    self.num_low_level_steps // self.num_low_level_actions_per_primitive
+                ) == 0:
+                    self.primitives_info["low_level_terminal"].append(0)
+        return action
+
+    def close_gripper(self, d, target=None):
         d = np.maximum(d, 0.0)
         compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, d, -d])
-        action = self.execute_primitive(compute_action, self.close_gripper_iterations)
+        if target is None:
+            target = np.concatenate((self.get_endeff_pose(), [d, -d]))
+        action = self.execute_primitive(
+            compute_action, self.close_gripper_iterations, target
+        )
         self.prev_low_level_action = action
         self.prev_grasp = -d
 
-    def open_gripper(self, d):
+    def open_gripper(self, d, target=None):
         d = np.maximum(d, 0.0)
         compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -d, d])
-        action = self.execute_primitive(compute_action, self.open_gripper_iterations)
+        if target is None:
+            target = np.concatenate((self.get_endeff_pose(), [-d, d]))
+        action = self.execute_primitive(
+            compute_action, self.open_gripper_iterations, target
+        )
         self.prev_low_level_action = action
         self.prev_grasp = d
 
-    def goto_pose(self, pose):
+    def goto_pose(self, pose, target=None):
         def compute_action():
             delta = pose - self.get_endeff_pos()
             gripper_ctrl = [-self.prev_grasp, self.prev_grasp]
@@ -637,16 +748,38 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             )
             return action
 
-        action = self.execute_primitive(compute_action, self.goto_pose_iterations)
+        if target is None:
+            target = np.concatenate(
+                (pose, self.get_endeff_quat(), [-self.prev_grasp, self.prev_grasp])
+            )
+        action = self.execute_primitive(
+            compute_action, self.goto_pose_iterations, target
+        )
         self.prev_low_level_action = action
 
     def top_x_y_grasp(self, xyzd):
         x_dist, y_dist, z_dist, d = xyzd
-        self.open_gripper(1)
-        self.goto_pose(self.get_endeff_pos() + np.array([0.0, y_dist, 0]))
-        self.goto_pose(self.get_endeff_pos() + np.array([x_dist, 0.0, 0]))
-        self.goto_pose(self.get_endeff_pos() + np.array([0.0, 0, z_dist]))
-        self.close_gripper(d)
+        target = np.concatenate(
+            (
+                self.get_endeff_pos() + np.array([x_dist, y_dist, z_dist]),
+                self.get_endeff_quat(),
+                [d, -d],
+            )
+        )
+        if self.use_primitive_model:
+            self.execute_primitive_model(target)
+        else:
+            self.open_gripper(1, target=target)
+            self.goto_pose(
+                self.get_endeff_pos() + np.array([0.0, y_dist, 0]), target=target
+            )
+            self.goto_pose(
+                self.get_endeff_pos() + np.array([x_dist, 0.0, 0]), target=target
+            )
+            self.goto_pose(
+                self.get_endeff_pos() + np.array([0.0, 0, z_dist]), target=target
+            )
+            self.close_gripper(d, target=target)
 
     def move_delta_ee(self, pose):
         self.goto_pose(self.get_endeff_pos() + pose)
@@ -704,6 +837,10 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
     def act(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         action = action * self.action_scale
+        argmax = np.argmax(action[: self.num_primitives], axis=-1)
+        one_hots = np.eye(self.num_primitives)[argmax]
+        action = np.concatenate((one_hots, action[self.num_primitives :]), axis=-1)
+        self.high_level_action = action
         (
             primitive_name,
             primitive_args,

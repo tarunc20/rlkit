@@ -7,10 +7,10 @@ import h5py
 import numpy as np
 
 from rlkit.data_management.simple_replay_buffer import SimpleReplayBuffer
-from rlkit.envs.env_utils import get_dim
 from rlkit.torch.model_based.dreamer.utils import (
     get_batch_length_indices,
     get_indexed_arr_from_batch_indices,
+    lambda_return_np,
 )
 
 
@@ -403,6 +403,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         use_batch_length=False,
         prioritize_fraction=0,
         uniform_priorities=True,
+        discount=0.99,
     ):
         self.n_envs = n_envs
 
@@ -452,6 +453,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self.prioritize_fraction = prioritize_fraction
         self.uniform_priorities = uniform_priorities
         self.num_low_level_actions_per_primitive = num_low_level_actions_per_primitive
+        self.discount = discount
 
     def _advance(self):
         self._top = (
@@ -461,7 +463,21 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
             self._size += self.n_envs * self.max_path_length
 
     def add_path(self, path):
-        # TODO: integrate in end of step high level rewards for the last step in each trajectory
+        reward = np.expand_dims(path["rewards"], -1)
+        low_level_reward = path["low_level_rewards"]
+        reward_input = reward[1:-1, :, :]
+        value = np.zeros_like(reward_input)
+        discount = (
+            np.ones_like(reward_input) * self.discount
+        )  # TODO: integrate in true discount value here (just pass to buffer)
+        bootstrap = reward_input[-1, :, :]
+        lambda_ = 1
+        returns = lambda_return_np(reward_input, value, discount, bootstrap, lambda_)
+        returns = np.concatenate(
+            (returns, np.expand_dims(bootstrap, 0)), axis=0
+        ).transpose(1, 0, 2)
+        returns = returns.transpose(1, 0, 2).reshape(-1, 1, 1)[:, 0]
+        low_level_reward[:, -1] += returns
         self._low_level_observations[
             self._top : self._top + self.n_envs * self.max_path_length
         ] = path["low_level_observations"]
@@ -473,7 +489,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         ] = path["low_level_actions"]
         self._low_level_rewards[
             self._top : self._top + self.n_envs * self.max_path_length
-        ] = path["low_level_rewards"]
+        ] = low_level_reward
         self._low_level_terminals[
             self._top : self._top + self.n_envs * self.max_path_length
         ] = path["low_level_terminals"]

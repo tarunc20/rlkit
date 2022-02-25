@@ -188,9 +188,16 @@ class SACTrainer(TorchTrainer, LossFunction):
         """
         eval_statistics = OrderedDict()
         if not skip_statistics:
-            eval_statistics["QF1 Loss"] = np.mean(ptu.get_numpy(qf1_loss))
-            eval_statistics["QF2 Loss"] = np.mean(ptu.get_numpy(qf2_loss))
-            eval_statistics["Policy Loss"] = np.mean(ptu.get_numpy(policy_loss))
+            eval_statistics["Rewards in Batch"] = rewards.mean().item()
+            eval_statistics["QF1 Loss"] = qf1_loss.item()
+            eval_statistics["QF2 Loss"] = qf2_loss.item()
+            eval_statistics["Policy Loss"] = policy_loss.item()
+            eval_statistics.update(
+                create_stats_ordered_dict(
+                    "Actions",
+                    ptu.get_numpy(actions),
+                )
+            )
             eval_statistics.update(
                 create_stats_ordered_dict(
                     "Q1 Predictions",

@@ -1,6 +1,7 @@
+import numpy as np
 import torch
 
-from rlkit.torch.model_based.dreamer.utils import lambda_return
+from rlkit.torch.model_based.dreamer.utils import lambda_return, lambda_return_np
 
 
 def test_lambda_return_zero():
@@ -51,6 +52,21 @@ def test_lambda_return_multi_step():
     bootstrap = torch.zeros(batch_size, 1)
     lambda_ = 1
     returns = lambda_return(reward, value, discount, bootstrap, lambda_)
+    assert returns.shape == (horizon - 1, batch_size, 1)
+    assert (returns != reward).any()
+    assert returns[0].item() == reward.sum().item()
+    assert returns[1].item() == reward[1:].sum().item()
+
+
+def test_lambda_return_np_multi_step():
+    horizon = 3
+    batch_size = 1
+    reward = np.random.rand(horizon - 1, batch_size, 1)
+    value = np.zeros((horizon - 1, batch_size, 1))
+    discount = np.ones((horizon - 1, batch_size, 1))
+    bootstrap = np.zeros((batch_size, 1))
+    lambda_ = 1
+    returns = lambda_return_np(reward, value, discount, bootstrap, lambda_)
     assert returns.shape == (horizon - 1, batch_size, 1)
     assert (returns != reward).any()
     assert returns[0].item() == reward.sum().item()

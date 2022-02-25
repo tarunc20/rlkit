@@ -117,8 +117,11 @@ def _worker(
                 os.environ["EGL_DEVICE_ID"] = str(data)
                 ptu.set_gpu_mode(True, gpu_id=int(data))
                 env.device_id = int(data)
+                remote.send(True)
             elif cmd == "sync_primitive_model":
                 remote.send(env.sync_primitive_model())
+            elif cmd == "set_use_primitive_model":
+                remote.send(env.set_use_primitive_model())
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -159,6 +162,8 @@ class StableBaselinesVecEnv(SubprocVecEnv):
         observation_space, action_space = self.remotes[0].recv()
         for remote in self.remotes:
             remote.send(("set_process_gpu_device_id", device_id))
+        for remote in self.remotes:
+            remote.recv()
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
 
     def step(self, actions):
@@ -218,5 +223,15 @@ class StableBaselinesVecEnv(SubprocVecEnv):
     def sync_primitive_model(self):
         for remote in self.remotes:
             remote.send(("sync_primitive_model", None))
+            self.waiting = True
         for remote in self.remotes:
             remote.recv()
+        self.waiting = False
+
+    def set_use_primitive_model(self):
+        for remote in self.remotes:
+            remote.send(("set_use_primitive_model", None))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False

@@ -6,9 +6,14 @@ from torch.distributions import Normal, TransformedDistribution
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.pythonplusplus import identity
-from rlkit.torch.distributions import MultivariateDiagonalNormal, TanhNormal
+from rlkit.torch.distributions import (
+    MultivariateDiagonalNormal,
+    TanhNormal,
+    TorchDistributionWrapper,
+)
 from rlkit.torch.model_based.dreamer.actor_models import (
     Independent,
+    SafeTruncatedNormal,
     SampleDist,
     TanhBijector,
 )
@@ -97,7 +102,9 @@ class CNN(jit.ScriptModule):
             self.input_channels,
             self.input_height,
             self.input_width,
-        ).to(memory_format=torch.channels_last, device=ptu.device, dtype=torch.float16)
+        ).to(
+            memory_format=torch.channels_last, device=ptu.device, dtype=conv_input.dtype
+        )
 
         h = self.conv_block_1(h)
         h = self.conv_block_2(h)
@@ -184,10 +191,10 @@ class DCNN(jit.ScriptModule):
             self.deconv_input_channels,
             self.deconv_input_width,
             self.deconv_input_height,
-        ).to(memory_format=torch.channels_last, device=ptu.device, dtype=torch.float16)
+        ).to(memory_format=torch.channels_last, device=ptu.device, dtype=h.dtype)
         output = self.deconv_block(h)
         return output.to(
-            memory_format=torch.channels_last, device=ptu.device, dtype=torch.float16
+            memory_format=torch.channels_last, device=ptu.device, dtype=h.dtype
         )
 
 
@@ -247,6 +254,7 @@ class CNNMLPGaussian(jit.ScriptModule):
         image_dim,
         min_std=0.1,
         init_std=0.0,
+        mean_scale=15,
     ):
         super().__init__()
         self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
@@ -255,6 +263,7 @@ class CNNMLPGaussian(jit.ScriptModule):
         self.image_dim = image_dim
         self.raw_init_std = torch.log(torch.exp(ptu.tensor(init_std)) - 1)
         self._min_std = min_std
+        self._mean_scale = mean_scale
 
     @jit.script_method
     def preprocess(self, obs):
@@ -273,11 +282,28 @@ class CNNMLPGaussian(jit.ScriptModule):
         joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
         output = self.joint_processor(joint_encoding)
         mean, std = output.split(self.joint_processor.output_size // 2, dim=-1)
-        std = F.softplus(std + self.raw_init_std) + self._min_std
-        assert std.min() >= 0.0, "std should not be negative anywhere"
         return mean, std
 
     def forward(self, input_):
         mean, std = self.forward_net(input_)
-        dist = MultivariateDiagonalNormal(mean, std)
+        self._dist = "trunc_normal"
+        mean = self._mean_scale * torch.tanh(mean / self._mean_scale)
+        if self._dist == "tanh_normal_dreamer_v1":
+            std = F.softplus(std + self.raw_init_std) + self._min_std
+            dist = Normal(mean, std)
+            dist = TransformedDistribution(dist, TanhBijector())
+            dist = Independent(dist, 1)
+            dist = SampleDist(dist)
+        elif self._dist == "trunc_normal":
+            std = 2 * torch.sigmoid(std / 2) + self._min_std
+            assert (
+                std >= 0.0
+            ).all(), f"std should not be negative, {std.max(), std.min()}"
+            dist = SafeTruncatedNormal(
+                mean, std, -self._mean_scale, self._mean_scale, mult=self._mean_scale
+            )
+            dist = Independent(dist, 1)
+        elif self._dist == "tanh_normal_sac":
+            dist = TanhNormal(mean, std)
+        dist = TorchDistributionWrapper(dist)
         return dist

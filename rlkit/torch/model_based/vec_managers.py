@@ -112,6 +112,10 @@ class Manager:
         self.expl_env.sync_primitive_model()
         self.eval_env.sync_primitive_model()
 
+    def set_use_primitive_model(self):
+        self.expl_env.set_use_primitive_model()
+        self.eval_env.set_use_primitive_model()
+
     def get_obs_and_action_dims(self):
         return (
             self.eval_env.observation_space.low.size,
@@ -154,6 +158,8 @@ def _worker(
                 remote.send(manager.sync_primitive_model())
             elif cmd == "get_obs_and_action_dims":
                 remote.send(manager.get_obs_and_action_dims())
+            elif cmd == "set_use_primitive_model":
+                remote.send(manager.set_use_primitive_model())
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -226,6 +232,14 @@ class VecManager:
     def sync_primitive_model(self):
         for remote in self.remotes:
             remote.send(("sync_primitive_model", None))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
+    def set_use_primitive_model(self):
+        for remote in self.remotes:
+            remote.send(("set_use_primitive_model", None))
             self.waiting = True
         for remote in self.remotes:
             remote.recv()
