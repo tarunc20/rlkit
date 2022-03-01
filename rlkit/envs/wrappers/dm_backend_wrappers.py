@@ -505,7 +505,6 @@ class DMControlBackendMetaworldMujocoEnv(MujocoEnv):
         if mode == "human":
             self.renderer.render_to_window()
         elif mode == "rgb_array":
-            # TODO Why reverse iterate?
             primary_img = self.renderer.render_offscreen(
                 imwidth,
                 imheight,
