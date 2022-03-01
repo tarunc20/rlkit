@@ -174,6 +174,7 @@ class MetaworldWrapper(gym.Wrapper):
         imheight=84,
         reward_scale=1.0,
         use_image_obs=False,
+        use_wrist_cam = False
     ):
         super().__init__(env)
         self.reward_type = reward_type
@@ -181,10 +182,16 @@ class MetaworldWrapper(gym.Wrapper):
         self.env.imheight = imheight
         self.imwidth = imwidth
         self.imheight = imheight
+
+        channels = 3
+        if use_wrist_cam:
+            channels = 6
+
         self.observation_space = Box(
-            0, 255, (6 * self.imwidth * self.imheight,), dtype=np.uint8
+            0, 255, (channels * self.imwidth * self.imheight,), dtype=np.uint8
         )
-        self.image_shape = (3, self.imwidth, self.imheight)
+        self.image_shape = (channels, self.imwidth, self.imheight)
+
         self.reward_scale = reward_scale
         self.use_image_obs = use_image_obs
 
