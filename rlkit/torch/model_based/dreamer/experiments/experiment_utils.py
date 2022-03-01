@@ -48,8 +48,13 @@ def preprocess_variant_llraps(variant):
         "num_low_level_actions_per_primitive"
     ]
 
+    size = 3e6
+    if variant['env_kwargs']['use_wrist_cam']:
+        size = 3e4
+    
+
     variant["replay_buffer_kwargs"]["max_replay_buffer_size"] = int(
-        3e4
+        size
         / (
             variant["num_low_level_actions_per_primitive"] * variant["max_path_length"]
             + 1
