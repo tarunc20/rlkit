@@ -50,10 +50,7 @@ class BCTrainer(TorchTrainer, LossFunction):
 
         self._n_train_steps_total += 1
 
-        if self._need_to_update_eval_statistics:
-            self.eval_statistics = stats
-            # Compute statistics using only one batch per epoch
-            self._need_to_update_eval_statistics = False
+        self.eval_statistics = stats
 
     @torch.cuda.amp.autocast()
     def compute_loss(
@@ -62,7 +59,7 @@ class BCTrainer(TorchTrainer, LossFunction):
         skip_statistics=False,
     ) -> Tuple[BCLosses, LossStatistics]:
         obs = batch["observations"]
-        actions = batch["actions"]
+        actions = batch["actions"] / self.policy._mean_scale
 
         """
         Policy Loss
@@ -70,15 +67,17 @@ class BCTrainer(TorchTrainer, LossFunction):
         action_dist = self.policy(obs)
         loss = -1 * action_dist.log_prob(actions).mean()
         eval_statistics = OrderedDict()
-        if not skip_statistics:
-            eval_statistics["Policy Loss"] = F.mse_loss(
-                action_dist.mean, actions
-            ).item()
+        eval_statistics["Policy Loss"] = F.mse_loss(action_dist.mean, actions).item()
+        eval_statistics["Predicted Actions Mean"] = action_dist.mean.mean().item()
+        eval_statistics["Predicted Actions Mean"] = actions.mean().item()
+        print(f"Policy Loss: {eval_statistics['Policy Loss']}")
+        print(f"Predicted Actions Max {action_dist.mean.abs().max().item()}")
+        print(f"Actions Max {actions.abs().max().item()}")
+        print()
 
         loss = BCLosses(
             policy_loss=loss,
         )
-
         return loss, eval_statistics
 
     def get_diagnostics(self):

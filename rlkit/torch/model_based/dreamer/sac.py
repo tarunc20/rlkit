@@ -23,7 +23,7 @@ SACLosses = namedtuple(
 class SACTrainer(TorchTrainer, LossFunction):
     def __init__(
         self,
-        action_space,
+        action_dim,
         policy,
         qf1,
         qf2,
@@ -54,7 +54,7 @@ class SACTrainer(TorchTrainer, LossFunction):
         if self.use_automatic_entropy_tuning:
             if target_entropy is None:
                 # Use heuristic value from SAC paper
-                self.target_entropy = -1 * np.prod(action_space.shape)
+                self.target_entropy = -1 * action_dim
             else:
                 self.target_entropy = target_entropy
             self.log_alpha = ptu.zeros(1, requires_grad=True)
@@ -136,7 +136,7 @@ class SACTrainer(TorchTrainer, LossFunction):
         rewards = batch["rewards"]
         terminals = batch["terminals"]
         obs = batch["observations"]
-        actions = batch["actions"]
+        actions = batch["actions"] / self.policy._mean_scale
         next_obs = batch["next_observations"]
 
         """
@@ -187,46 +187,54 @@ class SACTrainer(TorchTrainer, LossFunction):
         Save some statistics for eval
         """
         eval_statistics = OrderedDict()
-        if not skip_statistics:
-            eval_statistics["Rewards in Batch"] = rewards.mean().item()
-            eval_statistics["QF1 Loss"] = qf1_loss.item()
-            eval_statistics["QF2 Loss"] = qf2_loss.item()
-            eval_statistics["Policy Loss"] = policy_loss.item()
-            eval_statistics.update(
-                create_stats_ordered_dict(
-                    "Actions",
-                    ptu.get_numpy(actions),
-                )
+        eval_statistics["Rewards in Batch"] = rewards.mean().item()
+        eval_statistics["QF1 Loss"] = qf1_loss.item()
+        eval_statistics["QF2 Loss"] = qf2_loss.item()
+        eval_statistics["Policy Loss"] = policy_loss.item()
+        eval_statistics.update(
+            create_stats_ordered_dict(
+                "Actions",
+                ptu.get_numpy(actions),
             )
-            eval_statistics.update(
-                create_stats_ordered_dict(
-                    "Q1 Predictions",
-                    ptu.get_numpy(q1_pred),
-                )
+        )
+        eval_statistics.update(
+            create_stats_ordered_dict(
+                "Q1 Predictions",
+                ptu.get_numpy(q1_pred),
             )
-            eval_statistics.update(
-                create_stats_ordered_dict(
-                    "Q2 Predictions",
-                    ptu.get_numpy(q2_pred),
-                )
+        )
+        eval_statistics.update(
+            create_stats_ordered_dict(
+                "Q2 Predictions",
+                ptu.get_numpy(q2_pred),
             )
-            eval_statistics.update(
-                create_stats_ordered_dict(
-                    "Q Targets",
-                    ptu.get_numpy(q_target),
-                )
+        )
+        eval_statistics.update(
+            create_stats_ordered_dict(
+                "Q Targets",
+                ptu.get_numpy(q_target),
             )
-            eval_statistics.update(
-                create_stats_ordered_dict(
-                    "Log Pis",
-                    ptu.get_numpy(log_pi),
-                )
+        )
+        eval_statistics.update(
+            create_stats_ordered_dict(
+                "Log Pis",
+                ptu.get_numpy(log_pi),
             )
-            policy_statistics = add_prefix(dist.get_diagnostics(), "policy/")
-            eval_statistics.update(policy_statistics)
-            if self.use_automatic_entropy_tuning:
-                eval_statistics["Alpha"] = alpha.item()
-                eval_statistics["Alpha Loss"] = alpha_loss.item()
+        )
+        policy_statistics = add_prefix(dist.get_diagnostics(), "policy/")
+        eval_statistics.update(policy_statistics)
+        if self.use_automatic_entropy_tuning:
+            eval_statistics["Alpha"] = alpha.item()
+            eval_statistics["Alpha Loss"] = alpha_loss.item()
+
+        print(f"Policy Loss: {eval_statistics['Policy Loss']}")
+        print(f"QF1 Loss {qf1_loss.item()}")
+        print(f"QF2 Loss {qf2_loss.item()}")
+        print(f"Reward: {eval_statistics['Rewards in Batch']}")
+        print(f"Actions Max {actions.abs().max().item()}")
+        print(f"Log Pi Max {log_pi.abs().max().item()}")
+
+        print()
 
         loss = SACLosses(
             policy_loss=policy_loss,

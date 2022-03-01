@@ -351,6 +351,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         primitive_model_num_pretrain_steps=0,
         primitive_model_num_trains_per_train_loop=1,
         primitive_model_path=None,
+        use_sac_to_train_primitive_model=False,
     ):
         self._start_epoch = 0
         self.manager = manager
@@ -378,6 +379,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             primitive_model_num_trains_per_train_loop
         )
         self.primitive_model_path = primitive_model_path
+        self.use_sac_to_train_primitive_model = use_sac_to_train_primitive_model
 
     def _train(self):
         print("Initial Primitive Model Sync")
@@ -408,7 +410,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.primitive_model_trainer.policy.state_dict(), self.primitive_model_path
         )
         self.manager.sync_primitive_model()
-        self.manager.set_use_primitive_model()
+        if self.use_sac_to_train_primitive_model:
+            self.manager.set_use_primitive_model()
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,

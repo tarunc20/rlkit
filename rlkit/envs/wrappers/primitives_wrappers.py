@@ -647,10 +647,15 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ).unsqueeze(0)
             low_level_action = (
                 self.primitive_model(torch.cat((obs_torch, action_torch), dim=1))
-                .mean.cpu()
+                .sample()
+                .cpu()
                 .numpy()[0]
+            ) * self.primitive_model._mean_scale
+            low_level_action = np.clip(
+                low_level_action,
+                -self.primitive_model._mean_scale,
+                self.primitive_model._mean_scale,
             )
-            low_level_action = np.clip(low_level_action, -15, 15)
             target = self.get_endeff_pos() + low_level_action[:3]
             for step in range(num_subsample_steps):
                 a = (target - self.get_endeff_pos()) / num_subsample_steps

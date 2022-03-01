@@ -208,6 +208,8 @@ class CNNMLP(jit.ScriptModule):
         joint_processor_args,
         joint_processor_kwargs,
         image_dim,
+        mean_scale=15,
+        dist="normal",
     ):
         super().__init__()
         self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
@@ -234,6 +236,10 @@ class CNNMLP(jit.ScriptModule):
         return obs
 
 
+LOG_SIG_MAX = 2
+LOG_SIG_MIN = -20
+
+
 class CNNMLPGaussian(jit.ScriptModule):
     """
     Usage:
@@ -255,6 +261,7 @@ class CNNMLPGaussian(jit.ScriptModule):
         min_std=0.1,
         init_std=0.0,
         mean_scale=15,
+        dist="normal",
     ):
         super().__init__()
         self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
@@ -264,6 +271,7 @@ class CNNMLPGaussian(jit.ScriptModule):
         self.raw_init_std = torch.log(torch.exp(ptu.tensor(init_std)) - 1)
         self._min_std = min_std
         self._mean_scale = mean_scale
+        self._dist = dist
 
     @jit.script_method
     def preprocess(self, obs):
@@ -286,15 +294,19 @@ class CNNMLPGaussian(jit.ScriptModule):
 
     def forward(self, input_):
         mean, std = self.forward_net(input_)
-        self._dist = "trunc_normal"
-        mean = self._mean_scale * torch.tanh(mean / self._mean_scale)
         if self._dist == "tanh_normal_dreamer_v1":
+            mean = self._mean_scale * torch.tanh(mean / self._mean_scale)
             std = F.softplus(std + self.raw_init_std) + self._min_std
+            assert (
+                std >= 0.0
+            ).all(), f"std should not be negative, {std.max(), std.min()}"
             dist = Normal(mean, std)
             dist = TransformedDistribution(dist, TanhBijector())
             dist = Independent(dist, 1)
             dist = SampleDist(dist)
+            dist = TorchDistributionWrapper(dist)
         elif self._dist == "trunc_normal":
+            mean = self._mean_scale * torch.tanh(mean / self._mean_scale)
             std = 2 * torch.sigmoid(std / 2) + self._min_std
             assert (
                 std >= 0.0
@@ -303,7 +315,18 @@ class CNNMLPGaussian(jit.ScriptModule):
                 mean, std, -self._mean_scale, self._mean_scale, mult=self._mean_scale
             )
             dist = Independent(dist, 1)
-        elif self._dist == "tanh_normal_sac":
+            dist = TorchDistributionWrapper(dist)
+        elif self._dist == "normal":
+            std = F.softplus(std + self.raw_init_std) + self._min_std
+            assert (
+                std >= 0.0
+            ).all(), f"std should not be negative, {std.max(), std.min()}"
+            dist = MultivariateDiagonalNormal(mean, std)
+        elif self._dist == "tanh_normal":
+            log_std = torch.clamp(std, LOG_SIG_MIN, LOG_SIG_MAX)
+            std = torch.exp(log_std)
+            assert (
+                std >= 0.0
+            ).all(), f"std should not be negative, {std.max(), std.min()}"
             dist = TanhNormal(mean, std)
-        dist = TorchDistributionWrapper(dist)
         return dist

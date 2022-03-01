@@ -261,7 +261,7 @@ def experiment(variant):
 
     if variant.get("use_sac_to_train_primitive_model", False):
         primitive_model_trainer = SACTrainer(
-            action_space,
+            low_level_action_dim,
             policy=primitive_model,
             qf1=qf1,
             qf2=qf2,
