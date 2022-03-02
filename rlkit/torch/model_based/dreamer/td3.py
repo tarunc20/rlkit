@@ -191,6 +191,7 @@ class TD3Trainer(TorchTrainer):
         print(f"QF2 Loss {qf2_loss.item()}")
         print(f"Reward: {self.eval_statistics['Rewards in Batch']}")
         print(f"Actions Max {actions.abs().max().item()}")
+        print()
 
         self._n_train_steps_total += 1
 
