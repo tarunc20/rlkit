@@ -22,7 +22,7 @@ if __name__ == "__main__":
         )
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=256,
-            primitive_model_num_pretrain_steps=2500,
+            primitive_model_num_pretrain_steps=100,
             primitive_model_num_trains_per_train_loop=1,
         )
     else:
@@ -145,8 +145,7 @@ if __name__ == "__main__":
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256]),
             image_dim=64 * 64 * 3,
-            mean_scale=15,
-            dist="tanh_normal",
+            scale=15,
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
@@ -155,14 +154,8 @@ if __name__ == "__main__":
         primitive_model_algorithm_kwargs=primitive_model_algorithm_kwargs,
         primitive_model_trainer_kwargs=dict(
             discount=0.99,
-            soft_target_tau=5e-3,
-            target_update_period=1,
-            policy_lr=3e-4,
-            qf_lr=3e-4,
-            reward_scale=1,
-            use_automatic_entropy_tuning=True,
         ),
-        use_sac_to_train_primitive_model=True,
+        use_rl_to_train_primitive_model=True,
     )
 
     setup_sweep_and_launch_exp(

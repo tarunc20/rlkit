@@ -1,22 +1,9 @@
 import torch
-import torch.nn.functional as F
 from torch import jit
 from torch import nn as nn
-from torch.distributions import Normal, TransformedDistribution
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.pythonplusplus import identity
-from rlkit.torch.distributions import (
-    MultivariateDiagonalNormal,
-    TanhNormal,
-    TorchDistributionWrapper,
-)
-from rlkit.torch.model_based.dreamer.actor_models import (
-    Independent,
-    SafeTruncatedNormal,
-    SampleDist,
-    TanhBijector,
-)
 from rlkit.torch.model_based.dreamer.mlp import Mlp
 
 
@@ -208,14 +195,16 @@ class CNNMLP(jit.ScriptModule):
         joint_processor_args,
         joint_processor_kwargs,
         image_dim,
-        mean_scale=15,
-        dist="normal",
+        output_activation=identity,
+        scale=1.0,
     ):
         super().__init__()
         self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
         self.state_encoder = Mlp(*state_encoder_args, **state_encoder_kwargs)
         self.joint_processor = Mlp(*joint_processor_args, **joint_processor_kwargs)
         self.image_dim = image_dim
+        self.output_activation = output_activation
+        self.scale = scale
 
     @jit.script_method
     def forward(self, input_):
@@ -225,6 +214,7 @@ class CNNMLP(jit.ScriptModule):
         state_encoding = self.state_encoder(state)
         joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
         output = self.joint_processor(joint_encoding)
+        output = self.output_activation(output)
         return output
 
     @jit.script_method
@@ -234,99 +224,3 @@ class CNNMLP(jit.ScriptModule):
         ), f"Invalid observation: max: {obs.max()}, min: {obs.min()}"
         obs = obs / 255.0 - 0.5
         return obs
-
-
-LOG_SIG_MAX = 2
-LOG_SIG_MIN = -20
-
-
-class CNNMLPGaussian(jit.ScriptModule):
-    """
-    Usage:
-
-    ```
-    policy = TanhCNNMLPGaussianPolicy(...)
-    assumes joint processor outputs 2*output_size
-    """
-
-    def __init__(
-        self,
-        image_encoder_args,
-        image_encoder_kwargs,
-        state_encoder_args,
-        state_encoder_kwargs,
-        joint_processor_args,
-        joint_processor_kwargs,
-        image_dim,
-        min_std=0.1,
-        init_std=0.0,
-        mean_scale=15,
-        dist="normal",
-    ):
-        super().__init__()
-        self.image_encoder = CNN(*image_encoder_args, **image_encoder_kwargs)
-        self.state_encoder = Mlp(*state_encoder_args, **state_encoder_kwargs)
-        self.joint_processor = Mlp(*joint_processor_args, **joint_processor_kwargs)
-        self.image_dim = image_dim
-        self.raw_init_std = torch.log(torch.exp(ptu.tensor(init_std)) - 1)
-        self._min_std = min_std
-        self._mean_scale = mean_scale
-        self._dist = dist
-
-    @jit.script_method
-    def preprocess(self, obs):
-        assert (
-            obs.max() <= 255.0 and obs.min() >= 0.0
-        ), f"Invalid observation: max: {obs.max()}, min: {obs.min()}"
-        obs = obs / 255.0 - 0.5
-        return obs
-
-    @jit.script_method
-    def forward_net(self, input_):
-        image, state = input_[:, : self.image_dim], input_[:, self.image_dim :]
-        image = self.preprocess(image)
-        image_encoding = self.image_encoder(image)
-        state_encoding = self.state_encoder(state)
-        joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
-        output = self.joint_processor(joint_encoding)
-        mean, std = output.split(self.joint_processor.output_size // 2, dim=-1)
-        return mean, std
-
-    def forward(self, input_):
-        mean, std = self.forward_net(input_)
-        if self._dist == "tanh_normal_dreamer_v1":
-            mean = self._mean_scale * torch.tanh(mean / self._mean_scale)
-            std = F.softplus(std + self.raw_init_std) + self._min_std
-            assert (
-                std >= 0.0
-            ).all(), f"std should not be negative, {std.max(), std.min()}"
-            dist = Normal(mean, std)
-            dist = TransformedDistribution(dist, TanhBijector())
-            dist = Independent(dist, 1)
-            dist = SampleDist(dist)
-            dist = TorchDistributionWrapper(dist)
-        elif self._dist == "trunc_normal":
-            mean = self._mean_scale * torch.tanh(mean / self._mean_scale)
-            std = 2 * torch.sigmoid(std / 2) + self._min_std
-            assert (
-                std >= 0.0
-            ).all(), f"std should not be negative, {std.max(), std.min()}"
-            dist = SafeTruncatedNormal(
-                mean, std, -self._mean_scale, self._mean_scale, mult=self._mean_scale
-            )
-            dist = Independent(dist, 1)
-            dist = TorchDistributionWrapper(dist)
-        elif self._dist == "normal":
-            std = F.softplus(std + self.raw_init_std) + self._min_std
-            assert (
-                std >= 0.0
-            ).all(), f"std should not be negative, {std.max(), std.min()}"
-            dist = MultivariateDiagonalNormal(mean, std)
-        elif self._dist == "tanh_normal":
-            log_std = torch.clamp(std, LOG_SIG_MIN, LOG_SIG_MAX)
-            std = torch.exp(log_std)
-            assert (
-                std >= 0.0
-            ).all(), f"std should not be negative, {std.max(), std.min()}"
-            dist = TanhNormal(mean, std)
-        return dist

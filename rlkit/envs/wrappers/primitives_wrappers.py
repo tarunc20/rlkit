@@ -12,7 +12,7 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers.dm_backend_wrappers import DMControlBackendRobosuiteEnv
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.torch.model_based.dreamer.conv_networks import CNNMLPGaussian
+from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
 
 
 class TimeLimit(gym.Wrapper):
@@ -347,9 +347,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
             )
-            self.primitive_model = CNNMLPGaussian(**primitive_model_kwargs).to(
-                ptu.device
-            )
+            self.primitive_model = CNNMLP(**primitive_model_kwargs).to(ptu.device)
             self.primitive_model_path = primitive_model_path
         self.use_primitive_model = False
         self.low_level_reward_type = low_level_reward_type
@@ -647,14 +645,13 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ).unsqueeze(0)
             low_level_action = (
                 self.primitive_model(torch.cat((obs_torch, action_torch), dim=1))
-                .sample()
                 .cpu()
                 .numpy()[0]
-            ) * self.primitive_model._mean_scale
+            ) * self.primitive_model.scale
             low_level_action = np.clip(
                 low_level_action,
-                -self.primitive_model._mean_scale,
-                self.primitive_model._mean_scale,
+                -self.primitive_model.scale,
+                self.primitive_model.scale,
             )
             target = self.get_endeff_pos() + low_level_action[:3]
             for step in range(num_subsample_steps):

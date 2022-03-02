@@ -136,7 +136,7 @@ class SACTrainer(TorchTrainer, LossFunction):
         rewards = batch["rewards"]
         terminals = batch["terminals"]
         obs = batch["observations"]
-        actions = batch["actions"] / self.policy._mean_scale
+        actions = batch["actions"] / self.policy.scale
         next_obs = batch["next_observations"]
 
         """

@@ -1,11 +1,9 @@
-from rlkit.torch.model_based.dreamer.sac import SACTrainer
-
-
 def experiment(variant):
     import os
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP, CNNMLPGaussian
+    from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
+    from rlkit.torch.model_based.dreamer.td3 import TD3Trainer
     from rlkit.torch.model_based.rl_algorithm import TorchMultiManagerBatchRLAlgorithm
 
     os.environ["D4RL_SUPPRESS_IMPORT_ERROR"] = "1"
@@ -244,8 +242,10 @@ def experiment(variant):
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
         action_dim + 1
     )
+    variant["primitive_model_kwargs"]["output_activation"] = nn.Tanh()
 
-    primitive_model = CNNMLPGaussian(**variant["primitive_model_kwargs"]).to(ptu.device)
+    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
+    target_primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
 
     primitive_model_pretrain_trainer = BCTrainer(
         primitive_model, **variant["primitive_model_pretrain_trainer_kwargs"]
@@ -259,14 +259,14 @@ def experiment(variant):
     target_qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
     target_qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
 
-    if variant.get("use_sac_to_train_primitive_model", False):
-        primitive_model_trainer = SACTrainer(
-            low_level_action_dim,
+    if variant.get("use_rl_to_train_primitive_model", False):
+        primitive_model_trainer = TD3Trainer(
             policy=primitive_model,
             qf1=qf1,
             qf2=qf2,
             target_qf1=target_qf1,
             target_qf2=target_qf2,
+            target_policy=target_primitive_model,
             **variant["primitive_model_trainer_kwargs"],
         )
     else:
