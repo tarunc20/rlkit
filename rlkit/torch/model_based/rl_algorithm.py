@@ -469,8 +469,18 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.manager._log_stats()
 
         logger.record_dict(
+            self.primitive_model_pretrain_trainer.get_diagnostics(),
+            prefix=f"primitive_model_pretrain_trainer/trainer/",
+        )
+
+        logger.record_dict(
             self.primitive_model_trainer.get_diagnostics(),
             prefix=f"primitive_model_trainer/trainer/",
+        )
+
+        logger.record_dict(
+            self.primitive_model_buffer.get_diagnostics(),
+            prefix=f"primitive_model_buffer/trainer/",
         )
 
         """

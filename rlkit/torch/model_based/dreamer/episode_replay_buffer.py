@@ -2,6 +2,7 @@ import gc
 import os
 import pickle
 import warnings
+from collections import OrderedDict
 
 import h5py
 import numpy as np
@@ -540,3 +541,8 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
 
     def load(self, path, suffix):
         pass
+
+    def get_diagnostics(self):
+        diagnostics = OrderedDict([("size", self._size)])
+        diagnostics["average_returns"] = self._low_level_rewards.sum(axis=1).mean()
+        return diagnostics
