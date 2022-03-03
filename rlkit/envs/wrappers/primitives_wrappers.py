@@ -675,7 +675,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             )
             self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
             self.primitives_info["low_level_action"].append(low_level_action)
-            reward = self.compute_low_level_reward(low_level_action, target)
+            reward = self.compute_low_level_reward(
+                low_level_action, np.concatenate((target, low_level_action[3:]))
+            )
             self.primitives_info["low_level_reward"].append(reward)
             self.primitives_info["low_level_terminal"].append(0)
         return low_level_action

@@ -278,6 +278,9 @@ def experiment(variant):
         primitive_model_trainer=primitive_model_trainer,
         primitive_model_buffer=primitive_model_buffer,
         primitive_model_path=primitive_model_path,
+        use_rl_to_train_primitive_model=variant.get(
+            "use_rl_to_train_primitive_model", False
+        ),
         **variant["algorithm_kwargs"],
         **variant["primitive_model_algorithm_kwargs"],
     )
