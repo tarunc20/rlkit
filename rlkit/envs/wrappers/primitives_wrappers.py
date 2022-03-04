@@ -653,12 +653,13 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 -self.primitive_model.scale,
                 self.primitive_model.scale,
             )
-            target = self.get_endeff_pos() + low_level_action[:3]
+            t = self.get_endeff_pos() + low_level_action[:3]
             for step in range(num_subsample_steps):
-                a = (target - self.get_endeff_pos()) / num_subsample_steps
-                a = np.concatenate(
-                    (a, low_level_action[3:])
-                )  # assume rotation should not be subsampled/unsubsampled
+                a = (t - self.get_endeff_pos()) / num_subsample_steps
+                # a = np.concatenate(
+                #     (a, low_level_action[3:])
+                # )  # assume rotation should not be subsampled/unsubsampled
+                a = np.concatenate((a, np.array([1, 0, 1, 0, *low_level_action[7:]])))
                 self.mocap_set_action(self.sim, a[:7])
                 self.ctrl_set_action(self.sim, a[7:])
                 self.sim.step()
@@ -676,7 +677,14 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
             self.primitives_info["low_level_action"].append(low_level_action)
             reward = self.compute_low_level_reward(
-                low_level_action, np.concatenate((target, low_level_action[3:]))
+                np.concatenate(
+                    (
+                        self.get_endeff_pos(),
+                        np.array([1.0, 0, 1.0, 0]),
+                        a[7:],
+                    )
+                ),
+                target,
             )
             self.primitives_info["low_level_reward"].append(reward)
             self.primitives_info["low_level_terminal"].append(0)
@@ -713,7 +721,16 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 if (self.primitive_step_counter + 1) % (
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive
                 ) == 0:
-                    low_level_reward = self.compute_low_level_reward(action, target)
+                    low_level_reward = self.compute_low_level_reward(
+                        np.concatenate(
+                            (
+                                self.get_endeff_pos(),
+                                np.array([1.0, 0, 1.0, 0]),
+                                action[7:],
+                            )
+                        ),
+                        target,
+                    )
                     self.primitives_info["low_level_reward"].append(low_level_reward)
                 if (self.primitive_step_counter + 1) % (
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive

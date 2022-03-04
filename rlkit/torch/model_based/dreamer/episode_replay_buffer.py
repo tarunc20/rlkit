@@ -545,4 +545,5 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
     def get_diagnostics(self):
         diagnostics = OrderedDict([("size", self._size)])
         diagnostics["average_returns"] = self._low_level_rewards.sum(axis=1).mean()
+        diagnostics["average_final reward"] = self._low_level_rewards[:, -1].mean()
         return diagnostics
