@@ -612,9 +612,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         ee_quat = self.get_endeff_quat()
         return np.concatenate((ee_pos, ee_quat))
 
-    def compute_low_level_reward(self, low_level_action, target):
+    def compute_low_level_reward(self, low_level_action_gripper, target):
         current = np.concatenate(
-            (self.get_endeff_pose(), low_level_action[-2:])
+            (self.get_endeff_pos(), low_level_action_gripper)
         )  # 7DOF pose and gripper ctrl
         if self.low_level_reward_type == "argument_achievement":
             reward = -1 * np.linalg.norm(current - target)
@@ -676,16 +676,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             )
             self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
             self.primitives_info["low_level_action"].append(low_level_action)
-            reward = self.compute_low_level_reward(
-                np.concatenate(
-                    (
-                        self.get_endeff_pos(),
-                        np.array([1.0, 0, 1.0, 0]),
-                        a[7:],
-                    )
-                ),
-                target,
-            )
+            reward = self.compute_low_level_reward(a[7:], target)
             self.primitives_info["low_level_reward"].append(reward)
             self.primitives_info["low_level_terminal"].append(0)
         return low_level_action
@@ -721,15 +712,8 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 if (self.primitive_step_counter + 1) % (
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive
                 ) == 0:
-                    low_level_reward = self.compute_low_level_reward(
-                        np.concatenate(
-                            (
-                                self.get_endeff_pos(),
-                                np.array([1.0, 0, 1.0, 0]),
-                                action[7:],
-                            )
-                        ),
-                        target,
+                    low_level_reward = (
+                        self.compute_low_level_reward(action[7:], target),
                     )
                     self.primitives_info["low_level_reward"].append(low_level_reward)
                 if (self.primitive_step_counter + 1) % (
@@ -742,7 +726,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         d = np.maximum(d, 0.0)
         compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, d, -d])
         if target is None:
-            target = np.concatenate((self.get_endeff_pose(), [d, -d]))
+            target = np.concatenate((self.get_endeff_pos(), [d, -d]))
         action = self.execute_primitive(
             compute_action, self.close_gripper_iterations, target
         )
@@ -753,7 +737,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         d = np.maximum(d, 0.0)
         compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -d, d])
         if target is None:
-            target = np.concatenate((self.get_endeff_pose(), [-d, d]))
+            target = np.concatenate((self.get_endeff_pos(), [-d, d]))
         action = self.execute_primitive(
             compute_action, self.open_gripper_iterations, target
         )
@@ -770,9 +754,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             return action
 
         if target is None:
-            target = np.concatenate(
-                (pose, self.get_endeff_quat(), [-self.prev_grasp, self.prev_grasp])
-            )
+            target = np.concatenate((pose, [-self.prev_grasp, self.prev_grasp]))
         action = self.execute_primitive(
             compute_action, self.goto_pose_iterations, target
         )
@@ -783,7 +765,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         target = np.concatenate(
             (
                 self.get_endeff_pos() + np.array([x_dist, y_dist, z_dist]),
-                self.get_endeff_quat(),
                 [d, -d],
             )
         )
@@ -873,7 +854,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.num_low_level_steps = self.primitive_idx_to_num_low_level_steps[
             primitive_idx
         ]
-
         primitive(
             primitive_action,
         )
