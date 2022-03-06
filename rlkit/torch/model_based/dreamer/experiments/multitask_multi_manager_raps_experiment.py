@@ -207,6 +207,7 @@ def experiment(variant):
             replay_buffer,
             pretrain_policy=rand_policy,
             manager_idx=manager_idx,
+            env_name=env_name,
             **variant["algorithm_kwargs"],
         )
 

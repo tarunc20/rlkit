@@ -52,13 +52,14 @@ def visualize_rollout(
     num_rollouts=4,
     use_raps_obs=False,
     use_true_actions=True,
+    suffix="",
 ):
     file_path = logdir + "/"
     os.makedirs(file_path, exist_ok=True)
     print(
         f"Generating Imagination Reconstructions No Intermediate Obs: {use_raps_obs} Actual Actions: {use_true_actions}"
     )
-    file_suffix = f"imagination_reconstructions_raps_obs_{use_raps_obs}_actual_actions_{use_true_actions}.png"
+    file_suffix = f"imagination_reconstructions_raps_obs_{use_raps_obs}_actual_actions_{use_true_actions}_{suffix}.png"
     file_path += file_suffix
     img_shape = (img_size, img_size, 3)
     reconstructions = np.zeros(
@@ -340,6 +341,114 @@ def visualize_primitive_unsubsampled_rollout(
     print(f"Saved Rollout Visualization to {file_path}")
 
 
+def visualize_primitive_rollout(
+    env,
+    logdir,
+    num_rollouts=4,
+    suffix="",
+):
+    """
+    Visualize a primitive rollout.
+
+    1. get primitive idx, name and sample appropriate arguments (or just sample a completely random action)
+    2. execute primitive and collect all low level observations
+    3. save video of execution
+    4. repeat num_rollouts times for each primitive
+    5. collect into one super large video (num_primitivesxnum_rollouts)
+    """
+    render_size = 128
+    img_arrays = []
+    subsample_rate = 100
+    num_primitives = env.num_primitives
+    args = []
+    for primitive_idx in range(num_primitives):
+        for rollout in range(num_rollouts):
+            a = env.action_space.sample()
+            env.reset()
+
+            a[:num_primitives] = np.eye(num_primitives)[primitive_idx]
+            env.call_env_method(
+                "set_render_every_step",
+                (),
+                dict(
+                    render_every_step=True,
+                    render_mode="rgb_array",
+                    render_im_shape=(render_size, render_size),
+                ),
+            )
+            o, _, _, i = env.step(
+                a.reshape(1, -1),
+            )
+            env.call_env_method(
+                "set_render_every_step",
+                (),
+                dict(
+                    render_every_step=True,
+                    render_mode="rgb_array",
+                    render_im_shape=(64, 64),
+                ),
+            )
+            env.call_env_method("unset_render_every_step", (), {})
+            im_arr = np.array(env.img_array)
+            subsample_idxs = np.linspace(0, len(im_arr), subsample_rate, endpoint=False)
+            im_arr = im_arr[subsample_idxs.astype(int)]
+            img_arrays.append(im_arr)
+            (primitive_name, primitive_args, _,) = env.call_env_method(
+                "get_primitive_info_from_high_level_action",
+                (a,),
+                {},
+            )
+            primitive_name_to_action_dict = env.call_env_method(
+                "break_apart_action",
+                (primitive_args,),
+                {},
+            )
+            primitive_action = primitive_name_to_action_dict[primitive_name]
+            args.append(primitive_action)
+
+    fourcc = cv2.VideoWriter_fourcc(*"DIVX")
+    file_path = os.path.join(logdir, f"primitive_rollouts_{suffix}.avi")
+    out = cv2.VideoWriter(
+        file_path,
+        fourcc,
+        25.0,
+        (num_rollouts * render_size, num_primitives * render_size),
+    )
+
+    for i in range(subsample_rate):
+        combined_im_list = []
+        for im_arr in img_arrays:
+            combined_im_list.append(im_arr[i])
+
+        ctr = 0
+        combined_im = np.zeros(
+            (num_primitives * render_size, num_rollouts * render_size, 3),
+            dtype=np.uint8,
+        )
+        for n in range(num_primitives):
+            primitive_name = env.primitive_idx_to_name[n]
+            for j in range(num_rollouts):
+                im = combined_im_list[ctr]
+                primitive_args = args[ctr]
+                if j == 0:
+                    add_text(im, primitive_name, (1, 120), 0.3, (0, 255, 0))
+                np.set_printoptions(2)
+                primitive_args_string = str(np.array(primitive_args))
+                if np.array(primitive_args).shape != ():
+                    primitive_args_string = primitive_args_string[1:-1]
+                add_text(im, primitive_args_string, (1, 7), 0.3, (0, 0, 0))
+                np.set_printoptions(8)
+                combined_im[
+                    n * render_size : (n + 1) * render_size,
+                    j * render_size : (j + 1) * render_size,
+                ] = im
+                ctr += 1
+        cv2.imwrite("test.png", combined_im)
+        out.write(combined_im)
+    out.release()
+    print("video saved to :", file_path)
+
+
 def post_epoch_visualize_func(algorithm, epoch):
     if epoch % 10 == 0:
         visualize_rollout(
@@ -392,6 +501,7 @@ def post_epoch_visualize_func(algorithm, epoch):
 def post_epoch_visualize_func_vec_manager(algorithm, epoch):
     if epoch % 50 == 0:
         algorithm.manager.visualize_rollouts()
+        algorithm.manager.visualize_primitive_rollouts()
 
 
 @torch.no_grad()

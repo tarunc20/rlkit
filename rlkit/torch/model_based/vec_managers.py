@@ -6,7 +6,10 @@ from stable_baselines3.common.vec_env import CloudpickleWrapper
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.core import eval_util, logger
-from rlkit.torch.model_based.dreamer.visualization import visualize_rollout
+from rlkit.torch.model_based.dreamer.visualization import (
+    visualize_primitive_rollout,
+    visualize_rollout,
+)
 
 
 class Manager:
@@ -29,6 +32,7 @@ class Manager:
         pretrain_policy=None,
         num_pretrain_steps=0,
         manager_idx=0,
+        env_name=None,
     ):
         self.expl_env = expl_env
         self.eval_env = eval_env
@@ -47,6 +51,7 @@ class Manager:
         self.pretrain_policy = pretrain_policy
         self.num_pretrain_steps = num_pretrain_steps
         self.manager_idx = manager_idx
+        self.env_name = env_name
         ptu.set_gpu_mode(True, gpu_id=self.manager_idx)
 
     def training_mode(self, mode):
@@ -135,6 +140,12 @@ class Manager:
             use_raps_obs=False,
             use_true_actions=True,
             num_rollouts=4,
+            suffix=self.env_name,
+        )
+
+    def visualize_primitive_rollout(self, snapshot_dir):
+        visualize_primitive_rollout(
+            self.eval_env, snapshot_dir, num_rollouts=5, suffix=self.env_name
         )
 
 
@@ -176,6 +187,8 @@ def _worker(
                 remote.send(manager.set_use_primitive_model())
             elif cmd == "visualize_rollout":
                 remote.send(manager.visualize_rollout(str(data)))
+            elif cmd == "visualize_primitive_rollout":
+                remote.send(manager.visualize_primitive_rollout(str(data)))
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -312,6 +325,14 @@ class VecManager:
     def visualize_rollouts(self):
         for remote in self.remotes:
             remote.send(("visualize_rollout", logger.get_snapshot_dir()))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
+    def visualize_primitive_rollouts(self):
+        for remote in self.remotes:
+            remote.send(("visualize_primitive_rollout", logger.get_snapshot_dir()))
             self.waiting = True
         for remote in self.remotes:
             remote.recv()

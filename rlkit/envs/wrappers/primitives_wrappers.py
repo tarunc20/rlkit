@@ -224,7 +224,6 @@ class MetaworldWrapper(gym.Wrapper):
         render_mode="rgb_array",
         render_im_shape=(64, 64),
     ):
-        self.set_render_every_step(render_every_step, render_mode, render_im_shape)
         obs, reward, done, info = self.env.step(
             action,
         )
@@ -351,6 +350,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitive_model_path = primitive_model_path
         self.use_primitive_model = False
         self.low_level_reward_type = low_level_reward_type
+        self.set_render_every_step()
 
     def sync_primitive_model(self):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
@@ -663,18 +663,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 self.mocap_set_action(self.sim, a[:7])
                 self.ctrl_set_action(self.sim, a[7:])
                 self.sim.step()
+                self.call_render_every_step()
                 self.primitive_step_counter += 1
                 self._num_low_level_steps_total += 1
-            observation = (
-                self.render(
-                    "rgb_array",
-                    self.render_im_shape[0],
-                    self.render_im_shape[1],
-                )
-                .transpose(2, 0, 1)
-                .flatten()
-            )
-            self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
             self.primitives_info["low_level_action"].append(low_level_action)
             reward = self.compute_low_level_reward(a[7:], target)
             self.primitives_info["low_level_reward"].append(reward)
