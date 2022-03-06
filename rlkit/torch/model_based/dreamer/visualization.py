@@ -443,7 +443,6 @@ def visualize_primitive_rollout(
                     j * render_size : (j + 1) * render_size,
                 ] = im
                 ctr += 1
-        cv2.imwrite("test.png", combined_im)
         out.write(combined_im)
     out.release()
     print("video saved to :", file_path)

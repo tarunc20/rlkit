@@ -234,7 +234,7 @@ def experiment(variant):
         variant["env_names"],
         start_method="forkserver",
     )
-    obs_dim, action_dim, action_space = vec_manager.get_obs_and_action_dims()
+    obs_dim, action_dim, _ = vec_manager.get_obs_and_action_dims()
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         variant["num_expl_envs"],
         obs_dim,
@@ -289,6 +289,8 @@ def experiment(variant):
         **variant["algorithm_kwargs"],
         **variant["primitive_model_algorithm_kwargs"],
     )
+    if variant.get("load_from_path", None) is not None:
+        algorithm.load(variant["load_from_path"])
     algorithm.low_level_primitives = False
     if variant.get("generate_video", False):
         post_epoch_visualize_func_vec_manager(algorithm, 0)

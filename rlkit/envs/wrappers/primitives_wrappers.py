@@ -352,12 +352,13 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.low_level_reward_type = low_level_reward_type
         self.set_render_every_step()
 
-    def sync_primitive_model(self):
+    def sync_primitive_model_from_path(self, path):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
-        self.primitive_model.load_state_dict(
-            torch.load(self.primitive_model_path, map_location=ptu.device)
-        )
+        self.primitive_model.load_state_dict(torch.load(path, map_location=ptu.device))
         self.primitive_model = self.primitive_model.to(ptu.device)
+
+    def sync_primitive_model(self):
+        self.sync_primitive_model_from_path(self.primitive_model_path)
 
     def set_use_primitive_model(self):
         self.use_primitive_model = True

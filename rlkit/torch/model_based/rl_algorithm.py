@@ -460,12 +460,19 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self._log_stats(epoch)
 
         self.manager._end_epoch(epoch)
+        self.manager.save(logger.get_snapshot_dir())
 
         for post_epoch_func in self.post_epoch_funcs:
             post_epoch_func(self, epoch)
 
         self.primitive_model_buffer.end_epoch(epoch)
         self.primitive_model_trainer.end_epoch(epoch)
+
+    def load(self, path):
+        self.manager.load(path)
+        self.manager.sync_primitive_model_from_path(
+            os.path.join(path, "primitive_model.ptc")
+        )
 
     def _get_snapshot(self):
         snapshot = {}

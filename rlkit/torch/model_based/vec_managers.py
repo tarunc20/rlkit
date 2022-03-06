@@ -118,6 +118,10 @@ class Manager:
         self.expl_env.sync_primitive_model()
         self.eval_env.sync_primitive_model()
 
+    def sync_primitive_model_from_path(self, path):
+        self.expl_env.sync_primitive_model_from_path(path)
+        self.eval_env.sync_primitive_model_from_path(path)
+
     def set_use_primitive_model(self):
         self.expl_env.set_use_primitive_model()
         self.eval_env.set_use_primitive_model()
@@ -147,6 +151,16 @@ class Manager:
         visualize_primitive_rollout(
             self.eval_env, snapshot_dir, num_rollouts=5, suffix=self.env_name
         )
+
+    def save(self, path):
+        suffix = "trainer.pkl"
+        suffix = f"{self.env_name}_{suffix}"
+        self.trainer.save(path, suffix)
+
+    def load(self, path):
+        suffix = "trainer.pkl"
+        suffix = f"{self.env_name}_{suffix}"
+        self.trainer.load(path, suffix)
 
 
 def _worker(
@@ -189,6 +203,12 @@ def _worker(
                 remote.send(manager.visualize_rollout(str(data)))
             elif cmd == "visualize_primitive_rollout":
                 remote.send(manager.visualize_primitive_rollout(str(data)))
+            elif cmd == "save":
+                remote.send(manager.save(str(data)))
+            elif cmd == "load":
+                remote.send(manager.load(str(data)))
+            elif cmd == "sync_primitive_model_from_path":
+                remote.send(manager.sync_primitive_model_from_path(data))
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -266,6 +286,14 @@ class VecManager:
             remote.recv()
         self.waiting = False
 
+    def sync_primitive_model_from_path(self, path):
+        for remote in self.remotes:
+            remote.send(("sync_primitive_model_from_path", path))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
     def set_use_primitive_model(self):
         for remote in self.remotes:
             remote.send(("set_use_primitive_model", None))
@@ -333,6 +361,22 @@ class VecManager:
     def visualize_primitive_rollouts(self):
         for remote in self.remotes:
             remote.send(("visualize_primitive_rollout", logger.get_snapshot_dir()))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
+    def save(self, path):
+        for remote in self.remotes:
+            remote.send(("save", path))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
+    def load(self, path):
+        for remote in self.remotes:
+            remote.send(("load", path))
             self.waiting = True
         for remote in self.remotes:
             remote.recv()

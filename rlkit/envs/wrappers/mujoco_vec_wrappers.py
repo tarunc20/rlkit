@@ -122,6 +122,8 @@ def _worker(
                 remote.send(env.sync_primitive_model())
             elif cmd == "set_use_primitive_model":
                 remote.send(env.set_use_primitive_model())
+            elif cmd == "sync_primitive_model_from_path":
+                remote.send(env.sync_primitive_model_from_path(data))
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -227,6 +229,14 @@ class StableBaselinesVecEnv(SubprocVecEnv):
     def sync_primitive_model(self):
         for remote in self.remotes:
             remote.send(("sync_primitive_model", None))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
+    def sync_primitive_model_from_path(self, path):
+        for remote in self.remotes:
+            remote.send(("sync_primitive_model_from_path", path))
             self.waiting = True
         for remote in self.remotes:
             remote.recv()
