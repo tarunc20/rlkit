@@ -352,6 +352,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         primitive_model_num_trains_per_train_loop=1,
         primitive_model_path=None,
         use_rl_to_train_primitive_model=False,
+        train_primitive_model=False,
     ):
         self._start_epoch = 0
         self.manager = manager
@@ -380,6 +381,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         )
         self.primitive_model_path = primitive_model_path
         self.use_rl_to_train_primitive_model = use_rl_to_train_primitive_model
+        self.train_primitive_model = train_primitive_model
 
     def _train(self):
         print("Initial Primitive Model Sync")
@@ -430,15 +432,18 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 print("Manager Training")
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
-                print("Primitive Model Training")
-                self.training_mode(True)
-                for train_step in range(self.primitive_model_num_trains_per_train_loop):
-                    train_data = self.primitive_model_buffer.random_batch(
-                        self.primitive_model_batch_size
-                    )
-                    self.primitive_model_trainer.train(train_data)
-                self.training_mode(False)
-                gt.stamp("primitive model training", unique=False)
+                if self.train_primitive_model:
+                    print("Primitive Model Training")
+                    self.training_mode(True)
+                    for train_step in range(
+                        self.primitive_model_num_trains_per_train_loop
+                    ):
+                        train_data = self.primitive_model_buffer.random_batch(
+                            self.primitive_model_batch_size
+                        )
+                        self.primitive_model_trainer.train(train_data)
+                    self.training_mode(False)
+                    gt.stamp("primitive model training", unique=False)
                 torch.save(
                     self.primitive_model_trainer.policy.state_dict(),
                     self.primitive_model_path,

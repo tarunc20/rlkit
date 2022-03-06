@@ -156,6 +156,7 @@ if __name__ == "__main__":
             discount=0.99,
         ),
         use_rl_to_train_primitive_model=True,
+        train_primitive_model=False,
     )
 
     setup_sweep_and_launch_exp(

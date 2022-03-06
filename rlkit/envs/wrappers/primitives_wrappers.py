@@ -712,9 +712,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 if (self.primitive_step_counter + 1) % (
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive
                 ) == 0:
-                    low_level_reward = (
-                        self.compute_low_level_reward(action[7:], target),
-                    )
+                    low_level_reward = self.compute_low_level_reward(action[7:], target)
                     self.primitives_info["low_level_reward"].append(low_level_reward)
                 if (self.primitive_step_counter + 1) % (
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive

@@ -281,6 +281,7 @@ def experiment(variant):
         use_rl_to_train_primitive_model=variant.get(
             "use_rl_to_train_primitive_model", False
         ),
+        train_primitive_model=variant.get("train_primitive_model", False),
         **variant["algorithm_kwargs"],
         **variant["primitive_model_algorithm_kwargs"],
     )
