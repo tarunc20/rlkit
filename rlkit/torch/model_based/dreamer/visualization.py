@@ -74,16 +74,16 @@ def visualize_rollout(
             if step == 0:
                 observation = env.reset()
                 new_img = ptu.from_numpy(observation)
-                policy.reset(observation.reshape(1, -1))
+                policy.reset(observation)
                 reward = 0
                 if low_level_primitives:
-                    policy_o = (None, observation.reshape(1, -1))
+                    policy_o = (None, observation)
                 else:
-                    policy_o = observation.reshape(1, -1)
+                    policy_o = observation
                 # hack to pass typing checks
                 vis = convert_img_to_save(
                     world_model.get_image_from_obs(
-                        torch.from_numpy(observation.reshape(1, -1))
+                        torch.from_numpy(observation)
                     ).numpy()
                 )
                 add_text(vis, "Ground Truth", (1, 60), 0.25, (0, 255, 0))
@@ -95,6 +95,7 @@ def visualize_rollout(
                 observation, reward, done, info = env.step(
                     high_level_action[0],
                 )
+                reward = reward[0]
                 if low_level_primitives:
                     low_level_obs = np.expand_dims(np.array(info["low_level_obs"]), 0)
                     low_level_action = np.expand_dims(
@@ -103,11 +104,11 @@ def visualize_rollout(
                     policy_o = (low_level_action, low_level_obs)
                 else:
                     policy_o = observation.reshape(1, -1)
-                (
-                    primitive_name,
-                    _,
-                    _,
-                ) = env.get_primitive_info_from_high_level_action(high_level_action[0])
+                (primitive_name, _, _,) = env.call_env_method(
+                    "get_primitive_info_from_high_level_action",
+                    (high_level_action[0],),
+                    {},
+                )
                 # hack to pass typing checks
                 vis = convert_img_to_save(
                     world_model.get_image_from_obs(
@@ -342,7 +343,7 @@ def visualize_primitive_unsubsampled_rollout(
 def post_epoch_visualize_func(algorithm, epoch):
     if epoch % 10 == 0:
         visualize_rollout(
-            algorithm.eval_env.envs[0],
+            algorithm.eval_env,
             algorithm.trainer.world_model,
             logger.get_snapshot_dir(),
             algorithm.max_path_length,
@@ -354,7 +355,7 @@ def post_epoch_visualize_func(algorithm, epoch):
         )
         if algorithm.low_level_primitives:
             visualize_rollout(
-                algorithm.eval_env.envs[0],
+                algorithm.eval_env,
                 algorithm.trainer.world_model,
                 logger.get_snapshot_dir(),
                 algorithm.max_path_length,
@@ -365,7 +366,7 @@ def post_epoch_visualize_func(algorithm, epoch):
                 num_rollouts=2,
             )
             visualize_rollout(
-                algorithm.eval_env.envs[0],
+                algorithm.eval_env,
                 algorithm.trainer.world_model,
                 logger.get_snapshot_dir(),
                 algorithm.max_path_length,
@@ -376,7 +377,7 @@ def post_epoch_visualize_func(algorithm, epoch):
                 num_rollouts=2,
             )
             visualize_rollout(
-                algorithm.eval_env.envs[0],
+                algorithm.eval_env,
                 algorithm.trainer.world_model,
                 logger.get_snapshot_dir(),
                 algorithm.max_path_length,
@@ -386,6 +387,11 @@ def post_epoch_visualize_func(algorithm, epoch):
                 use_true_actions=False,
                 num_rollouts=2,
             )
+
+
+def post_epoch_visualize_func_vec_manager(algorithm, epoch):
+    if epoch % 50 == 0:
+        algorithm.manager.visualize_rollouts()
 
 
 @torch.no_grad()

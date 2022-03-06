@@ -196,6 +196,10 @@ class StableBaselinesVecEnv(SubprocVecEnv):
         else:
             raise AttributeError("")
 
+    def call_env_method(self, name, args, kwargs):
+        self.remotes[0].send(("env_method", (name, args, kwargs)))
+        return self.remotes[0].recv()
+
     def save(self, path, suffix):
         n_envs, make_env, make_env_args = self.reload_state_args
         reload_state_dict = dict()

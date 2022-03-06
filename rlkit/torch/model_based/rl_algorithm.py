@@ -461,6 +461,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
 
         self.manager._end_epoch(epoch)
 
+        for post_epoch_func in self.post_epoch_funcs:
+            post_epoch_func(self, epoch)
+
         self.primitive_model_buffer.end_epoch(epoch)
         self.primitive_model_trainer.end_epoch(epoch)
 

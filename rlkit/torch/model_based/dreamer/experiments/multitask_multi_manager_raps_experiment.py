@@ -4,6 +4,9 @@ def experiment(variant):
     from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
     from rlkit.torch.model_based.dreamer.td3 import TD3Trainer
+    from rlkit.torch.model_based.dreamer.visualization import (
+        post_epoch_visualize_func_vec_manager,
+    )
     from rlkit.torch.model_based.rl_algorithm import TorchMultiManagerBatchRLAlgorithm
 
     os.environ["D4RL_SUPPRESS_IMPORT_ERROR"] = "1"
@@ -287,11 +290,11 @@ def experiment(variant):
     )
     algorithm.low_level_primitives = False
     if variant.get("generate_video", False):
-        post_epoch_visualize_func(algorithm, 0)
+        post_epoch_visualize_func_vec_manager(algorithm, 0)
     else:
         if variant.get("save_video", False):
-            algorithm.post_epoch_funcs.append(post_epoch_visualize_func)
+            algorithm.post_epoch_funcs.append(post_epoch_visualize_func_vec_manager)
         print("TRAINING")
         algorithm.train()
         if variant.get("save_video", False):
-            post_epoch_visualize_func(algorithm, -1)
+            post_epoch_visualize_func_vec_manager(algorithm, -1)

@@ -6,6 +6,7 @@ from stable_baselines3.common.vec_env import CloudpickleWrapper
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.core import eval_util, logger
+from rlkit.torch.model_based.dreamer.visualization import visualize_rollout
 
 
 class Manager:
@@ -123,6 +124,19 @@ class Manager:
             self.eval_env.action_space,
         )
 
+    def visualize_rollout(self, snapshot_dir):
+        visualize_rollout(
+            self.eval_env,
+            self.trainer.world_model,
+            snapshot_dir,
+            self.max_path_length,
+            low_level_primitives=False,
+            policy=self.eval_env_path_collector._policy,
+            use_raps_obs=False,
+            use_true_actions=True,
+            num_rollouts=4,
+        )
+
 
 def _worker(
     remote,
@@ -160,6 +174,8 @@ def _worker(
                 remote.send(manager.get_obs_and_action_dims())
             elif cmd == "set_use_primitive_model":
                 remote.send(manager.set_use_primitive_model())
+            elif cmd == "visualize_rollout":
+                remote.send(manager.visualize_rollout(str(data)))
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -288,6 +304,14 @@ class VecManager:
     def _end_epoch(self, epoch):
         for remote in self.remotes:
             remote.send(("_end_epoch", epoch))
+            self.waiting = True
+        for remote in self.remotes:
+            remote.recv()
+        self.waiting = False
+
+    def visualize_rollouts(self):
+        for remote in self.remotes:
+            remote.send(("visualize_rollout", logger.get_snapshot_dir()))
             self.waiting = True
         for remote in self.remotes:
             remote.recv()

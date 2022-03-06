@@ -125,7 +125,6 @@ if __name__ == "__main__":
         num_expl_envs=3,
         num_eval_envs=1,
         expl_amount=0.3,
-        save_video=True,
         max_path_length=5,
         num_low_level_actions_per_primitive=5,
         low_level_action_dim=9,
@@ -157,6 +156,7 @@ if __name__ == "__main__":
         ),
         use_rl_to_train_primitive_model=True,
         train_primitive_model=False,
+        save_video=True,
     )
 
     setup_sweep_and_launch_exp(
