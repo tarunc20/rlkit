@@ -70,6 +70,7 @@ def visualize_rollout(
         (num_rollouts, max_path_length + 1, *img_shape),
         dtype=np.uint8,
     )
+    num_primitives = env.num_primitives
     for rollout in range(num_rollouts):
         for step in range(0, max_path_length + 1):
             if step == 0:
@@ -92,9 +93,14 @@ def visualize_rollout(
                 high_level_action, state = policy.get_action(
                     policy_o, use_raps_obs, use_true_actions
                 )
+                argmax = np.argmax(high_level_action[:, :num_primitives], axis=-1)
+                one_hots = np.eye(num_primitives)[argmax]
+                high_level_action = np.concatenate(
+                    (one_hots, high_level_action[:, num_primitives:]), axis=-1
+                )
                 state = state["state"]
                 observation, reward, done, info = env.step(
-                    high_level_action[0],
+                    high_level_action,
                 )
                 reward = reward[0]
                 if low_level_primitives:
@@ -104,7 +110,7 @@ def visualize_rollout(
                     )
                     policy_o = (low_level_action, low_level_obs)
                 else:
-                    policy_o = observation.reshape(1, -1)
+                    policy_o = observation
                 (primitive_name, _, _,) = env.call_env_method(
                     "get_primitive_info_from_high_level_action",
                     (high_level_action[0],),
@@ -113,7 +119,7 @@ def visualize_rollout(
                 # hack to pass typing checks
                 vis = convert_img_to_save(
                     world_model.get_image_from_obs(
-                        torch.from_numpy(observation.reshape(1, -1))
+                        torch.from_numpy(observation)
                     ).numpy()
                 )
                 add_text(vis, primitive_name, (1, 60), 0.25, (0, 255, 0))
