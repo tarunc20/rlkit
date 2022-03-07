@@ -213,7 +213,10 @@ class MetaworldWrapper(gym.Wrapper):
     def reset(self):
         obs = super().reset()
         if self.use_image_obs:
-            return self._get_image()
+            if self.env.set_primitive_goals:
+                return np.concatenate((self._get_image(), self.env.goal))
+            else:
+                return self._get_image()
         else:
             return obs
 
@@ -229,7 +232,10 @@ class MetaworldWrapper(gym.Wrapper):
         )
         self.unset_render_every_step()
         if self.use_image_obs:
-            obs = self._get_image()
+            if self.env.set_primitive_goals:
+                obs = np.concatenate((self._get_image(), self.env.goal))
+            else:
+                obs = self._get_image()
         reward = self.reward_scale * reward
         new_info = {}
         for key, value in info.items():
@@ -261,7 +267,11 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         primitive_model_kwargs=None,
         primitive_model_path=None,
         low_level_reward_type="none",
+        set_primitive_goals=False,
+        primitive_to_model=None,
     ):
+        self.primitive_to_model = primitive_to_model
+        self.set_primitive_goals = set_primitive_goals
         self.goto_pose_iterations = goto_pose_iterations
         self.open_gripper_iterations = open_gripper_iterations
         self.close_gripper_iterations = close_gripper_iterations
@@ -351,6 +361,95 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.use_primitive_model = False
         self.low_level_reward_type = low_level_reward_type
         self.set_render_every_step()
+        if self.set_primitive_goals:
+            self.start_ee_pos = self.get_endeff_pos()
+            if (
+                self.primitive_to_model == "close_gripper"
+                or self.primitive_to_model == "open_gripper"
+            ):
+                self.goal_space = Box(
+                    np.concatenate((self.start_ee_pos, np.array([0]))),
+                    np.concatenate((self.start_ee_pos, np.array([1]))),
+                )
+            elif self.primitive_to_model == "top_x_y_grasp":
+                self.goal_space = Box(
+                    np.concatenate((self.mocap_low, np.array([0]))),
+                    np.concatenate((self.mocap_high, np.array([-1]))),
+                )
+            elif self.primitive_to_model == "move_left":
+                self.goal_space = Box(
+                    np.concatenate(
+                        (
+                            self.mocap_low[0:1],
+                            self.start_ee_pos[1:3],
+                            np.array([1, 0, 1, 0, 0]),
+                        )
+                    ),
+                    np.concatenate((self.start_ee_pos[0:3], np.array([0]))),
+                )
+            elif self.primitive_to_model == "move_right":
+                self.goal_space = Box(
+                    np.concatenate((self.start_ee_pos[0:3], np.array([0]))),
+                    np.concatenate(
+                        (
+                            self.mocap_high[0:1],
+                            self.start_ee_pos[1:3],
+                            np.array([0]),
+                        )
+                    ),
+                )
+            elif self.primitive_to_model == "move_backward":
+                self.goal_space = Box(
+                    np.concatenate(
+                        (
+                            self.start_ee_pos[0:1],
+                            self.mocap_low[1:2],
+                            self.start_ee_pos[2:3],
+                            np.array([0]),
+                        )
+                    ),
+                    np.concatenate((self.start_ee_pos[0:3], np.array([0]))),
+                )
+            elif self.primitive_to_model == "move_backward":
+                self.goal_space = Box(
+                    np.concatenate((self.start_ee_pos[0:3], np.array([0]))),
+                    np.concatenate(
+                        (
+                            self.start_ee_pos[0:1],
+                            self.mocap_high[1:2],
+                            self.start_ee_pos[2:3],
+                            np.array([0]),
+                        )
+                    ),
+                )
+            elif self.primitive_to_model == "drop":
+                self.goal_space = Box(
+                    np.concatenate(
+                        (
+                            self.start_ee_pos[0:2],
+                            self.mocap_low[2:3],
+                            np.array([0]),
+                        )
+                    ),
+                    np.concatenate((self.start_ee_pos[0:3], np.array([0]))),
+                )
+            elif self.primitive_to_model == "lift":
+                self.goal_space = Box(
+                    np.concatenate((self.start_ee_pos[0:3], np.array([0]))),
+                    np.concatenate(
+                        (
+                            self.start_ee_pos[0:2],
+                            self.mocap_high[2:3],
+                            np.array([0]),
+                        )
+                    ),
+                )
+            elif self.primitive_to_model == "move_delta_ee":
+                self.goal_space = Box(
+                    np.concatenate((self.mocap_low, np.array([0]))),
+                    np.concatenate((self.mocap_high, np.array([0]))),
+                )
+            self.goal_dim = self.goal_space.low.size + 1
 
     def sync_primitive_model_from_path(self, path):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
@@ -366,6 +465,22 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
     def _reset_hand(self):
         super()._reset_hand()
         self.prev_grasp = 1  # corresponds to open
+        if hasattr(self, "set_primitive_goals") and self.set_primitive_goals:
+            self.goal = self.goal_space.sample()
+            if self.primitive_to_model == "close_gripper":
+                self.goal = np.concatenate(
+                    (self.goal[:7], [self.goal[-1], -self.goal[-1]])
+                )
+            elif self.primitive_to_model == "open_gripper":
+                self.goal = np.concatenate(
+                    (self.goal[:7], [-self.goal[-1], self.goal[-1]])
+                )
+            elif self.primitive_to_model == "top_x_y_grasp":
+                self.goal = np.concatenate(
+                    (self.goal[:7], [self.goal[-1], -self.goal[-1]])
+                )
+            else:
+                self.goal = np.concatenate((self.goal, [self.goal[-1]]))
 
     def set_render_every_step(
         self,
@@ -434,6 +549,10 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         reward, info = self.evaluate_state(
             self._last_stable_obs, self.prev_low_level_action
         )
+        if self.set_primitive_goals:
+            reward = self.compute_low_level_reward(
+                np.array([action[-1], -action[-1]]), self.goal
+            )
         if self.control_mode == "primitives":
             if self.collect_primitives_info:
                 info.update(self.primitives_info)

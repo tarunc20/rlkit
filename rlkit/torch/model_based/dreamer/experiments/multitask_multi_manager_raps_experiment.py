@@ -247,6 +247,12 @@ def experiment(variant):
         action_dim + 1
     )
     variant["primitive_model_kwargs"]["output_activation"] = nn.Tanh()
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
 
     primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
     target_primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
@@ -258,6 +264,7 @@ def experiment(variant):
     qf_kwargs = variant["primitive_model_kwargs"].copy()
     qf_kwargs["state_encoder_kwargs"]["input_size"] += variant["low_level_action_dim"]
     qf_kwargs["joint_processor_kwargs"]["output_size"] = 1
+    qf_kwargs["output_activation"] = ptu.identity
     qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
     qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
     target_qf1 = CNNMLP(**qf_kwargs).to(ptu.device)

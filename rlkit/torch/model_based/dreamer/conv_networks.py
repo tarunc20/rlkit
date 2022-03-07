@@ -4,6 +4,7 @@ from torch import nn as nn
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.pythonplusplus import identity
+from rlkit.torch.core import eval_np
 from rlkit.torch.model_based.dreamer.mlp import Mlp
 
 
@@ -224,3 +225,12 @@ class CNNMLP(jit.ScriptModule):
         ), f"Invalid observation: max: {obs.max()}, min: {obs.min()}"
         obs = obs / 255.0 - 0.5
         return obs
+
+    def get_action(self, obs_np):
+        if len(obs_np.shape) == 1:
+            obs_np = obs_np.reshape(1, -1)
+        actions = ptu.get_numpy(self.forward(ptu.from_numpy(obs_np)))
+        return actions[0, :], {}
+
+    def reset(self):
+        pass
