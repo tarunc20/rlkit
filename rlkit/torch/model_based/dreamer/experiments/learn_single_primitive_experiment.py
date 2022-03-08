@@ -1,18 +1,16 @@
-import torch.nn as nn
-
-import rlkit.torch.pytorch_util as ptu
-from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
-from rlkit.data_management.simple_replay_buffer import ImageReplayBuffer
-from rlkit.envs.primitives_make_env import make_env
-from rlkit.exploration_strategies.base import PolicyWrappedWithExplorationStrategy
-from rlkit.exploration_strategies.gaussian_strategy import GaussianStrategy
-from rlkit.samplers.data_collector import MdpPathCollector
-from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
-from rlkit.torch.model_based.dreamer.td3 import TD3Trainer
-from rlkit.torch.torch_rl_algorithm import TorchBatchRLAlgorithm
-
-
 def experiment(variant):
+    import torch.nn as nn
+
+    import rlkit.torch.pytorch_util as ptu
+    from rlkit.data_management.simple_replay_buffer import ImageReplayBuffer
+    from rlkit.envs.primitives_make_env import make_env
+    from rlkit.exploration_strategies.base import PolicyWrappedWithExplorationStrategy
+    from rlkit.exploration_strategies.gaussian_strategy import GaussianStrategy
+    from rlkit.samplers.data_collector import MdpPathCollector
+    from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
+    from rlkit.torch.model_based.dreamer.td3 import TD3Trainer
+    from rlkit.torch.torch_rl_algorithm import TorchBatchRLAlgorithm
+
     env_suite = variant.get("env_suite", "kitchen")
     env_kwargs = variant["env_kwargs"]
     env_name = variant["env_name"]
@@ -29,6 +27,8 @@ def experiment(variant):
     )
     policy_kwargs["output_activation"] = nn.Tanh()
     policy_kwargs["state_encoder_kwargs"]["hidden_activation"] = nn.ReLU
+    policy_kwargs["state_encoder_kwargs"]["hidden_activation"] = nn.ReLU
+    policy_kwargs["image_encoder_kwargs"]["output_activation"] = nn.ReLU
     policy_kwargs["joint_processor_kwargs"]["hidden_activation"] = nn.ReLU
     policy = CNNMLP(**policy_kwargs).to(ptu.device)
     target_policy = CNNMLP(**policy_kwargs).to(ptu.device)
@@ -43,8 +43,8 @@ def experiment(variant):
     target_qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
     es = GaussianStrategy(
         action_space=expl_env.action_space,
-        max_sigma=0.1,
-        min_sigma=0.1,  # Constant sigma
+        max_sigma=variant["max_sigma"],
+        min_sigma=variant["max_sigma"],  # Constant sigma
     )
     exploration_policy = PolicyWrappedWithExplorationStrategy(
         exploration_strategy=es,

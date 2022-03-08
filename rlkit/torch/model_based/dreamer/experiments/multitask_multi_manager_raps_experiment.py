@@ -246,9 +246,16 @@ def experiment(variant):
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
         action_dim + 1
     )
+
     variant["primitive_model_kwargs"]["output_activation"] = nn.Tanh()
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
+        "hidden_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
+        "output_activation"
     ] = nn.ReLU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "hidden_activation"
@@ -270,7 +277,7 @@ def experiment(variant):
     target_qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
     target_qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
 
-    if variant.get("use_rl_to_train_primitive_model", False):
+    if variant.get("collect_data_using_primitive_model", False):
         primitive_model_trainer = TD3Trainer(
             policy=primitive_model,
             qf1=qf1,
@@ -289,8 +296,8 @@ def experiment(variant):
         primitive_model_trainer=primitive_model_trainer,
         primitive_model_buffer=primitive_model_buffer,
         primitive_model_path=primitive_model_path,
-        use_rl_to_train_primitive_model=variant.get(
-            "use_rl_to_train_primitive_model", False
+        collect_data_using_primitive_model=variant.get(
+            "collect_data_using_primitive_model", False
         ),
         train_primitive_model=variant.get("train_primitive_model", False),
         **variant["algorithm_kwargs"],

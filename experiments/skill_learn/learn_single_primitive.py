@@ -20,7 +20,7 @@ if __name__ == "__main__":
         )
     else:
         algorithm_kwargs = dict(
-            num_epochs=3000,
+            num_epochs=1000,
             num_eval_steps_per_epoch=500,
             num_trains_per_train_loop=1000,
             num_expl_steps_per_train_loop=1000,
@@ -79,10 +79,11 @@ if __name__ == "__main__":
             image_dim=64 * 64 * 3,
             scale=1,
         ),
-        replay_buffer_size=int(3e6),
+        replay_buffer_size=int(1e6),
         trainer_kwargs=dict(
             discount=0.99,
         ),
+        max_sigma=0.1,
     )
 
     setup_sweep_and_launch_exp(lambda x: x, variant, experiment, args)
