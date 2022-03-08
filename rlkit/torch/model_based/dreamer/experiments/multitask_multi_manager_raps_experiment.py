@@ -304,6 +304,7 @@ def experiment(variant):
         **variant["primitive_model_algorithm_kwargs"],
     )
     if variant.get("load_from_path", None) is not None:
+        print("LOADING FROM PATH")
         algorithm.load(variant["load_from_path"])
     algorithm.low_level_primitives = False
     if variant.get("generate_video", False):
