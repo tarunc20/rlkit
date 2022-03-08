@@ -123,7 +123,6 @@ class ImageReplayBuffer(SimpleReplayBuffer):
         )
         self._state_observations = np.zeros(
             (max_replay_buffer_size, observation_dim - image_flattened_shape),
-            dtype=np.uint8,
         )
         # It's a bit memory inefficient to save the observations twice,
         # but it makes the code *much* easier since you no longer have to
