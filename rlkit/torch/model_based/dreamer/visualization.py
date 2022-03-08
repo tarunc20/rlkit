@@ -92,7 +92,6 @@ def visualize_rollout(
                 else:
                     policy_o = observation.reshape(1, -1)
                 # hack to pass typing checks
-                # TODO why reshape here?
                 vis = convert_img_to_save(
                     world_model.get_image_from_obs(
                         torch.from_numpy(observation.reshape(1, -1))
