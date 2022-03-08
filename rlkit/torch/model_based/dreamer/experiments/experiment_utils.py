@@ -49,7 +49,7 @@ def preprocess_variant_llraps(variant):
     ]
 
     size = 3e6
-    if variant['env_kwargs']['use_wrist_cam']:
+    if variant['env_kwargs']['action_space_kwargs']['use_wrist_cam']:
         size = 3e4
     
 
