@@ -91,9 +91,6 @@ def make_base_metaworld_env(env_name, env_kwargs=None, use_dm_backend=True):
     else:
         env = env_cls(seed=42)
     env.reset_action_space(**action_space_kwargs)
-
-    if isinstance(env, SawyerMocapBaseDMBackendMetaworld):
-        env.use_wrist_cam = env_kwargs['use_wrist_cam']
     
     env.reset()
     env = MetaworldWrapper(env, **env_kwargs_new)
