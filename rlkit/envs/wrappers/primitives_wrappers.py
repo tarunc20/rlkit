@@ -174,7 +174,6 @@ class MetaworldWrapper(gym.Wrapper):
         imheight=84,
         reward_scale=1.0,
         use_image_obs=False,
-        use_wrist_cam = False
     ):
         super().__init__(env)
         self.reward_type = reward_type
@@ -182,9 +181,9 @@ class MetaworldWrapper(gym.Wrapper):
         self.env.imheight = imheight
         self.imwidth = imwidth
         self.imheight = imheight
-
+        self.use_wrist_cam = self.env.use_wrist_cam
         channels = 3
-        if use_wrist_cam:
+        if self.use_wrist_cam:
             channels = 6
 
         self.observation_space = Box(
@@ -194,11 +193,12 @@ class MetaworldWrapper(gym.Wrapper):
 
         self.reward_scale = reward_scale
         self.use_image_obs = use_image_obs
+        
 
     def _get_image(self):
         if hasattr(self.env, "_use_dm_backend"):
             img = self.env.render(
-                mode="rgb_array", imwidth=self.imwidth, imheight=self.imheight
+                mode="rgb_array", imwidth=self.imwidth, imheight=self.imheight, use_wrist_cam=self.use_wrist_cam
             )
         else:
             img = self.env.sim.render(
@@ -264,6 +264,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         open_gripper_iterations=200,
         close_gripper_iterations=300,
         pos_ctrl_action_scale=0.05,
+        use_wrist_cam=False
     ):
         self.goto_pose_iterations = goto_pose_iterations
         self.open_gripper_iterations = open_gripper_iterations
@@ -273,6 +274,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.action_scale = action_scale
         self.render_intermediate_obs_to_info = render_intermediate_obs_to_info
         self.num_low_level_actions_per_primitive = num_low_level_actions_per_primitive
+        self.use_wrist_cam = use_wrist_cam
 
         # primitives
         self.primitive_idx_to_name = {
@@ -552,6 +554,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                         "rgb_array",
                         self.render_im_shape[0],
                         self.render_im_shape[1],
+                        use_wrist_cam=self.use_wrist_cam
                     )
                     .transpose(2, 0, 1)
                     .flatten()
@@ -564,6 +567,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                         self.render_mode,
                         self.render_im_shape[0],
                         self.render_im_shape[1],
+                        use_wrist_cam=self.use_wrist_cam
                     )
                 )
             else:
