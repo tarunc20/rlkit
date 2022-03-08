@@ -15,13 +15,21 @@ def reconstruct_from_state(state, world_model):
     new_img = (torch.clamp(world_model.decode(feat) + 0.5, 0, 1) * 255.0).type(
         torch.ByteTensor
     )
+    
     new_img = ptu.get_numpy(new_img.permute(0, 2, 3, 1)[0]).astype(np.uint8)
     new_img = np.ascontiguousarray(np.copy(new_img), dtype=np.uint8)
     return new_img
 
 
-def convert_img_to_save(img):
-    img = np.copy(img.reshape(3, 64, 64).transpose(1, 2, 0))
+def convert_img_to_save(img, img_size):
+    
+    channels = img.shape[1] // (img_size * img_size)
+    
+    img = np.copy(img.reshape(channels, img_size, img_size).transpose(1, 2, 0))
+    if channels == 6:
+        img1 = img[:, :, :3]
+        img2 = img[:, :, 3:]
+        img = np.hstack((img1, img2))
     img = np.ascontiguousarray(img, dtype=np.uint8)
     return img
 
@@ -59,8 +67,11 @@ def visualize_rollout(
         f"Generating Imagination Reconstructions No Intermediate Obs: {use_raps_obs} Actual Actions: {use_true_actions}"
     )
     file_suffix = f"imagination_reconstructions_raps_obs_{use_raps_obs}_actual_actions_{use_true_actions}.png"
+    observation = env.reset()
+    channels = observation.shape[0] // (img_size * img_size)
     file_path += file_suffix
-    img_shape = (img_size, img_size, 3)
+    img_shape = (img_size, img_size, channels)
+    
     reconstructions = np.zeros(
         (num_rollouts, max_path_length + 1, *img_shape),
         dtype=np.uint8,
@@ -81,10 +92,12 @@ def visualize_rollout(
                 else:
                     policy_o = observation.reshape(1, -1)
                 # hack to pass typing checks
+                # TODO why reshape here?
                 vis = convert_img_to_save(
                     world_model.get_image_from_obs(
                         torch.from_numpy(observation.reshape(1, -1))
-                    ).numpy()
+                    ).numpy(),
+                    img_size
                 )
                 add_text(vis, "Ground Truth", (1, 60), 0.25, (0, 255, 0))
             else:
@@ -112,16 +125,25 @@ def visualize_rollout(
                 vis = convert_img_to_save(
                     world_model.get_image_from_obs(
                         torch.from_numpy(observation.reshape(1, -1))
-                    ).numpy()
+                    ).numpy(),
+                    img_size
                 )
                 add_text(vis, primitive_name, (1, 60), 0.25, (0, 255, 0))
                 add_text(vis, f"r: {reward}", (35, 7), 0.3, (0, 0, 0))
 
-            obs[rollout, step] = vis
+            
+            obs[rollout, step] = observation.reshape(img_size, img_size, -1)
             if step != 0:
                 new_img = reconstruct_from_state(state, world_model)
                 if step == 1:
-                    add_text(new_img, "Reconstruction", (1, 60), 0.25, (0, 255, 0))
+                    channels = new_img.shape[-1]
+                    if channels == 6:
+                        img1 = new_img[:, :, :3]
+                        img2 = new_img[:, :, 3:]
+                        temp_img = np.hstack((img1, img2))
+                        add_text(temp_img, "Reconstruction", (1, 60), 0.25, (0, 255, 0))
+                    else:
+                        add_text(new_img, "Reconstruction", (1, 60), 0.25, (0, 255, 0))
                 reconstructions[rollout, step - 1] = new_img
                 reward_pred = (
                     world_model.reward(world_model.get_features(state))
@@ -178,21 +200,47 @@ def visualize_rollout(
         print(f"Rollout {rollout} Final Predicted Discount {discount_pred}")
         print()
 
-    im = np.zeros(
-        (img_size * 2 * num_rollouts, (max_path_length + 1) * img_size, 3),
-        dtype=np.uint8,
-    )
+    im = None
+    height = None
+    width = None
+    if channels == 6:
+        im = np.zeros(
+            (img_size * 2 * num_rollouts, (max_path_length + 1) * 2 * img_size, 3),
+            dtype=np.uint8,
+        )
+        width = 2 * img_size
+        height = img_size
+    else:
+        im = np.zeros(
+            (img_size * 2 * num_rollouts, (max_path_length + 1) * img_size, 3),
+            dtype=np.uint8,
+        )
+        width = img_size
+        height = img_size
 
+    
     for rollout in range(num_rollouts):
         for step in range(max_path_length + 1):
+            temp_img = obs[rollout, step]
+            if temp_img.shape[-1] == 6:
+                img1 = temp_img[:, :, :3]
+                img2 = temp_img[:, :, 3:]
+                temp_img = np.hstack((img1, img2))
             im[
-                img_size * 2 * rollout : img_size * 2 * rollout + img_size,
-                img_size * step : img_size * (step + 1),
-            ] = obs[rollout, step]
+                height * 2 * rollout : height * 2 * rollout + height,
+                width * step : width * (step + 1),
+            ] = temp_img
+
+            temp_img = reconstructions[rollout, step]
+            if temp_img.shape[-1] == 6:
+                img1 = temp_img[:, :, :3]
+                img2 = temp_img[:, :, 3:]
+                temp_img = np.hstack((img1, img2))
+
             im[
-                img_size * 2 * rollout + img_size : img_size * 2 * (rollout + 1),
-                img_size * step : img_size * (step + 1),
-            ] = reconstructions[rollout, step]
+                height * 2 * rollout + height : height * 2 * (rollout + 1),
+                width * step : width * (step + 1),
+            ] = temp_img
     cv2.imwrite(file_path, im)
     print(f"Saved Rollout Visualization to {file_path}")
     print()
@@ -453,7 +501,7 @@ def post_epoch_video_func(
         policy.reset(observation)
         while path_length < algorithm.max_path_length:
             action, agent_info = policy.get_action(
-                observationo,
+                observation,
             )
             observation, r, d, i = env.step(
                 action,
