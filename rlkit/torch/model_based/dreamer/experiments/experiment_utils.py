@@ -84,7 +84,7 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
     ] = variant["num_low_level_actions_per_primitive"]
 
     variant["primitive_model_replay_buffer_kwargs"]["max_replay_buffer_size"] = int(
-        1.5e7
+        2.1e5
         / (
             variant["num_low_level_actions_per_primitive"] * variant["max_path_length"]
             + 1
@@ -100,14 +100,17 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
         "low_level_action_dim"
     ]
 
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
-        "output_size"
-    ] = variant["low_level_action_dim"]
     variant["primitive_model_kwargs"]["joint_processor_kwargs"]["input_size"] = (
         variant["primitive_model_kwargs"]["image_encoder_kwargs"]["n_channels"][-1] * 4
         + variant["primitive_model_kwargs"]["state_encoder_kwargs"]["output_size"]
     )
-
+    variant["num_processes"] = (
+        variant["algorithm_kwargs"]["num_expl_steps_per_train_loop"]
+        // (variant["max_path_length"] + 1)
+        * variant["num_low_level_actions_per_primitive"]
+        * len(variant["env_names"])
+    )
+    variant["num_steps"] = variant["max_path_length"]
     return variant
 
 

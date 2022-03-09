@@ -5,8 +5,10 @@ import time
 from collections import OrderedDict
 
 import gtimer as gt
+import numpy as np
 import torch
 
+import rlkit.torch.pytorch_util as ptu
 from rlkit.core import eval_util, logger
 from rlkit.data_management.replay_buffer import ReplayBuffer
 from rlkit.samplers.data_collector import DataCollector, PathCollector
@@ -345,7 +347,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         num_pretrain_steps=0,
         use_pretrain_policy_for_initial_data=True,
         primitive_model_pretrain_trainer=None,
-        primitive_model_trainer=None,
+        agent=None,
+        rollouts=None,
         primitive_model_buffer=None,
         primitive_model_batch_size=0,
         primitive_model_num_pretrain_steps=0,
@@ -372,7 +375,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.num_pretrain_steps = num_pretrain_steps
         self.total_train_expl_time = 0
         self.primitive_model_pretrain_trainer = primitive_model_pretrain_trainer
-        self.primitive_model_trainer = primitive_model_trainer
+        self.agent = agent
+        self.rollouts = rollouts
         self.primitive_model_buffer = primitive_model_buffer
         self.primitive_model_batch_size = primitive_model_batch_size
         self.primitive_model_num_pretrain_steps = primitive_model_num_pretrain_steps
@@ -386,7 +390,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
     def _train(self):
         print("Initial Primitive Model Sync")
         torch.save(
-            self.primitive_model_trainer.policy.state_dict(),
+            self.primitive_model_pretrain_trainer.policy.state_dict(),
             self.primitive_model_path,
         )
         self.manager.sync_primitive_model()
@@ -409,7 +413,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.total_train_expl_time += time.time() - st
         print("Primitive Model Sync")
         torch.save(
-            self.primitive_model_trainer.policy.state_dict(), self.primitive_model_path
+            self.primitive_model_pretrain_trainer.policy.state_dict(),
+            self.primitive_model_path,
         )
         self.manager.sync_primitive_model()
         if self.collect_data_using_primitive_model:
@@ -426,26 +431,205 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 print("Expl Data Collection")
                 expl_paths = self.manager.collect_expl_paths()
                 gt.stamp("exploration sampling", unique=False)
+                obs = []
+                actions = []
+                actor_log_probs = []
+                values = []
+                rewards = []
+                masks = []
                 for paths in expl_paths:
-                    self.primitive_model_buffer.add_paths(paths)
+                    for path in paths:
+                        for i in range(0, path["low_level_observations"].shape[1]):
+                            if i > 0:
+                                inputs = ptu.from_numpy(
+                                    np.concatenate(
+                                        (
+                                            path["low_level_observations"][:, i - 1],
+                                            path["high_level_actions"][:, i - 1],
+                                        ),
+                                        axis=-1,
+                                    )
+                                )
+                                (
+                                    value,
+                                    action_log_probs,
+                                    _,
+                                    _,
+                                ) = self.primitive_model_pretrain_trainer.policy.evaluate_actions(
+                                    inputs,
+                                    ptu.zeros_like(inputs),
+                                    ptu.zeros_like(inputs),
+                                    ptu.from_numpy(path["low_level_actions"][:, i - 1]),
+                                )
+                                value = value.cpu().detach()
+                                action_log_probs = action_log_probs.cpu().detach()
+                            if len(obs) <= i:
+                                if i > 0:
+                                    obs.append(
+                                        torch.from_numpy(
+                                            np.concatenate(
+                                                (
+                                                    path["low_level_observations"][
+                                                        :, i
+                                                    ],
+                                                    path["high_level_actions"][
+                                                        :, i - 1
+                                                    ],
+                                                ),
+                                                axis=-1,
+                                            )
+                                        )
+                                    )
+                                else:
+                                    obs.append(
+                                        torch.from_numpy(
+                                            np.concatenate(
+                                                (
+                                                    path["low_level_observations"][
+                                                        :, i
+                                                    ],
+                                                    path["high_level_actions"][:, i],
+                                                ),
+                                                axis=-1,
+                                            )
+                                        )
+                                    )
+                                if i > 0:
+                                    actions.append(
+                                        torch.from_numpy(
+                                            path["low_level_actions"][:, i - 1]
+                                        )
+                                    )
+                                    rewards.append(
+                                        torch.from_numpy(
+                                            path["low_level_rewards"][:, i - 1]
+                                        )
+                                    )
+                                    masks.append(
+                                        torch.from_numpy(
+                                            path["low_level_terminals"][:, i - 1]
+                                        )
+                                    )
+                                    values.append(value)
+                                    actor_log_probs.append(action_log_probs)
+                            else:
+                                if i > 0:
+                                    obs[i] = torch.cat(
+                                        (
+                                            obs[i],
+                                            torch.from_numpy(
+                                                np.concatenate(
+                                                    (
+                                                        path["low_level_observations"][
+                                                            :, i
+                                                        ],
+                                                        path["high_level_actions"][
+                                                            :, i - 1
+                                                        ],
+                                                    ),
+                                                    axis=-1,
+                                                ),
+                                            ),
+                                        ),
+                                        dim=0,
+                                    )
+                                else:
+                                    obs[i] = torch.cat(
+                                        (
+                                            obs[i],
+                                            torch.from_numpy(
+                                                np.concatenate(
+                                                    (
+                                                        path["low_level_observations"][
+                                                            :, i
+                                                        ],
+                                                        path["high_level_actions"][
+                                                            :, i
+                                                        ],
+                                                    ),
+                                                    axis=-1,
+                                                ),
+                                            ),
+                                        ),
+                                        dim=0,
+                                    )
+                                if i > 0:
+                                    actions[i - 1] = torch.cat(
+                                        (
+                                            actions[i - 1],
+                                            torch.from_numpy(
+                                                path["low_level_actions"][:, i - 1]
+                                            ),
+                                        ),
+                                        axis=0,
+                                    )
+                                    rewards[i - 1] = torch.cat(
+                                        (
+                                            rewards[i - 1],
+                                            torch.from_numpy(
+                                                path["low_level_rewards"][:, i - 1]
+                                            ),
+                                        ),
+                                        dim=0,
+                                    )
+                                    masks[i - 1] = torch.cat(
+                                        (
+                                            masks[i - 1],
+                                            torch.from_numpy(
+                                                path["low_level_terminals"][:, i - 1]
+                                            ),
+                                        ),
+                                        dim=0,
+                                    )
+                                    values[i - 1] = torch.cat(
+                                        (values[i - 1], value), dim=0
+                                    )
+                                    actor_log_probs[i - 1] = torch.cat(
+                                        (
+                                            actor_log_probs[i - 1],
+                                            action_log_probs,
+                                        ),
+                                        dim=0,
+                                    )
+                self.rollouts.obs[0] = obs[0]
+                for step, (o, a, al, r, v, m) in enumerate(
+                    zip(obs[1:], actions, actor_log_probs, values, rewards, masks)
+                ):
+                    self.rollouts.insert(
+                        o,
+                        torch.zeros_like(o),
+                        a,
+                        al,
+                        v,
+                        r,
+                        m,
+                        m,
+                        torch.ones_like(r[:, 0]) * step,
+                    )
                 gt.stamp("storing", unique=False)
                 print("Manager Training")
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
                 if self.train_primitive_model:
+                    self.rollouts.to(ptu.device)
                     print("Primitive Model Training")
-                    self.training_mode(True)
-                    for train_step in range(
-                        self.primitive_model_num_trains_per_train_loop
-                    ):
-                        train_data = self.primitive_model_buffer.random_batch(
-                            self.primitive_model_batch_size
+                    with torch.no_grad():
+                        next_value = (
+                            self.primitive_model_pretrain_trainer.policy.get_value(
+                                self.rollouts.obs[-1],
+                                self.rollouts.recurrent_hidden_states[-1],
+                                self.rollouts.masks[-1],
+                            ).detach()
                         )
-                        self.primitive_model_trainer.train(train_data)
-                    self.training_mode(False)
+                    self.rollouts.compute_returns(
+                        next_value, **self.rollouts.rollout_kwargs
+                    )
+                    self.agent.update(self.rollouts)
+                    self.rollouts.after_update()
+                    self.rollouts.to(torch.device("cpu"))
                     gt.stamp("primitive model training", unique=False)
                 torch.save(
-                    self.primitive_model_trainer.policy.state_dict(),
+                    self.primitive_model_pretrain_trainer.policy.state_dict(),
                     self.primitive_model_path,
                 )
                 self.manager.sync_primitive_model()
@@ -466,7 +650,6 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             post_epoch_func(self, epoch)
 
         self.primitive_model_buffer.end_epoch(epoch)
-        self.primitive_model_trainer.end_epoch(epoch)
 
     def load(self, path):
         self.manager.load(path)
@@ -489,7 +672,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         )
 
         logger.record_dict(
-            self.primitive_model_trainer.get_diagnostics(),
+            self.agent.get_diagnostics(),
             prefix=f"primitive_model_trainer/trainer/",
         )
 
@@ -511,11 +694,8 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
 
 class TorchMultiManagerBatchRLAlgorithm(MultiManagerBatchRLAlgorithm):
     def to(self, device):
-        self.primitive_model_trainer.to(device)
         self.primitive_model_pretrain_trainer.to(device)
 
     def training_mode(self, mode):
         for net in self.primitive_model_pretrain_trainer.networks:
-            net.train(mode)
-        for net in self.primitive_model_trainer.networks:
             net.train(mode)

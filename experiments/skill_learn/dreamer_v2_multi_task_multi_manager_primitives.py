@@ -13,7 +13,7 @@ if __name__ == "__main__":
         algorithm_kwargs = dict(
             num_epochs=5,
             num_eval_steps_per_epoch=5,
-            num_expl_steps_per_train_loop=5,
+            num_expl_steps_per_train_loop=126,
             min_num_steps_before_training=5,
             num_pretrain_steps=1,
             num_train_loops_per_epoch=1,
@@ -32,8 +32,8 @@ if __name__ == "__main__":
             min_num_steps_before_training=10000,
             num_pretrain_steps=100,
             batch_size=417,
-            num_expl_steps_per_train_loop=60,
-            num_train_loops_per_epoch=20,
+            num_expl_steps_per_train_loop=126,
+            num_train_loops_per_epoch=10,
             num_trains_per_train_loop=20,
         )
         primitive_model_algorithm_kwargs = dict(
@@ -49,9 +49,9 @@ if __name__ == "__main__":
         env_suite="metaworld",
         pass_render_kwargs=True,
         env_names=(
-            "assembly-v2",
-            "disassemble-v2",
-            "soccer-v2",
+            # "assembly-v2",
+            # "disassemble-v2",
+            # "soccer-v2",
             "sweep-into-v2",
         ),
         env_kwargs=dict(
@@ -75,7 +75,7 @@ if __name__ == "__main__":
                 },
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
-                low_level_reward_type="argument_achievement",
+                low_level_reward_type="none",
             ),
         ),
         actor_kwargs=dict(
@@ -142,7 +142,7 @@ if __name__ == "__main__":
             state_encoder_args=(),
             state_encoder_kwargs=dict(hidden_sizes=[64, 64], output_size=64),
             joint_processor_args=(),
-            joint_processor_kwargs=dict(hidden_sizes=[512, 256]),
+            joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=64),
             image_dim=64 * 64 * 3,
             scale=15,
         ),
@@ -152,10 +152,24 @@ if __name__ == "__main__":
         ),
         primitive_model_algorithm_kwargs=primitive_model_algorithm_kwargs,
         primitive_model_trainer_kwargs=dict(
-            discount=0.99,
+            entropy_coef=0.01,
+            value_loss_coef=0.5,
+            lr=3e-4,
+            num_mini_batch=64,
+            ppo_epoch=10,
+            clip_param=0.2,
+            eps=1e-5,
+            max_grad_norm=0.5,
         ),
-        collect_data_using_primitive_model=False,
-        train_primitive_model=False,
+        rollout_kwargs=dict(
+            use_gae=True,
+            gamma=0.99,
+            gae_lambda=0.95,
+            use_proper_time_limits=True,
+        ),
+        num_steps=5,
+        collect_data_using_primitive_model=True,
+        train_primitive_model=True,
         save_video=True,
     )
 

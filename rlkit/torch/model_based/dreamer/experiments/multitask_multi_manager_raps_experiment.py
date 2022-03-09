@@ -1,6 +1,12 @@
 def experiment(variant):
     import os
 
+    import numpy as np
+    from a2c_ppo_acktr import algo
+    from a2c_ppo_acktr.model import PrimitivePolicy
+    from a2c_ppo_acktr.storage import RolloutStorage
+    from gym.spaces import Box
+
     from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
     from rlkit.torch.model_based.dreamer.td3 import TD3Trainer
@@ -261,39 +267,32 @@ def experiment(variant):
         "hidden_activation"
     ] = nn.ReLU
 
-    primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
-    target_primitive_model = CNNMLP(**variant["primitive_model_kwargs"]).to(ptu.device)
+    actor_critic = PrimitivePolicy(
+        (obs_dim,),
+        (low_level_action_dim,),
+        base_kwargs=variant["primitive_model_kwargs"],
+    )
+    actor_critic.to(ptu.device)
 
     primitive_model_pretrain_trainer = BCTrainer(
-        primitive_model, **variant["primitive_model_pretrain_trainer_kwargs"]
+        actor_critic, **variant["primitive_model_pretrain_trainer_kwargs"]
     )
 
-    qf_kwargs = variant["primitive_model_kwargs"].copy()
-    qf_kwargs["state_encoder_kwargs"]["input_size"] += variant["low_level_action_dim"]
-    qf_kwargs["joint_processor_kwargs"]["output_size"] = 1
-    qf_kwargs["output_activation"] = ptu.identity
-    qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
-    qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
-    target_qf1 = CNNMLP(**qf_kwargs).to(ptu.device)
-    target_qf2 = CNNMLP(**qf_kwargs).to(ptu.device)
-
-    if variant.get("collect_data_using_primitive_model", False):
-        primitive_model_trainer = TD3Trainer(
-            policy=primitive_model,
-            qf1=qf1,
-            qf2=qf2,
-            target_qf1=target_qf1,
-            target_qf2=target_qf2,
-            target_policy=target_primitive_model,
-            **variant["primitive_model_trainer_kwargs"],
-        )
-    else:
-        primitive_model_trainer = primitive_model_pretrain_trainer
+    agent = algo.PPO(actor_critic, **variant["primitive_model_trainer_kwargs"])
+    rollouts = RolloutStorage(
+        variant["num_steps"],
+        variant["num_processes"],
+        (obs_dim + action_dim + 1,),
+        Box(np.zeros(low_level_action_dim), np.ones(low_level_action_dim)),
+        obs_dim + action_dim + 1,
+    )
+    rollouts.rollout_kwargs = variant["rollout_kwargs"]
 
     algorithm = TorchMultiManagerBatchRLAlgorithm(
         vec_manager,
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
-        primitive_model_trainer=primitive_model_trainer,
+        agent=agent,
+        rollouts=rollouts,
         primitive_model_buffer=primitive_model_buffer,
         primitive_model_path=primitive_model_path,
         collect_data_using_primitive_model=variant.get(

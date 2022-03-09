@@ -2,6 +2,7 @@ import gym
 import mujoco_py
 import numpy as np
 import torch
+from a2c_ppo_acktr.model import PrimitivePolicy
 from d4rl.kitchen.adept_envs.simulation.renderer import DMRenderer
 from gym import spaces
 from gym.spaces.box import Box
@@ -12,7 +13,6 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers.dm_backend_wrappers import DMControlBackendRobosuiteEnv
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
 
 
 class TimeLimit(gym.Wrapper):
@@ -356,7 +356,11 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
             )
-            self.primitive_model = CNNMLP(**primitive_model_kwargs).to(ptu.device)
+            self.primitive_model = PrimitivePolicy(
+                (self.observation_space.low.size + self.action_space.low.size,),
+                (9,),
+                base_kwargs=primitive_model_kwargs,
+            )
             self.primitive_model_path = primitive_model_path
         self.use_primitive_model = False
         self.low_level_reward_type = low_level_reward_type
@@ -672,6 +676,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         ) == 0:
             self.primitives_info["low_level_action"].append(
                 np.concatenate([self.combined_prev_action, rot_ctrl, gripper_ctrl])
+                / self.primitive_model.scale  # TODO: add a flag here
             )
             self.combined_prev_action = np.zeros(3, dtype=np.float32)
 
@@ -802,8 +807,14 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             action_torch = ptu.from_numpy(
                 np.concatenate((self.high_level_action, [1 / (sample_step + 1)]))
             ).unsqueeze(0)
+            inputs = torch.cat((obs_torch, action_torch), dim=1)
             low_level_action = (
-                self.primitive_model(torch.cat((obs_torch, action_torch), dim=1))
+                self.primitive_model.get_action(
+                    inputs,
+                    ptu.ones_like(inputs),
+                    ptu.ones_like(inputs),
+                    deterministic=True,
+                )
                 .cpu()
                 .numpy()[0]
             ) * self.primitive_model.scale
@@ -825,7 +836,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 self.call_render_every_step()
                 self.primitive_step_counter += 1
                 self._num_low_level_steps_total += 1
-            self.primitives_info["low_level_action"].append(low_level_action)
+            self.primitives_info["low_level_action"].append(
+                low_level_action / self.primitive_model.scale
+            )
             reward = self.compute_low_level_reward(a[7:], target)
             self.primitives_info["low_level_reward"].append(reward)
             self.primitives_info["low_level_terminal"].append(0)
