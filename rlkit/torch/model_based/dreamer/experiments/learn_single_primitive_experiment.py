@@ -19,7 +19,7 @@ def experiment(variant):
     action_dim = expl_env.action_space.low.size
 
     policy_kwargs = variant["policy_kwargs"]
-    policy_kwargs["state_encoder_kwargs"]["input_size"] = expl_env.goal_dim
+    policy_kwargs["state_encoder_kwargs"]["input_size"] = expl_env.primitive_goal_dim
     policy_kwargs["joint_processor_kwargs"]["output_size"] = action_dim
     policy_kwargs["joint_processor_kwargs"]["input_size"] = (
         policy_kwargs["image_encoder_kwargs"]["n_channels"][-1] * 4
@@ -60,7 +60,7 @@ def experiment(variant):
     )
     replay_buffer = ImageReplayBuffer(
         variant["replay_buffer_size"],
-        expl_env.observation_space.low.size + expl_env.goal_dim,
+        expl_env.observation_space.low.size + expl_env.primitive_goal_dim,
         action_dim,
         64 * 64 * 3,
         dict(),
