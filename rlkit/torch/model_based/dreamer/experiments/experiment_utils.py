@@ -49,9 +49,6 @@ def preprocess_variant_llraps(variant):
     ]
 
     size = 3e6
-    if variant['env_kwargs']['action_space_kwargs']['use_wrist_cam']:
-        size = 3e4
-    
 
     variant["replay_buffer_kwargs"]["max_replay_buffer_size"] = int(
         size
@@ -60,6 +57,16 @@ def preprocess_variant_llraps(variant):
             + 1
         )
     )
+
+    # Ensure that the buffer size is a multiple of the number of environments
+    max_replay_buffer_size = variant["replay_buffer_kwargs"]["max_replay_buffer_size"]
+    num_expl_envs = variant['num_expl_envs']
+
+    rem = max_replay_buffer_size % num_expl_envs
+    max_replay_buffer_size -= rem
+
+    variant["replay_buffer_kwargs"]["max_replay_buffer_size"]  = max_replay_buffer_size
+
     variant["replay_buffer_kwargs"]["num_low_level_actions_per_primitive"] = variant[
         "num_low_level_actions_per_primitive"
     ]
