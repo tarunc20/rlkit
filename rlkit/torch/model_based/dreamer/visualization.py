@@ -130,8 +130,9 @@ def visualize_rollout(
                 add_text(vis, primitive_name, (1, 60), 0.25, (0, 255, 0))
                 add_text(vis, f"r: {reward}", (35, 7), 0.3, (0, 0, 0))
 
-            
-            obs[rollout, step] = observation.reshape(img_size, img_size, -1)
+            img = np.copy(observation.reshape(channels, img_size, img_size).transpose(1, 2, 0))
+            img = np.ascontiguousarray(img, dtype=np.uint8)
+            obs[rollout, step] = img
             if step != 0:
                 new_img = reconstruct_from_state(state, world_model)
                 if step == 1:
