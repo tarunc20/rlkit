@@ -133,7 +133,7 @@ class Manager:
             self.eval_env.action_space,
         )
 
-    def visualize_rollout(self, snapshot_dir):
+    def visualize_rollout(self, epoch, snapshot_dir):
         visualize_rollout(
             self.eval_env,
             self.trainer.world_model,
@@ -145,11 +145,16 @@ class Manager:
             use_true_actions=True,
             num_rollouts=4,
             suffix=self.env_name,
+            epoch=epoch,
         )
 
-    def visualize_primitive_rollout(self, snapshot_dir):
+    def visualize_primitive_rollout(self, epoch, snapshot_dir):
         visualize_primitive_rollout(
-            self.eval_env, snapshot_dir, num_rollouts=5, suffix=self.env_name
+            self.eval_env,
+            snapshot_dir,
+            num_rollouts=5,
+            suffix=self.env_name,
+            epoch=epoch,
         )
 
     def save(self, path):
@@ -200,15 +205,17 @@ def _worker(
             elif cmd == "set_use_primitive_model":
                 remote.send(manager.set_use_primitive_model())
             elif cmd == "visualize_rollout":
-                remote.send(manager.visualize_rollout(str(data)))
+                remote.send(manager.visualize_rollout(int(data[0]), str(data[1])))
             elif cmd == "visualize_primitive_rollout":
-                remote.send(manager.visualize_primitive_rollout(str(data)))
+                remote.send(
+                    manager.visualize_primitive_rollout(int(data[0]), str(data[1]))
+                )
             elif cmd == "save":
                 remote.send(manager.save(str(data)))
             elif cmd == "load":
                 remote.send(manager.load(str(data)))
             elif cmd == "sync_primitive_model_from_path":
-                remote.send(manager.sync_primitive_model_from_path(data))
+                remote.send(manager.sync_primitive_model_from_path(str(data)))
             else:
                 raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
         except EOFError:
@@ -350,17 +357,19 @@ class VecManager:
             remote.recv()
         self.waiting = False
 
-    def visualize_rollouts(self):
+    def visualize_rollouts(self, epoch):
         for remote in self.remotes:
-            remote.send(("visualize_rollout", logger.get_snapshot_dir()))
+            remote.send(("visualize_rollout", (epoch, logger.get_snapshot_dir())))
             self.waiting = True
         for remote in self.remotes:
             remote.recv()
         self.waiting = False
 
-    def visualize_primitive_rollouts(self):
+    def visualize_primitive_rollouts(self, epoch):
         for remote in self.remotes:
-            remote.send(("visualize_primitive_rollout", logger.get_snapshot_dir()))
+            remote.send(
+                ("visualize_primitive_rollout", (epoch, logger.get_snapshot_dir()))
+            )
             self.waiting = True
         for remote in self.remotes:
             remote.recv()

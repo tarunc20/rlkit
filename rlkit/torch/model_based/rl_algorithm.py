@@ -12,6 +12,7 @@ import rlkit.torch.pytorch_util as ptu
 from rlkit.core import eval_util, logger
 from rlkit.data_management.replay_buffer import ReplayBuffer
 from rlkit.samplers.data_collector import DataCollector, PathCollector
+from rlkit.torch.model_based.dreamer.utils import lambda_return_np
 
 
 def _get_epoch_timings():
@@ -356,6 +357,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         primitive_model_path=None,
         collect_data_using_primitive_model=False,
         train_primitive_model=False,
+        discount=1,
     ):
         self._start_epoch = 0
         self.manager = manager
@@ -386,6 +388,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.primitive_model_path = primitive_model_path
         self.collect_data_using_primitive_model = collect_data_using_primitive_model
         self.train_primitive_model = train_primitive_model
+        self.discount = discount
 
     def _train(self):
         print("Initial Primitive Model Sync")
@@ -419,6 +422,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.manager.sync_primitive_model()
         if self.collect_data_using_primitive_model:
             self.manager.set_use_primitive_model()
+        self._end_epoch(-1)
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,
@@ -439,6 +443,21 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 masks = []
                 for paths in expl_paths:
                     for path in paths:
+                        high_level_reward = np.expand_dims(path["rewards"], -1)
+                        low_level_reward = path["low_level_rewards"]
+                        reward_input = high_level_reward[1:-1, :, :]
+                        value = np.zeros_like(reward_input)
+                        discount = np.ones_like(reward_input) * self.discount
+                        bootstrap = reward_input[-1, :, :]
+                        lambda_ = 1
+                        returns = lambda_return_np(
+                            reward_input, value, discount, bootstrap, lambda_
+                        )
+                        returns = np.concatenate(
+                            (returns, np.expand_dims(bootstrap, 0)), axis=0
+                        )
+                        returns = returns.reshape(-1, 1, 1)[:, 0]
+                        low_level_reward[:, -1] += returns
                         for i in range(0, path["low_level_observations"].shape[1]):
                             if i > 0:
                                 inputs = ptu.from_numpy(
@@ -501,9 +520,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                                         )
                                     )
                                     rewards.append(
-                                        torch.from_numpy(
-                                            path["low_level_rewards"][:, i - 1]
-                                        )
+                                        torch.from_numpy(low_level_reward[:, i - 1])
                                     )
                                     masks.append(
                                         torch.from_numpy(
@@ -567,7 +584,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                                         (
                                             rewards[i - 1],
                                             torch.from_numpy(
-                                                path["low_level_rewards"][:, i - 1]
+                                                low_level_reward[:, i - 1]
                                             ),
                                         ),
                                         dim=0,
@@ -592,7 +609,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                                         dim=0,
                                     )
                 self.rollouts.obs[0] = obs[0]
-                for step, (o, a, al, r, v, m) in enumerate(
+                for step, (o, a, al, v, r, m) in enumerate(
                     zip(obs[1:], actions, actor_log_probs, values, rewards, masks)
                 ):
                     self.rollouts.insert(
@@ -624,7 +641,15 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     self.rollouts.compute_returns(
                         next_value, **self.rollouts.rollout_kwargs
                     )
-                    self.agent.update(self.rollouts)
+                    (
+                        value_loss_epoch,
+                        action_loss_epoch,
+                        dist_entropy_epoch,
+                        num_updates,
+                    ) = self.agent.update(self.rollouts)
+                    print(
+                        f"value_loss_epoch {value_loss_epoch} action_loss_epoch {action_loss_epoch} dist_entropy_epoch {dist_entropy_epoch}"
+                    )
                     self.rollouts.after_update()
                     self.rollouts.to(torch.device("cpu"))
                     gt.stamp("primitive model training", unique=False)
@@ -638,18 +663,22 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self._end_epoch(epoch)
 
     def _end_epoch(self, epoch):
-        snapshot = self._get_snapshot()
-        logger.save_itr_params(epoch, snapshot)
-        gt.stamp("saving")
-        self._log_stats(epoch)
+        if epoch > -1:
+            snapshot = self._get_snapshot()
+            logger.save_itr_params(epoch, snapshot)
+            gt.stamp("saving")
+            self._log_stats(epoch)
 
-        self.manager._end_epoch(epoch)
-        self.manager.save(logger.get_snapshot_dir())
+            self.manager._end_epoch(epoch)
+            self.manager.save(logger.get_snapshot_dir())
 
-        for post_epoch_func in self.post_epoch_funcs:
-            post_epoch_func(self, epoch)
+            self.primitive_model_buffer.end_epoch(epoch)
 
-        self.primitive_model_buffer.end_epoch(epoch)
+            for post_epoch_func in self.post_epoch_funcs:
+                post_epoch_func(self, epoch)
+        else:
+            for post_epoch_func in self.post_epoch_funcs:
+                post_epoch_func(self, epoch)
 
     def load(self, path):
         self.manager.load(path)
@@ -668,18 +697,19 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
 
         logger.record_dict(
             self.primitive_model_pretrain_trainer.get_diagnostics(),
-            prefix=f"primitive_model_pretrain_trainer/trainer/",
+            prefix=f"primitive_model_pretrain_trainer/",
         )
 
-        logger.record_dict(
-            self.agent.get_diagnostics(),
-            prefix=f"primitive_model_trainer/trainer/",
-        )
+        if self.train_primitive_model:
+            logger.record_dict(
+                self.agent.get_diagnostics(),
+                prefix=f"primitive_model_trainer/",
+            )
 
-        logger.record_dict(
-            self.primitive_model_buffer.get_diagnostics(),
-            prefix=f"primitive_model_buffer/trainer/",
-        )
+            logger.record_dict(
+                self.rollouts.get_diagnostics(),
+                prefix=f"primitive_model_buffer/",
+            )
 
         """
         Misc

@@ -87,6 +87,7 @@ def experiment(variant):
                 (env_suite, env_name, env_kwargs),
             ),
         )
+        env_kwargs["action_space_kwargs"]["deterministic_primitive_rollout"] = True
         env_fns = [
             lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)
             for _ in range(1)
@@ -298,6 +299,7 @@ def experiment(variant):
         collect_data_using_primitive_model=variant.get(
             "collect_data_using_primitive_model", False
         ),
+        discount=variant["trainer_kwargs"]["discount"],
         train_primitive_model=variant.get("train_primitive_model", False),
         **variant["algorithm_kwargs"],
         **variant["primitive_model_algorithm_kwargs"],
@@ -313,5 +315,3 @@ def experiment(variant):
             algorithm.post_epoch_funcs.append(post_epoch_visualize_func_vec_manager)
         print("TRAINING")
         algorithm.train()
-        if variant.get("save_video", False):
-            post_epoch_visualize_func_vec_manager(algorithm, -1)

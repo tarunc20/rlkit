@@ -53,13 +53,14 @@ def visualize_rollout(
     use_raps_obs=False,
     use_true_actions=True,
     suffix="",
+    epoch=0,
 ):
     file_path = logdir + "/"
     os.makedirs(file_path, exist_ok=True)
     print(
         f"Generating Imagination Reconstructions No Intermediate Obs: {use_raps_obs} Actual Actions: {use_true_actions}"
     )
-    file_suffix = f"imagination_reconstructions_raps_obs_{use_raps_obs}_actual_actions_{use_true_actions}_{suffix}.png"
+    file_suffix = f"imagination_reconstructions_raps_obs_{use_raps_obs}_actual_actions_{use_true_actions}_{suffix}_{epoch}.png"
     file_path += file_suffix
     img_shape = (img_size, img_size, 3)
     reconstructions = np.zeros(
@@ -352,6 +353,7 @@ def visualize_primitive_rollout(
     logdir,
     num_rollouts=4,
     suffix="",
+    epoch=0,
 ):
     """
     Visualize a primitive rollout.
@@ -413,7 +415,7 @@ def visualize_primitive_rollout(
             args.append(primitive_action)
 
     fourcc = cv2.VideoWriter_fourcc(*"DIVX")
-    file_path = os.path.join(logdir, f"primitive_rollouts_{suffix}.avi")
+    file_path = os.path.join(logdir, f"primitive_rollouts_{suffix}_{epoch}.avi")
     out = cv2.VideoWriter(
         file_path,
         fourcc,
@@ -504,9 +506,9 @@ def post_epoch_visualize_func(algorithm, epoch):
 
 
 def post_epoch_visualize_func_vec_manager(algorithm, epoch):
-    if epoch % 50 == 0:
-        algorithm.manager.visualize_rollouts()
-        algorithm.manager.visualize_primitive_rollouts()
+    if epoch % 50 == 0 or epoch == -1:
+        algorithm.manager.visualize_rollouts(epoch)
+        algorithm.manager.visualize_primitive_rollouts(epoch)
 
 
 @torch.no_grad()

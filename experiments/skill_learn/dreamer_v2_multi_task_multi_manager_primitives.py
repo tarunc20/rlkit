@@ -23,13 +23,12 @@ if __name__ == "__main__":
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=256,
             primitive_model_num_pretrain_steps=100,
-            primitive_model_num_trains_per_train_loop=1,
         )
     else:
         algorithm_kwargs = dict(
             num_epochs=250,
             num_eval_steps_per_epoch=60,
-            min_num_steps_before_training=10000,
+            min_num_steps_before_training=2500,
             num_pretrain_steps=100,
             batch_size=417,
             num_expl_steps_per_train_loop=126,
@@ -38,8 +37,7 @@ if __name__ == "__main__":
         )
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=256,
-            primitive_model_num_pretrain_steps=5000,
-            primitive_model_num_trains_per_train_loop=50,
+            primitive_model_num_pretrain_steps=2500,
         )
     variant = dict(
         algorithm="MultiTaskMultiManagerRAPS",
@@ -127,7 +125,7 @@ if __name__ == "__main__":
         expl_amount=0.3,
         max_path_length=5,
         num_low_level_actions_per_primitive=5,
-        low_level_action_dim=9,
+        low_level_action_dim=5,
         primitive_model_kwargs=dict(
             image_encoder_args=(),
             image_encoder_kwargs=dict(
@@ -142,7 +140,7 @@ if __name__ == "__main__":
             state_encoder_args=(),
             state_encoder_kwargs=dict(hidden_sizes=[64, 64], output_size=64),
             joint_processor_args=(),
-            joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=64),
+            joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
             scale=15,
         ),
@@ -168,8 +166,8 @@ if __name__ == "__main__":
             use_proper_time_limits=True,
         ),
         num_steps=5,
-        collect_data_using_primitive_model=True,
-        train_primitive_model=True,
+        collect_data_using_primitive_model=False,
+        train_primitive_model=False,
         save_video=True,
     )
 

@@ -269,6 +269,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         low_level_reward_type="none",
         set_primitive_goals=False,
         primitive_to_model=None,
+        deterministic_primitive_rollout=False,
     ):
         self.primitive_to_model = primitive_to_model
         self.set_primitive_goals = set_primitive_goals
@@ -358,7 +359,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             )
             self.primitive_model = PrimitivePolicy(
                 (self.observation_space.low.size + self.action_space.low.size,),
-                (9,),
+                (5,),
                 base_kwargs=primitive_model_kwargs,
             )
             self.primitive_model_path = primitive_model_path
@@ -480,6 +481,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                             [self.primitive_goal[-1], self.primitive_goal[-1]],
                         )
                     )
+        self.deterministic_primitive_rollout = deterministic_primitive_rollout
 
     def sync_primitive_model_from_path(self, path):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
@@ -675,7 +677,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.num_low_level_steps // self.num_low_level_actions_per_primitive
         ) == 0:
             self.primitives_info["low_level_action"].append(
-                np.concatenate([self.combined_prev_action, rot_ctrl, gripper_ctrl])
+                np.concatenate([self.combined_prev_action, gripper_ctrl])
                 / self.primitive_model.scale  # TODO: add a flag here
             )
             self.combined_prev_action = np.zeros(3, dtype=np.float32)
@@ -813,10 +815,10 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     inputs,
                     ptu.ones_like(inputs),
                     ptu.ones_like(inputs),
-                    deterministic=True,
-                )
+                    deterministic=self.deterministic_primitive_rollout,
+                )[0]
                 .cpu()
-                .numpy()[0]
+                .numpy()
             ) * self.primitive_model.scale
             low_level_action = np.clip(
                 low_level_action,
@@ -829,7 +831,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 # a = np.concatenate(
                 #     (a, low_level_action[3:])
                 # )  # assume rotation should not be subsampled/unsubsampled
-                a = np.concatenate((a, np.array([1, 0, 1, 0, *low_level_action[7:]])))
+                a = np.concatenate((a, np.array([1, 0, 1, 0, *low_level_action[3:]])))
                 self.mocap_set_action(self.sim, a[:7])
                 self.ctrl_set_action(self.sim, a[7:])
                 self.sim.step()
