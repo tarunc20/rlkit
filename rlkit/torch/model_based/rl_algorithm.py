@@ -682,9 +682,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
 
     def load(self, path):
         self.manager.load(path)
-        self.manager.sync_primitive_model_from_path(
-            os.path.join(path, "primitive_model.ptc")
-        )
+        # self.manager.sync_primitive_model_from_path(
+        #     os.path.join(path, "primitive_model.ptc")
+        # )
 
     def _get_snapshot(self):
         snapshot = {}
