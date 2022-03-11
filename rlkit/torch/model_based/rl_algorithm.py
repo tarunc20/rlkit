@@ -681,6 +681,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 post_epoch_func(self, epoch)
 
     def load(self, path):
+        path = os.path.join(
+            "/home/mdalal/research/skill_learn/rlkit/", path
+        )  # TODO: fix hardcoded path
         self.manager.load(path)
         # self.manager.sync_primitive_model_from_path(
         #     os.path.join(path, "primitive_model.ptc")
