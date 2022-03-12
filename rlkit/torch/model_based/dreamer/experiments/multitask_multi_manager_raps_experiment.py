@@ -38,7 +38,6 @@ def experiment(variant):
     from rlkit.torch.model_based.dreamer.rollout_functions import (
         vec_rollout_skill_learn,
     )
-    from rlkit.torch.model_based.dreamer.visualization import post_epoch_visualize_func
     from rlkit.torch.model_based.dreamer.world_models import WorldModel
     from rlkit.torch.model_based.vec_managers import Manager, VecManager
 
@@ -87,7 +86,6 @@ def experiment(variant):
                 (env_suite, env_name, env_kwargs),
             ),
         )
-        env_kwargs["action_space_kwargs"]["deterministic_primitive_rollout"] = True
         env_fns = [
             lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)
             for _ in range(1)
@@ -268,31 +266,39 @@ def experiment(variant):
         "hidden_activation"
     ] = nn.ReLU
 
-    actor_critic = PrimitivePolicy(
-        (obs_dim,),
-        (low_level_action_dim,),
-        base_kwargs=variant["primitive_model_kwargs"],
-    )
-    actor_critic.to(ptu.device)
+    if variant["primitive_learning_algorithm"] == "gcsl":
+        policy = CNNMLP(**variant["primitive_model_kwargs"])
+        primitive_model_trainer = BCTrainer(
+            policy, **variant["primitive_model_pretrain_trainer_kwargs"]
+        )
+        rollouts = None
+    elif variant["algorithm_kwargs"]["primitive_learning_algorithm"] == "ppo":
+        policy = PrimitivePolicy(
+            (obs_dim,),
+            (low_level_action_dim,),
+            base_kwargs=variant["primitive_model_kwargs"],
+        )
+        primitive_model_trainer = algo.PPO(
+            policy, **variant["primitive_model_trainer_kwargs"]
+        )
+        rollouts = RolloutStorage(
+            variant["num_steps"],
+            variant["num_processes"],
+            (obs_dim + action_dim + 1,),
+            Box(np.zeros(low_level_action_dim), np.ones(low_level_action_dim)),
+            obs_dim + action_dim + 1,
+        )
+        rollouts.rollout_kwargs = variant["rollout_kwargs"]
+    policy.to(ptu.device)
 
     primitive_model_pretrain_trainer = BCTrainer(
-        actor_critic, **variant["primitive_model_pretrain_trainer_kwargs"]
+        policy, **variant["primitive_model_pretrain_trainer_kwargs"]
     )
-
-    agent = algo.PPO(actor_critic, **variant["primitive_model_trainer_kwargs"])
-    rollouts = RolloutStorage(
-        variant["num_steps"],
-        variant["num_processes"],
-        (obs_dim + action_dim + 1,),
-        Box(np.zeros(low_level_action_dim), np.ones(low_level_action_dim)),
-        obs_dim + action_dim + 1,
-    )
-    rollouts.rollout_kwargs = variant["rollout_kwargs"]
 
     algorithm = TorchMultiManagerBatchRLAlgorithm(
         vec_manager,
         primitive_model_pretrain_trainer=primitive_model_pretrain_trainer,
-        agent=agent,
+        primitive_model_trainer=primitive_model_trainer,
         rollouts=rollouts,
         primitive_model_buffer=primitive_model_buffer,
         primitive_model_path=primitive_model_path,
@@ -300,6 +306,7 @@ def experiment(variant):
             "collect_data_using_primitive_model", False
         ),
         discount=variant["trainer_kwargs"]["discount"],
+        primitive_learning_algorithm=variant["primitive_learning_algorithm"],
         train_primitive_model=variant.get("train_primitive_model", False),
         **variant["algorithm_kwargs"],
         **variant["primitive_model_algorithm_kwargs"],

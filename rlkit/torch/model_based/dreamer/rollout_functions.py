@@ -302,10 +302,14 @@ def vec_rollout_skill_learn(
         low_level_obs = np.array(info["low_level_obs"])
         low_level_reward = np.array(info["low_level_reward"])
         low_level_terminal = np.array(info["low_level_terminal"])
+        high_level_action = np.array(
+            info["high_level_action"]
+        )  # relabelling with achieved goal
         del info["low_level_action"]
         del info["low_level_obs"]
         del info["low_level_reward"]
         del info["low_level_terminal"]
+        del info["high_level_action"]
         gc.collect()
         env_infos.append(info)
 

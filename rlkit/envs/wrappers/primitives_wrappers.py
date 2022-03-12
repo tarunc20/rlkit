@@ -13,6 +13,7 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers.dm_backend_wrappers import DMControlBackendRobosuiteEnv
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
+from rlkit.torch.model_based.dreamer.conv_networks import CNNMLP
 
 
 class TimeLimit(gym.Wrapper):
@@ -269,7 +270,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         low_level_reward_type="none",
         set_primitive_goals=False,
         primitive_to_model=None,
-        deterministic_primitive_rollout=False,
     ):
         self.primitive_to_model = primitive_to_model
         self.set_primitive_goals = set_primitive_goals
@@ -357,11 +357,12 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
                 self.action_space.low.shape[0] + 1
             )
-            self.primitive_model = PrimitivePolicy(
-                (self.observation_space.low.size + self.action_space.low.size,),
-                (5,),
-                base_kwargs=primitive_model_kwargs,
-            )
+            # self.primitive_model = PrimitivePolicy(
+            #     (self.observation_space.low.size + self.action_space.low.size,),
+            #     (5,),
+            #     base_kwargs=primitive_model_kwargs,
+            # )
+            self.primitive_model = CNNMLP(**primitive_model_kwargs)
             self.primitive_model_path = primitive_model_path
         self.use_primitive_model = False
         self.low_level_reward_type = low_level_reward_type
@@ -481,7 +482,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                             [self.primitive_goal[-1], self.primitive_goal[-1]],
                         )
                     )
-        self.deterministic_primitive_rollout = deterministic_primitive_rollout
 
     def sync_primitive_model_from_path(self, path):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
@@ -568,6 +568,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.combined_prev_action = np.zeros(3, dtype=np.float32)
             self.act(action)
             self.primitives_info["low_level_terminal"][-1] = 1
+            self.primitives_info["high_level_action"] = self.high_level_action
 
         self.curr_path_length += 1
 
@@ -676,10 +677,15 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         if (self.primitive_step_counter + 1) % (
             self.num_low_level_steps // self.num_low_level_actions_per_primitive
         ) == 0:
-            self.primitives_info["low_level_action"].append(
-                np.concatenate([self.combined_prev_action, gripper_ctrl])
-                / self.primitive_model.scale  # TODO: add a flag here
-            )
+            if hasattr(self, "primitive_model"):
+                self.primitives_info["low_level_action"].append(
+                    np.concatenate([self.combined_prev_action, gripper_ctrl])
+                    / self.primitive_model.scale
+                )
+            else:
+                self.primitives_info["low_level_action"].append(
+                    np.concatenate([self.combined_prev_action, gripper_ctrl])
+                )
             self.combined_prev_action = np.zeros(3, dtype=np.float32)
 
         # Apply action to simulation.
@@ -805,26 +811,12 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 .transpose(2, 0, 1)
                 .flatten()
             )
-            obs_torch = ptu.from_numpy(observation).unsqueeze(0)
-            action_torch = ptu.from_numpy(
-                np.concatenate((self.high_level_action, [1 / (sample_step + 1)]))
-            ).unsqueeze(0)
-            inputs = torch.cat((obs_torch, action_torch), dim=1)
-            low_level_action = (
-                self.primitive_model.get_action(
-                    inputs,
-                    ptu.ones_like(inputs),
-                    ptu.ones_like(inputs),
-                    deterministic=self.deterministic_primitive_rollout,
-                )[0]
-                .cpu()
-                .numpy()
-            ) * self.primitive_model.scale
-            low_level_action = np.clip(
-                low_level_action,
-                -self.primitive_model.scale,
-                self.primitive_model.scale,
+            action = np.concatenate((self.high_level_action, [1 / (sample_step + 1)]))
+            inputs = np.concatenate((observation, action))
+            low_level_action, _ = self.primitive_model.get_action(
+                np.expand_dims(inputs, 0)
             )
+            low_level_action *= self.primitive_model.scale
             t = self.get_endeff_pos() + low_level_action[:3]
             for step in range(num_subsample_steps):
                 a = (t - self.get_endeff_pos()) / num_subsample_steps
@@ -883,6 +875,58 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive
                 ) == 0:
                     self.primitives_info["low_level_terminal"].append(0)
+        if self.primitive_name == "lift":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = np.maximum(self.get_endeff_pos()[2] - self.pre_action_pos[2], 0)
+        elif self.primitive_name == "drop":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = np.minimum(self.get_endeff_pos()[2] - self.pre_action_pos[2], 0)
+        elif self.primitive_name == "move_left":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = np.minimum(self.get_endeff_pos()[0] - self.pre_action_pos[0], 0)
+        elif self.primitive_name == "move_right":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = np.maximum(self.get_endeff_pos()[0] - self.pre_action_pos[0], 0)
+        elif self.primitive_name == "move_forward":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = np.maximum(self.get_endeff_pos()[1] - self.pre_action_pos[1], 0)
+        elif self.primitive_name == "move_backward":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = np.minimum(self.get_endeff_pos()[1] - self.pre_action_pos[1], 0)
+        elif self.primitive_name == "move_delta_ee":
+            self.high_level_action[
+                self.num_primitives
+                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+            ] = (self.get_endeff_pos() - self.pre_action_pos)
+        elif self.primitive_name == "top_x_y_grasp":
+            self.high_level_action[
+                self.num_primitives
+                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+            ] = np.concatenate(
+                (
+                    self.get_endeff_pos() - self.pre_action_pos,
+                    [
+                        self.high_level_action[
+                            self.num_primitives
+                            + np.array(
+                                self.primitive_name_to_action_idx[self.primitive_name]
+                            )
+                        ][-1]
+                    ],
+                )
+            )
         return action
 
     def close_gripper(self, d, target=None):
@@ -1017,6 +1061,8 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.num_low_level_steps = self.primitive_idx_to_num_low_level_steps[
             primitive_idx
         ]
+        self.pre_action_pos = self.get_endeff_pos()
+        self.primitive_name = primitive_name
         primitive(
             primitive_action,
         )

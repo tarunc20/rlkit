@@ -84,11 +84,12 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
     ] = variant["num_low_level_actions_per_primitive"]
 
     variant["primitive_model_replay_buffer_kwargs"]["max_replay_buffer_size"] = int(
-        2.1e5
+        3e6
         / (
             variant["num_low_level_actions_per_primitive"] * variant["max_path_length"]
             + 1
         )
+        * len(variant["env_names"])
     )
     variant["primitive_model_replay_buffer_kwargs"][
         "num_low_level_actions_per_primitive"

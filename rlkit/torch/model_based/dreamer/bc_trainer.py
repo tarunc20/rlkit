@@ -64,13 +64,16 @@ class BCTrainer(TorchTrainer, LossFunction):
         """
         Policy Loss
         """
-        action_dist = self.policy.get_dist(
-            obs, torch.zeros_like(obs), torch.zeros_like(obs)
-        )
-        loss = -1 * action_dist.log_prob(actions).mean()
+        # action_dist = self.policy.get_dist(
+        #     obs, torch.zeros_like(obs), torch.zeros_like(obs)
+        # )
+        # loss = -1 * action_dist.log_prob(actions).mean()
+        action_preds = self.policy(obs)
+        loss = self.policy_criterion(action_preds, actions)
         eval_statistics = OrderedDict()
-        action_preds = action_dist.mean
-        eval_statistics["Policy MSE"] = F.mse_loss(action_preds, actions).item()
+        eval_statistics["Policy MSE"] = self.policy_criterion(
+            action_preds, actions
+        ).item()
         eval_statistics["Policy Loss"] = loss.item()
         eval_statistics["Predicted Actions Mean"] = action_preds.mean().item()
         eval_statistics["Actions Mean"] = actions.mean().item()
