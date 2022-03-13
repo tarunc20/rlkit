@@ -2,9 +2,10 @@ def experiment(variant):
     import os
 
     import numpy as np
-    from a2c_ppo_acktr import algo
-    from a2c_ppo_acktr.model import PrimitivePolicy
-    from a2c_ppo_acktr.storage import RolloutStorage
+
+    # from a2c_ppo_acktr import algo
+    # from a2c_ppo_acktr.model import PrimitivePolicy
+    # from a2c_ppo_acktr.storage import RolloutStorage
     from gym.spaces import Box
 
     from rlkit.core import logger

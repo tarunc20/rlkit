@@ -76,6 +76,7 @@ if __name__ == "__main__":
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
                 low_level_reward_type="none",
+                relabel_high_level_actions=False,
             ),
         ),
         actor_kwargs=dict(

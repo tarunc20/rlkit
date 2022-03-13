@@ -2,7 +2,8 @@ import gym
 import mujoco_py
 import numpy as np
 import torch
-from a2c_ppo_acktr.model import PrimitivePolicy
+
+# from a2c_ppo_acktr.model import PrimitivePolicy
 from d4rl.kitchen.adept_envs.simulation.renderer import DMRenderer
 from gym import spaces
 from gym.spaces.box import Box
@@ -270,7 +271,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         low_level_reward_type="none",
         set_primitive_goals=False,
         primitive_to_model=None,
+        relabel_high_level_actions=False,
     ):
+        self.relabel_high_level_actions = relabel_high_level_actions
         self.primitive_to_model = primitive_to_model
         self.set_primitive_goals = set_primitive_goals
         self.goto_pose_iterations = goto_pose_iterations
@@ -824,7 +827,30 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 # a = np.concatenate(
                 #     (a, low_level_action[3:])
                 # )  # assume rotation should not be subsampled/unsubsampled
-                a = np.concatenate((a, np.array([1, 0, 1, 0, *compute_action()[-2:]])))
+                if self.primitive_name == "top_x_y_grasp":
+                    if sample_step == self.num_low_level_actions_per_primitive - 1:
+                        grasp = self.high_level_action[
+                            self.num_primitives
+                            + np.array(
+                                self.primitive_name_to_action_idx[self.primitive_name]
+                            )
+                        ][-1]
+                        a = np.concatenate(
+                            (a, np.array([1, 0, 1, 0, *[grasp, -grasp]]))
+                        )
+                    else:
+                        a = np.concatenate(
+                            (
+                                a,
+                                np.array(
+                                    [1, 0, 1, 0, -self.prev_grasp, self.prev_grasp]
+                                ),
+                            )
+                        )
+                else:
+                    a = np.concatenate(
+                        (a, np.array([1, 0, 1, 0, *compute_action()[-2:]]))
+                    )
                 self.mocap_set_action(self.sim, a[:7])
                 self.ctrl_set_action(self.sim, a[7:])
                 self.sim.step()
@@ -859,7 +885,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
     def execute_primitive(self, compute_action, num_iterations, target):
         if self.use_primitive_model:
-            action = self.execute_primitive_model(target)
+            action = self.execute_primitive_model(target, compute_action)
         else:
             for _ in range(num_iterations):
                 action = compute_action()
@@ -978,7 +1004,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             )
         )
         if self.use_primitive_model:
-            self.execute_primitive_model(target)
+            self.execute_primitive_model(target, None)
         else:
             self.open_gripper(1, target=target)
             self.goto_pose(
