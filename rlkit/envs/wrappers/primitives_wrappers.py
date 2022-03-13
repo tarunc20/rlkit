@@ -800,6 +800,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self,
         num_subsample_steps,
         target,
+        compute_action,
     ):
         for sample_step in range(self.num_low_level_actions_per_primitive):
             observation = (
@@ -823,7 +824,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 # a = np.concatenate(
                 #     (a, low_level_action[3:])
                 # )  # assume rotation should not be subsampled/unsubsampled
-                a = np.concatenate((a, np.array([1, 0, 1, 0, *low_level_action[3:]])))
+                a = np.concatenate((a, np.array([1, 0, 1, 0, *compute_action()[-2:]])))
                 self.mocap_set_action(self.sim, a[:7])
                 self.ctrl_set_action(self.sim, a[7:])
                 self.sim.step()
@@ -838,7 +839,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitives_info["low_level_terminal"].append(0)
         return low_level_action
 
-    def execute_primitive_model(self, target):
+    def execute_primitive_model(self, target, compute_action):
         (
             _,
             _,
@@ -851,6 +852,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         action = self.unsubsample_and_execute_ll(
             num_subsample_steps,
             target,
+            compute_action,
         )
         self.prev_low_level_action = action
         return action
@@ -884,12 +886,12 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.minimum(self.get_endeff_pos()[2] - self.pre_action_pos[2], 0)
+            ] = np.maximum(self.get_endeff_pos()[2] - self.pre_action_pos[2], 0)
         elif self.primitive_name == "move_left":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.minimum(self.get_endeff_pos()[0] - self.pre_action_pos[0], 0)
+            ] = np.maximum(self.get_endeff_pos()[0] - self.pre_action_pos[0], 0)
         elif self.primitive_name == "move_right":
             self.high_level_action[
                 self.num_primitives
@@ -904,7 +906,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.minimum(self.get_endeff_pos()[1] - self.pre_action_pos[1], 0)
+            ] = np.maximum(self.get_endeff_pos()[1] - self.pre_action_pos[1], 0)
         elif self.primitive_name == "move_delta_ee":
             self.high_level_action[
                 self.num_primitives
