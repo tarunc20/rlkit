@@ -907,32 +907,32 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.maximum(self.get_endeff_pos()[2] - self.pre_action_pos[2], 0)
+            ] = np.abs(self.get_endeff_pos()[2] - self.pre_action_pos[2])
         elif self.primitive_name == "drop":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.maximum(self.get_endeff_pos()[2] - self.pre_action_pos[2], 0)
+            ] = np.abs(self.get_endeff_pos()[2] - self.pre_action_pos[2])
         elif self.primitive_name == "move_left":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.maximum(self.get_endeff_pos()[0] - self.pre_action_pos[0], 0)
+            ] = np.abs(self.get_endeff_pos()[0] - self.pre_action_pos[0])
         elif self.primitive_name == "move_right":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.maximum(self.get_endeff_pos()[0] - self.pre_action_pos[0], 0)
+            ] = np.abs(self.get_endeff_pos()[0] - self.pre_action_pos[0])
         elif self.primitive_name == "move_forward":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.maximum(self.get_endeff_pos()[1] - self.pre_action_pos[1], 0)
+            ] = np.abs(self.get_endeff_pos()[1] - self.pre_action_pos[1])
         elif self.primitive_name == "move_backward":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.maximum(self.get_endeff_pos()[1] - self.pre_action_pos[1], 0)
+            ] = np.abs(self.get_endeff_pos()[1] - self.pre_action_pos[1])
         elif self.primitive_name == "move_delta_ee":
             self.high_level_action[
                 self.num_primitives
@@ -958,7 +958,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         return action
 
     def close_gripper(self, d, target=None):
-        d = np.maximum(d, 0.0)
+        d = np.abs(d)
         compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, d, -d])
         if target is None:
             target = np.concatenate((self.get_endeff_pos(), [d, -d]))
@@ -969,7 +969,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.prev_grasp = -d
 
     def open_gripper(self, d, target=None):
-        d = np.maximum(d, 0.0)
+        d = np.abs(d)
         compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -d, d])
         if target is None:
             target = np.concatenate((self.get_endeff_pos(), [-d, d]))
@@ -1022,37 +1022,37 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.goto_pose(self.get_endeff_pos() + pose)
 
     def lift(self, z_dist):
-        z_dist = np.maximum(z_dist, 0.0)
+        z_dist = np.abs(z_dist)
         self.goto_pose(
             self.get_endeff_pos() + np.array([0.0, 0.0, z_dist]),
         )
 
     def drop(self, z_dist):
-        z_dist = np.maximum(z_dist, 0.0)
+        z_dist = np.abs(z_dist)
         self.goto_pose(
             self.get_endeff_pos() + np.array([0.0, 0.0, -z_dist]),
         )
 
     def move_left(self, x_dist):
-        x_dist = np.maximum(x_dist, 0.0)
+        x_dist = np.abs(x_dist)
         self.goto_pose(
             self.get_endeff_pos() + np.array([-x_dist, 0.0, 0.0]),
         )
 
     def move_right(self, x_dist):
-        x_dist = np.maximum(x_dist, 0.0)
+        x_dist = np.abs(x_dist)
         self.goto_pose(
             self.get_endeff_pos() + np.array([x_dist, 0.0, 0.0]),
         )
 
     def move_forward(self, y_dist):
-        y_dist = np.maximum(y_dist, 0.0)
+        y_dist = np.abs(y_dist)
         self.goto_pose(
             self.get_endeff_pos() + np.array([0.0, y_dist, 0.0]),
         )
 
     def move_backward(self, y_dist):
-        y_dist = np.maximum(y_dist, 0.0)
+        y_dist = np.abs(y_dist)
         self.goto_pose(
             self.get_endeff_pos() + np.array([0.0, -y_dist, 0.0]),
         )
@@ -1429,42 +1429,42 @@ class RobosuitePrimitives(DMControlBackendRobosuiteEnv):
         return stats
 
     def lift(self, z_dist):
-        z_dist = np.maximum(z_dist, 0.0)
+        z_dist = np.abs(z_dist, 0.0)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0.0, 0.0, z_dist]),
         )
         return stats
 
     def drop(self, z_dist):
-        z_dist = np.maximum(z_dist, 0.0)
+        z_dist = np.abs(z_dist, 0.0)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0.0, 0.0, -z_dist]),
         )
         return stats
 
     def move_left(self, x_dist):
-        x_dist = np.maximum(x_dist, 0.0)
+        x_dist = np.abs(x_dist, 0.0)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0, -x_dist, 0.0]),
         )
         return stats
 
     def move_right(self, x_dist):
-        x_dist = np.maximum(x_dist, 0.0)
+        x_dist = np.abs(x_dist, 0.0)
         stats = self.goto_pose(
             self._eef_xpos + np.array([0, x_dist, 0.0]),
         )
         return stats
 
     def move_forward(self, y_dist):
-        y_dist = np.maximum(y_dist, 0.0)
+        y_dist = np.abs(y_dist, 0.0)
         stats = self.goto_pose(
             self._eef_xpos + np.array([y_dist, 0, 0.0]),
         )
         return stats
 
     def move_backward(self, y_dist):
-        y_dist = np.maximum(y_dist, 0.0)
+        y_dist = np.abs(y_dist, 0.0)
         stats = self.goto_pose(
             self._eef_xpos + np.array([-y_dist, 0, 0.0]),
         )
