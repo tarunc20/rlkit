@@ -506,7 +506,7 @@ def post_epoch_visualize_func(algorithm, epoch):
 
 
 def post_epoch_visualize_func_vec_manager(algorithm, epoch):
-    if epoch % 50 == 0 or epoch == -1:
+    if epoch % 25 == 0 or epoch == -1:
         algorithm.manager.visualize_rollouts(epoch)
         algorithm.manager.visualize_primitive_rollouts(epoch)
 
