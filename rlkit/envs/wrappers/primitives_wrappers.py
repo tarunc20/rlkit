@@ -605,6 +605,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         if self.control_mode == "primitives":
             if self.collect_primitives_info:
                 info.update(self.primitives_info)
+            info["relabel_distance"] = self.relabel_distance
             info["num low level steps"] = (
                 self._num_low_level_steps_total // self.frame_skip
             )
@@ -903,6 +904,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive
                 ) == 0:
                     self.primitives_info["low_level_terminal"].append(0)
+        old_hl = self.high_level_action.copy()
         if self.primitive_name == "lift":
             self.high_level_action[
                 self.num_primitives
@@ -955,6 +957,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     ],
                 )
             )
+        self.relabel_distance = np.linalg.norm(self.high_level_action - old_hl)
         return action
 
     def close_gripper(self, d, target=None):
