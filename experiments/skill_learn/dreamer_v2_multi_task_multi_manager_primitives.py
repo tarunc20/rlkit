@@ -121,7 +121,7 @@ if __name__ == "__main__":
             imagination_horizon=5,
         ),
         replay_buffer_kwargs=dict(
-            max_replay_buffer_size=int(5e5),
+            max_replay_buffer_size=int(2.5e5),
         ),
         num_expl_envs=3,
         num_eval_envs=1,

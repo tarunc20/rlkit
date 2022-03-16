@@ -295,7 +295,6 @@ def vec_rollout_skill_learn(
         observations.append(high_level_obs)
         rewards.append(reward)
         terminals.append(done)
-        actions.append(high_level_action)
         agent_infos.append(agent_info)
 
         low_level_action = np.array(info["low_level_action"])
@@ -306,6 +305,7 @@ def vec_rollout_skill_learn(
             high_level_action = np.array(
                 info["high_level_action"]
             )  # relabelling with achieved goal
+        actions.append(high_level_action)
         del info["low_level_action"]
         del info["low_level_obs"]
         del info["low_level_reward"]

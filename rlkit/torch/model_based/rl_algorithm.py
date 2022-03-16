@@ -425,6 +425,9 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         if self.collect_data_using_primitive_model:
             self.manager.set_use_primitive_model()
         self._end_epoch(-1)
+        # clear primitive model buffer:
+        self.primitive_model_buffer._size = 0
+        self.primitive_model_buffer._top = 0
         for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True,
