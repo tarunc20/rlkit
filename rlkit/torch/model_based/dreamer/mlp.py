@@ -62,7 +62,7 @@ class Mlp(jit.ScriptModule):
             h = torch.cat([embedding, h[:, self.embedding_slice :]], dim=1)
         h = self.fc_block_1(h)
         preactivation = self.fc_block_2(h)
-        output = preactivation
+        output = self.output_activation(preactivation)
         return output
 
 

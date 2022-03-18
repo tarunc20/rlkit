@@ -47,24 +47,31 @@ def experiment(variant):
     num_low_level_actions_per_primitive = variant["num_low_level_actions_per_primitive"]
     low_level_action_dim = variant["low_level_action_dim"]
 
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
     ] = nn.ReLU
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
     ] = nn.ReLU
     variant["primitive_model_kwargs"]["image_encoder_kwargs"][
+        "output_activation"
+    ] = nn.ReLU
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "hidden_activation"
     ] = nn.ReLU
-    variant["env_kwargs"]["action_space_kwargs"]["primitive_model_kwargs"] = variant[
-        "primitive_model_kwargs"
-    ]
+    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
+        "output_activation"
+    ] = nn.Tanh()
     primitive_model_path = os.path.join(
         logger.get_snapshot_dir(), "primitive_model.ptc"
     )
     variant["env_kwargs"]["action_space_kwargs"][
         "primitive_model_path"
     ] = primitive_model_path
+
+    variant["env_kwargs"]["action_space_kwargs"]["primitive_model_kwargs"] = variant[
+        "primitive_model_kwargs"
+    ]
 
     def make_manager(manager_idx):
         ptu.set_gpu_mode(True, gpu_id=manager_idx)
@@ -244,7 +251,7 @@ def experiment(variant):
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         variant["num_expl_envs"],
         obs_dim,
-        action_dim + 4,
+        action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
     vec_manager.set_primitive_model_buffer(primitive_model_buffer)
@@ -253,25 +260,12 @@ def experiment(variant):
         action_dim + 5
     )
 
-    variant["primitive_model_kwargs"]["output_activation"] = nn.Tanh()
-    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
-    variant["primitive_model_kwargs"]["state_encoder_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
-    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
-        "output_activation"
-    ] = nn.ReLU
-    variant["primitive_model_kwargs"]["joint_processor_kwargs"][
-        "hidden_activation"
-    ] = nn.ReLU
-
     if variant["primitive_learning_algorithm"] == "gcsl":
         policy = CNNMLP(**variant["primitive_model_kwargs"])
         primitive_model_trainer = BCTrainer(
             policy, **variant["primitive_model_pretrain_trainer_kwargs"]
         )
+        print(policy)
         rollouts = None
     elif variant["algorithm_kwargs"]["primitive_learning_algorithm"] == "ppo":
         policy = PrimitivePolicy(

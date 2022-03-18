@@ -29,7 +29,7 @@ if __name__ == "__main__":
         algorithm_kwargs = dict(
             num_epochs=100,
             num_eval_steps_per_epoch=60,
-            min_num_steps_before_training=10000,
+            min_num_steps_before_training=2500,
             num_pretrain_steps=100,
             batch_size=417,
             num_expl_steps_per_train_loop=126,
@@ -38,7 +38,7 @@ if __name__ == "__main__":
         )
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=256,
-            primitive_model_num_pretrain_steps=5000,
+            primitive_model_num_pretrain_steps=2500,
             primitive_model_num_trains_per_train_loop=100,
         )
     variant = dict(
@@ -76,7 +76,8 @@ if __name__ == "__main__":
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
                 low_level_reward_type="none",
-                relabel_high_level_actions=False,
+                relabel_high_level_actions=True,
+                goto_pose_iterations=200,
             ),
         ),
         actor_kwargs=dict(
@@ -141,7 +142,7 @@ if __name__ == "__main__":
                 paddings=[0] * 4,
             ),
             state_encoder_args=(),
-            state_encoder_kwargs=dict(hidden_sizes=[64, 64], output_size=64),
+            state_encoder_kwargs=dict(hidden_sizes=[64, 64, 64], output_size=64),
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
@@ -156,8 +157,8 @@ if __name__ == "__main__":
             policy_lr=1e-3,
         ),
         num_steps=5,
-        collect_data_using_primitive_model=False,
-        train_primitive_model=False,
+        collect_data_using_primitive_model=True,
+        train_primitive_model=True,
         save_video=True,
         primitive_learning_algorithm="gcsl",
     )

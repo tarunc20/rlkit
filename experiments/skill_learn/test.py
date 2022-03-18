@@ -36,13 +36,13 @@ if __name__ == "__main__":
     o = env.reset()
     cv2.imwrite("test0.png", o.reshape(3, 64, 64).transpose(1, 2, 0))
 
-    a = np.zeros_like(env.action_space.sample())
+    a = env.action_space.sample()
     a[5] = 1
     a[env.num_primitives + env.primitive_name_to_action_idx["move_gripper"]] = -1
     o, r, d, i = env.step(a)
     cv2.imwrite("test1.png", o.reshape(3, 64, 64).transpose(1, 2, 0))
 
-    a = np.zeros_like(env.action_space.sample())
+    a = env.action_space.sample()
     a[5] = 1
     a[env.num_primitives + env.primitive_name_to_action_idx["move_gripper"]] = 1
     o, r, d, i = env.step(a)

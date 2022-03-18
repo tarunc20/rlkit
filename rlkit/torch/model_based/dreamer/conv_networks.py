@@ -196,7 +196,6 @@ class CNNMLP(jit.ScriptModule):
         joint_processor_args,
         joint_processor_kwargs,
         image_dim,
-        output_activation=identity,
         scale=1.0,
     ):
         super().__init__()
@@ -204,7 +203,6 @@ class CNNMLP(jit.ScriptModule):
         self.state_encoder = Mlp(*state_encoder_args, **state_encoder_kwargs)
         self.joint_processor = Mlp(*joint_processor_args, **joint_processor_kwargs)
         self.image_dim = image_dim
-        self.output_activation = output_activation
         self.scale = scale
 
     @jit.script_method
@@ -215,7 +213,6 @@ class CNNMLP(jit.ScriptModule):
         state_encoding = self.state_encoder(state)
         joint_encoding = torch.cat((image_encoding, state_encoding), dim=1)
         output = self.joint_processor(joint_encoding)
-        output = self.output_activation(output)
         return output
 
     @jit.script_method

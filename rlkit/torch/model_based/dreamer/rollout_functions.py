@@ -231,7 +231,7 @@ def vec_rollout_skill_learn(
         (
             num_envs * max_path_length,
             num_low_level_actions_per_primitive,
-            env.action_space.low.shape[0] + 5,  # Plus 1 includes phase variable.
+            env.action_space.low.shape[0] + 1,  # Plus 1 includes phase variable.
         ),
         dtype=np.float32,
     )
@@ -242,6 +242,13 @@ def vec_rollout_skill_learn(
             env.observation_space.low.shape[0],
         ),
         dtype=np.uint8,
+    )
+    low_level_float_observations = np.zeros(
+        (
+            num_envs * max_path_length,
+            num_low_level_actions_per_primitive + 1,
+            4,
+        ),
     )
 
     low_level_rewards = np.zeros(
@@ -299,15 +306,19 @@ def vec_rollout_skill_learn(
 
         low_level_action = np.array(info["low_level_action"])
         low_level_obs = np.array(info["low_level_obs"])
+        low_level_float_obs = np.array(info["low_level_float_obs"])
         low_level_reward = np.array(info["low_level_reward"])
         low_level_terminal = np.array(info["low_level_terminal"])
         high_level_action = np.array(info["high_level_action"])
-        actions.append(high_level_action[:, :-4])
+        processed_high_level_action = np.array(info["processed_high_level_action"])
+        actions.append(high_level_action)
         del info["low_level_action"]
         del info["low_level_obs"]
+        del info["low_level_float_obs"]
         del info["low_level_reward"]
         del info["low_level_terminal"]
         del info["high_level_action"]
+        del info["processed_high_level_action"]
         gc.collect()
         env_infos.append(info)
 
@@ -320,9 +331,12 @@ def vec_rollout_skill_learn(
             low_level_action
         )
         low_level_observations[step * num_envs : (step + 1) * num_envs] = low_level_obs
+        low_level_float_observations[
+            step * num_envs : (step + 1) * num_envs
+        ] = low_level_float_obs
 
         high_level_action = np.repeat(
-            np.array(high_level_action).reshape(num_envs, 1, -1),
+            np.array(processed_high_level_action).reshape(num_envs, 1, -1),
             num_low_level_actions_per_primitive,
             axis=1,
         )
@@ -366,6 +380,7 @@ def vec_rollout_skill_learn(
         agent_infos=agent_infos,
         env_infos=env_infos,
         low_level_observations=low_level_observations,
+        low_level_float_observations=low_level_float_observations,
         high_level_actions=high_level_actions,
         low_level_actions=low_level_actions,
         low_level_rewards=low_level_rewards,
