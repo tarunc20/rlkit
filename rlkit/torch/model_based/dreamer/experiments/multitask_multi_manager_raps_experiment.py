@@ -265,7 +265,6 @@ def experiment(variant):
         primitive_model_trainer = BCTrainer(
             policy, **variant["primitive_model_pretrain_trainer_kwargs"]
         )
-        print(policy)
         rollouts = None
     elif variant["algorithm_kwargs"]["primitive_learning_algorithm"] == "ppo":
         policy = PrimitivePolicy(
