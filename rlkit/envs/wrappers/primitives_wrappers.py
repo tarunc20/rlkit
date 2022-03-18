@@ -272,7 +272,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         set_primitive_goals=False,
         primitive_to_model=None,
         relabel_high_level_actions=False,
+        split_top_grasp=False,
     ):
+        self.split_top_grasp = split_top_grasp
         self.relabel_high_level_actions = relabel_high_level_actions
         self.primitive_to_model = primitive_to_model
         self.set_primitive_goals = set_primitive_goals
@@ -286,57 +288,102 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.num_low_level_actions_per_primitive = num_low_level_actions_per_primitive
 
         # primitives
+        # self.primitive_idx_to_name = {
+        #     0: "move_delta_ee",
+        #     1: "top_x_y_grasp",
+        #     2: "lift",
+        #     3: "drop",
+        #     4: "move_left",
+        #     5: "move_right",
+        #     6: "move_forward",
+        #     7: "move_backward",
+        #     8: "open_gripper",
+        #     9: "close_gripper",
+        # }
+        # self.primitive_idx_to_num_low_level_steps = {
+        #     0: goto_pose_iterations,
+        #     1: goto_pose_iterations * 3
+        #     + open_gripper_iterations
+        #     + close_gripper_iterations,
+        #     2: goto_pose_iterations,
+        #     3: goto_pose_iterations,
+        #     4: goto_pose_iterations,
+        #     5: goto_pose_iterations,
+        #     6: goto_pose_iterations,
+        #     7: goto_pose_iterations,
+        #     8: open_gripper_iterations,
+        #     9: close_gripper_iterations,
+        # }
+        # self.primitive_name_to_func = dict(
+        #     move_delta_ee=self.move_delta_ee,
+        #     top_x_y_grasp=self.top_x_y_grasp,
+        #     lift=self.lift,
+        #     drop=self.drop,
+        #     move_left=self.move_left,
+        #     move_right=self.move_right,
+        #     move_forward=self.move_forward,
+        #     move_backward=self.move_backward,
+        #     open_gripper=self.open_gripper,
+        #     close_gripper=self.close_gripper,
+        # )
+        # self.primitive_name_to_action_idx = dict(
+        #     move_delta_ee=[0, 1, 2],
+        #     top_x_y_grasp=[3, 4, 5, 6],
+        #     lift=7,
+        #     drop=8,
+        #     move_left=9,
+        #     move_right=10,
+        #     move_forward=11,
+        #     move_backward=12,
+        #     open_gripper=13,
+        #     close_gripper=14,
+        # )
+        # self.max_arg_len = 15
+        # self.primitive_idx_to_name = {
+        #     0: "move_delta_ee",
+        #     1: "top_x_y_grasp",
+        #     2: "lift",
+        #     3: "drop",
+        #     4: "move_left",
+        #     5: "move_right",
+        #     6: "move_forward",
+        #     7: "move_backward",
+        #     8: "open_gripper",
+        #     9: "close_gripper",
+        # }
         self.primitive_idx_to_name = {
             0: "move_delta_ee",
-            1: "top_x_y_grasp",
-            2: "lift",
-            3: "drop",
-            4: "move_left",
-            5: "move_right",
-            6: "move_forward",
-            7: "move_backward",
-            8: "open_gripper",
-            9: "close_gripper",
+            # 1: "top_x_y_grasp",
+            1: "move_along_x",
+            2: "move_along_y",
+            3: "move_along_z",
+            4: "move_gripper",
         }
         self.primitive_idx_to_num_low_level_steps = {
             0: goto_pose_iterations,
-            1: goto_pose_iterations * 3
-            + open_gripper_iterations
-            + close_gripper_iterations,
+            # 1: goto_pose_iterations * 4,
+            1: goto_pose_iterations,
             2: goto_pose_iterations,
             3: goto_pose_iterations,
             4: goto_pose_iterations,
-            5: goto_pose_iterations,
-            6: goto_pose_iterations,
-            7: goto_pose_iterations,
-            8: open_gripper_iterations,
-            9: close_gripper_iterations,
         }
         self.primitive_name_to_func = dict(
             move_delta_ee=self.move_delta_ee,
-            top_x_y_grasp=self.top_x_y_grasp,
-            lift=self.lift,
-            drop=self.drop,
-            move_left=self.move_left,
-            move_right=self.move_right,
-            move_forward=self.move_forward,
-            move_backward=self.move_backward,
-            open_gripper=self.open_gripper,
-            close_gripper=self.close_gripper,
+            # top_x_y_grasp=self.top_x_y_grasp,
+            move_along_x=self.move_along_x,
+            move_along_y=self.move_along_y,
+            move_along_z=self.move_along_z,
+            move_gripper=self.move_gripper,
         )
         self.primitive_name_to_action_idx = dict(
             move_delta_ee=[0, 1, 2],
-            top_x_y_grasp=[3, 4, 5, 6],
-            lift=7,
-            drop=8,
-            move_left=9,
-            move_right=10,
-            move_forward=11,
-            move_backward=12,
-            open_gripper=13,
-            close_gripper=14,
+            # top_x_y_grasp=[3, 4, 5, 6],
+            move_along_x=3,
+            move_along_y=4,
+            move_along_z=5,
+            move_gripper=6,
         )
-        self.max_arg_len = 15
+        self.max_arg_len = 7
         self.num_primitives = len(self.primitive_name_to_func)
         self.control_mode = control_mode
         if self.control_mode == "primitives":
@@ -358,7 +405,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.collect_primitives_info = collect_primitives_info
         if primitive_model_kwargs is not None:
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
-                self.action_space.low.shape[0] + 1
+                self.action_space.low.shape[0] + 5
             )
             # self.primitive_model = PrimitivePolicy(
             #     (self.observation_space.low.size + self.action_space.low.size,),
@@ -778,7 +825,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self._get_site_pos("rightEndEffector"),
             self._get_site_pos("leftEndEffector"),
         )
-        return (finger_right - finger_left)[:2]
+        return np.linalg.norm(finger_right - finger_left)
 
     def get_endeff_quat(self):
         return self.sim.data.get_body_xquat("hand")
@@ -806,6 +853,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         target,
         compute_action,
     ):
+        prev_grasp = self.get_gripper_pos()
         for sample_step in range(self.num_low_level_actions_per_primitive):
             observation = (
                 self.render(
@@ -830,22 +878,29 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 # )  # assume rotation should not be subsampled/unsubsampled
                 if self.primitive_name == "top_x_y_grasp":
                     if sample_step == self.num_low_level_actions_per_primitive - 1:
-                        grasp = self.high_level_action[
+                        d = self.high_level_action[
                             self.num_primitives
                             + np.array(
                                 self.primitive_name_to_action_idx[self.primitive_name]
                             )
                         ][-1]
-                        a = np.concatenate(
-                            (a, np.array([1, 0, 1, 0, *[grasp, -grasp]]))
-                        )
+                        gripper_target = d * 0.035 + 0.065
+                        current_pos = self.get_gripper_pos()
+                        gripper_ctrl = [
+                            -(gripper_target - current_pos) * 1 / (0.07),
+                            (gripper_target - current_pos) * 1 / (0.07),
+                        ]
+                        a = np.concatenate((a, np.array([1, 0, 1, 0, *gripper_ctrl])))
                     else:
+                        current_pos = self.get_gripper_pos()
+                        gripper_ctrl = [
+                            -(prev_grasp - current_pos) * 1 / (0.07),
+                            (prev_grasp - current_pos) * 1 / (0.07),
+                        ]
                         a = np.concatenate(
                             (
                                 a,
-                                np.array(
-                                    [1, 0, 1, 0, -self.prev_grasp, self.prev_grasp]
-                                ),
+                                np.array([1, 0, 1, 0, *gripper_ctrl]),
                             )
                         )
                 else:
@@ -904,37 +959,21 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     self.num_low_level_steps // self.num_low_level_actions_per_primitive
                 ) == 0:
                     self.primitives_info["low_level_terminal"].append(0)
-        old_hl = self.high_level_action.copy()
-        if self.primitive_name == "lift":
+        if self.primitive_name == "move_along_x":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.abs(self.get_endeff_pos()[2] - self.pre_action_pos[2])
-        elif self.primitive_name == "drop":
+            ] = (self.get_endeff_pos()[0] - self.pre_action_pos[0])
+        elif self.primitive_name == "move_along_y":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.abs(self.get_endeff_pos()[2] - self.pre_action_pos[2])
-        elif self.primitive_name == "move_left":
+            ] = (self.get_endeff_pos()[1] - self.pre_action_pos[1])
+        elif self.primitive_name == "move_along_z":
             self.high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.abs(self.get_endeff_pos()[0] - self.pre_action_pos[0])
-        elif self.primitive_name == "move_right":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.abs(self.get_endeff_pos()[0] - self.pre_action_pos[0])
-        elif self.primitive_name == "move_forward":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.abs(self.get_endeff_pos()[1] - self.pre_action_pos[1])
-        elif self.primitive_name == "move_backward":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = np.abs(self.get_endeff_pos()[1] - self.pre_action_pos[1])
+            ] = (self.get_endeff_pos()[2] - self.pre_action_pos[2])
         elif self.primitive_name == "move_delta_ee":
             self.high_level_action[
                 self.num_primitives
@@ -947,55 +986,111 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ] = np.concatenate(
                 (
                     self.get_endeff_pos() - self.pre_action_pos,
-                    [
-                        self.high_level_action[
-                            self.num_primitives
-                            + np.array(
-                                self.primitive_name_to_action_idx[self.primitive_name]
-                            )
-                        ][-1]
-                    ],
+                    [(self.get_gripper_pos() - 0.065) / 0.035],
                 )
             )
-        self.relabel_distance = np.linalg.norm(self.high_level_action - old_hl)
+        elif self.primitive_name == "move_gripper":
+            self.high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = (self.get_gripper_pos() - 0.065) / 0.035
+        self.relabel_distance = np.linalg.norm(
+            self.high_level_action[:-4] - self.old_hl[:-4]
+        )
+        if self.relabel_high_level_actions:
+            self.high_level_action = np.concatenate(
+                (
+                    self.high_level_action[:-4],
+                    self.pre_action_pos,
+                    [self.pre_action_grip],
+                )
+            )
+        else:
+            self.high_level_action = np.concatenate(
+                (self.old_hl[:-4], self.pre_action_pos, [self.pre_action_grip])
+            )
         return action
 
-    def close_gripper(self, d, target=None):
-        d = np.abs(d)
-        compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, d, -d])
-        if target is None:
-            target = np.concatenate((self.get_endeff_pos(), [d, -d]))
-        action = self.execute_primitive(
-            compute_action, self.close_gripper_iterations, target
-        )
-        self.prev_low_level_action = action
-        self.prev_grasp = -d
+    def move_gripper(self, d, target=None, iterations=None):
+        pose = self.get_endeff_pos()
+        gripper_target = d * 0.035 + 0.065
 
-    def open_gripper(self, d, target=None):
-        d = np.abs(d)
-        compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -d, d])
-        if target is None:
-            target = np.concatenate((self.get_endeff_pos(), [-d, d]))
-        action = self.execute_primitive(
-            compute_action, self.open_gripper_iterations, target
-        )
-        self.prev_low_level_action = action
-        self.prev_grasp = d
-
-    def goto_pose(self, pose, target=None):
         def compute_action():
             delta = pose - self.get_endeff_pos()
-            gripper_ctrl = [-self.prev_grasp, self.prev_grasp]
+            current_pos = self.get_gripper_pos()
+            gripper_ctrl = [
+                -(gripper_target - current_pos) * 1 / (0.07),
+                (gripper_target - current_pos) * 1 / (0.07),
+            ]
             action = np.array(
                 [delta[0], delta[1], delta[2], 1.0, 0.0, 1.0, 0.0, *gripper_ctrl]
             )
             return action
 
         if target is None:
-            target = np.concatenate((pose, [-self.prev_grasp, self.prev_grasp]))
-        action = self.execute_primitive(
-            compute_action, self.goto_pose_iterations, target
+            target = np.concatenate((self.get_endeff_pos(), [gripper_target]))
+        if iterations is None:
+            iterations = self.goto_pose_iterations
+        action = self.execute_primitive(compute_action, iterations, target)
+        self.prev_low_level_action = action
+
+    def move_along_x(self, x_dist):
+        self.goto_pose(
+            self.get_endeff_pos() + np.array([0.0, 0.0, x_dist]),
         )
+
+    def move_along_y(self, y_dist):
+        self.goto_pose(
+            self.get_endeff_pos() + np.array([0.0, 0.0, y_dist]),
+        )
+
+    def move_along_z(self, z_dist):
+        self.goto_pose(
+            self.get_endeff_pos() + np.array([0.0, 0.0, z_dist]),
+        )
+
+    def close_gripper(self, d, target=None, iterations=None):
+        d = np.abs(d)
+        compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, d, -d])
+        if target is None:
+            target = np.concatenate((self.get_endeff_pos(), [d, -d]))
+        if iterations is None:
+            iterations = self.close_gripper_iterations
+        action = self.execute_primitive(compute_action, iterations, target)
+        self.prev_low_level_action = action
+        self.prev_grasp = -d
+
+    def open_gripper(self, d, target=None, iterations=None):
+        d = np.abs(d)
+        compute_action = lambda: np.array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -d, d])
+        if target is None:
+            target = np.concatenate((self.get_endeff_pos(), [-d, d]))
+        if iterations is None:
+            iterations = self.open_gripper_iterations
+        action = self.execute_primitive(compute_action, iterations, target)
+        self.prev_low_level_action = action
+        self.prev_grasp = d
+
+    def goto_pose(self, pose, target=None, iterations=None):
+        prev_grasp = self.get_gripper_pos()
+
+        def compute_action():
+            delta = pose - self.get_endeff_pos()
+            current_pos = self.get_gripper_pos()
+            gripper_ctrl = [
+                -(prev_grasp - current_pos) * 1 / (0.07),
+                (prev_grasp - current_pos) * 1 / (0.07),
+            ]
+            action = np.array(
+                [delta[0], delta[1], delta[2], 1.0, 0.0, 1.0, 0.0, *gripper_ctrl]
+            )
+            return action
+
+        if target is None:
+            target = np.concatenate((pose, [prev_grasp]))
+        if iterations is None:
+            iterations = self.goto_pose_iterations
+        action = self.execute_primitive(compute_action, iterations, target)
         self.prev_low_level_action = action
 
     def top_x_y_grasp(self, xyzd):
@@ -1003,23 +1098,45 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         target = np.concatenate(
             (
                 self.get_endeff_pos() + np.array([x_dist, y_dist, z_dist]),
-                [d, -d],
+                [d * 0.035 + 0.065],
             )
         )
         if self.use_primitive_model:
             self.execute_primitive_model(target, None)
         else:
-            self.open_gripper(1, target=target)
-            self.goto_pose(
-                self.get_endeff_pos() + np.array([0.0, y_dist, 0]), target=target
-            )
-            self.goto_pose(
-                self.get_endeff_pos() + np.array([x_dist, 0.0, 0]), target=target
-            )
-            self.goto_pose(
-                self.get_endeff_pos() + np.array([0.0, 0, z_dist]), target=target
-            )
-            self.close_gripper(d, target=target)
+            if self.split_top_grasp:
+                iterations = self.goto_pose_iterations // 4
+                self.num_low_level_steps = self.goto_pose_iterations
+                self.goto_pose(
+                    self.get_endeff_pos() + np.array([0.0, y_dist, 0]),
+                    target=target,
+                    iterations=iterations,
+                )
+                self.goto_pose(
+                    self.get_endeff_pos() + np.array([x_dist, 0.0, 0]),
+                    target=target,
+                    iterations=iterations,
+                )
+                self.goto_pose(
+                    self.get_endeff_pos() + np.array([0.0, 0, z_dist]),
+                    target=target,
+                    iterations=iterations,
+                )
+                self.close_gripper(d, target=target, iterations=iterations)
+            else:
+                self.goto_pose(
+                    self.get_endeff_pos() + np.array([0.0, y_dist, 0]),
+                    target=target,
+                )
+                self.goto_pose(
+                    self.get_endeff_pos() + np.array([x_dist, 0.0, 0]),
+                    target=target,
+                )
+                self.goto_pose(
+                    self.get_endeff_pos() + np.array([0.0, 0, z_dist]),
+                    target=target,
+                )
+                self.move_gripper(d, target=target)
 
     def move_delta_ee(self, pose):
         self.goto_pose(self.get_endeff_pos() + pose)
@@ -1092,7 +1209,18 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.num_low_level_steps = self.primitive_idx_to_num_low_level_steps[
             primitive_idx
         ]
+        self.old_hl = np.concatenate(
+            (
+                self.high_level_action.copy(),
+                self.get_endeff_pos(),
+                [self.get_gripper_pos()],
+            )
+        )
+        self.high_level_action = np.concatenate(
+            (self.high_level_action, self.get_endeff_pos(), [self.get_gripper_pos()])
+        )
         self.pre_action_pos = self.get_endeff_pos()
+        self.pre_action_grip = self.get_gripper_pos()
         self.primitive_name = primitive_name
         primitive(
             primitive_action,

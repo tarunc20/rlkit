@@ -244,13 +244,13 @@ def experiment(variant):
     primitive_model_buffer = EpisodeReplayBufferSkillLearn(
         variant["num_expl_envs"],
         obs_dim,
-        action_dim,
+        action_dim + 4,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
     vec_manager.set_primitive_model_buffer(primitive_model_buffer)
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
-        action_dim + 1
+        action_dim + 5
     )
 
     variant["primitive_model_kwargs"]["output_activation"] = nn.Tanh()

@@ -231,7 +231,7 @@ def vec_rollout_skill_learn(
         (
             num_envs * max_path_length,
             num_low_level_actions_per_primitive,
-            env.action_space.low.shape[0] + 1,  # Plus 1 includes phase variable.
+            env.action_space.low.shape[0] + 5,  # Plus 1 includes phase variable.
         ),
         dtype=np.float32,
     )
@@ -301,11 +301,8 @@ def vec_rollout_skill_learn(
         low_level_obs = np.array(info["low_level_obs"])
         low_level_reward = np.array(info["low_level_reward"])
         low_level_terminal = np.array(info["low_level_terminal"])
-        if env.relabel_high_level_actions:
-            high_level_action = np.array(
-                info["high_level_action"]
-            )  # relabelling with achieved goal
-        actions.append(high_level_action)
+        high_level_action = np.array(info["high_level_action"])
+        actions.append(high_level_action[:, :-4])
         del info["low_level_action"]
         del info["low_level_obs"]
         del info["low_level_reward"]

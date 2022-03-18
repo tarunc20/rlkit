@@ -14,7 +14,7 @@ if __name__ == "__main__":
             num_epochs=5,
             num_eval_steps_per_epoch=5,
             num_expl_steps_per_train_loop=126,
-            min_num_steps_before_training=5,
+            min_num_steps_before_training=100,
             num_pretrain_steps=1,
             num_train_loops_per_epoch=1,
             num_trains_per_train_loop=1,
@@ -121,7 +121,7 @@ if __name__ == "__main__":
             imagination_horizon=5,
         ),
         replay_buffer_kwargs=dict(
-            max_replay_buffer_size=int(2.5e5),
+            max_replay_buffer_size=int(1e5),
         ),
         num_expl_envs=3,
         num_eval_envs=1,

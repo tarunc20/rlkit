@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 
 from rlkit.envs.primitives_make_env import make_env
@@ -32,6 +33,17 @@ if __name__ == "__main__":
         env_name,
         env_kwargs,
     )
-    env.reset()
-    a = env.action_space.sample()
-    env.step(a)
+    o = env.reset()
+    cv2.imwrite("test0.png", o.reshape(3, 64, 64).transpose(1, 2, 0))
+
+    a = np.zeros_like(env.action_space.sample())
+    a[5] = 1
+    a[env.num_primitives + env.primitive_name_to_action_idx["move_gripper"]] = -1
+    o, r, d, i = env.step(a)
+    cv2.imwrite("test1.png", o.reshape(3, 64, 64).transpose(1, 2, 0))
+
+    a = np.zeros_like(env.action_space.sample())
+    a[5] = 1
+    a[env.num_primitives + env.primitive_name_to_action_idx["move_gripper"]] = 1
+    o, r, d, i = env.step(a)
+    cv2.imwrite("test2.png", o.reshape(3, 64, 64).transpose(1, 2, 0))

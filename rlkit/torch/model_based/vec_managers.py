@@ -58,10 +58,10 @@ class Manager:
         for net in self.trainer.networks:
             net.train(mode)
 
-    def collect_init_expl_paths(self):
+    def collect_init_expl_paths(self, ratio):
         init_expl_paths = self.expl_env_path_collector.collect_new_paths(
             self.max_path_length,
-            self.min_num_steps_before_training,
+            self.min_num_steps_before_training // ratio,
             runtime_policy=self.pretrain_policy,
         )
         self.replay_buffer.add_paths(init_expl_paths)
@@ -179,7 +179,7 @@ def _worker(
         try:
             cmd, data = remote.recv()
             if cmd == "collect_init_expl_paths":
-                remote.send(manager.collect_init_expl_paths())
+                remote.send(manager.collect_init_expl_paths(int(data)))
             elif cmd == "pretrain":
                 remote.send(manager.pretrain())
             elif cmd == "collect_eval_paths":
@@ -309,9 +309,9 @@ class VecManager:
             remote.recv()
         self.waiting = False
 
-    def collect_init_expl_paths(self):
+    def collect_init_expl_paths(self, ratio):
         for remote in self.remotes:
-            remote.send(("collect_init_expl_paths", None))
+            remote.send(("collect_init_expl_paths", ratio))
             self.waiting = True
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False

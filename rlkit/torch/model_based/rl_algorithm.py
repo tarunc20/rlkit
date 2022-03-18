@@ -402,9 +402,12 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         st = time.time()
         print("Initial RAPS Data Collection")
         if self.min_num_steps_before_training > 0:
-            init_expl_paths = self.manager.collect_init_expl_paths()
-            for paths in init_expl_paths:
-                self.primitive_model_buffer.add_paths(paths)
+            for i in range(self.min_num_steps_before_training // 100):
+                init_expl_paths = self.manager.collect_init_expl_paths(
+                    self.min_num_steps_before_training // 100
+                )
+                for paths in init_expl_paths:
+                    self.primitive_model_buffer.add_paths(paths)
         print("Manager Pretraining")
         self.manager.pretrain()
         print("Primitive Model Pretraining")
@@ -439,6 +442,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             for _ in range(self.num_train_loops_per_epoch):
                 print("Expl Data Collection")
                 expl_paths = self.manager.collect_expl_paths()
+                gt.stamp("exploration sampling", unique=False)
                 if self.primitive_learning_algorithm == "gcsl":
                     for paths in expl_paths:
                         self.primitive_model_buffer.add_paths(paths)
@@ -446,8 +450,6 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                     setup_ppo_buffer(
                         expl_paths, self.discount, self.policy, self.rollouts
                     )
-                gt.stamp("exploration sampling", unique=False)
-
                 gt.stamp("storing", unique=False)
                 print("Manager Training")
                 self.manager.train()
