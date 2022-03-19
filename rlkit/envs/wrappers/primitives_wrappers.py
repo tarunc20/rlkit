@@ -1149,12 +1149,12 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
     def move_along_x(self, x_dist):
         self.goto_pose(
-            self.get_endeff_pos() + np.array([0.0, 0.0, x_dist]),
+            self.get_endeff_pos() + np.array([x_dist, 0.0, 0]),
         )
 
     def move_along_y(self, y_dist):
         self.goto_pose(
-            self.get_endeff_pos() + np.array([0.0, 0.0, y_dist]),
+            self.get_endeff_pos() + np.array([0.0, y_dist, 0]),
         )
 
     def move_along_z(self, z_dist):
@@ -1322,7 +1322,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.num_low_level_steps = self.primitive_idx_to_num_low_level_steps[
             primitive_idx
         ]
-        self.old_hl = (self.high_level_action.copy(),)
+        self.old_hl = self.high_level_action.copy()
         self.pre_action_pos = self.get_endeff_pos()
         self.pre_action_grip = self.get_gripper_pos()
         self.primitive_name = primitive_name
