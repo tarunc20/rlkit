@@ -59,6 +59,7 @@ def experiment(variant):
     )
 
     discrete_continuous_dist = variant["actor_kwargs"]["discrete_continuous_dist"]
+    variant['actor_kwargs']['action_space'] = eval_envs[0].action_space
     num_primitives = eval_envs[0].num_primitives
     continuous_action_dim = eval_envs[0].max_arg_len
     discrete_action_dim = num_primitives
