@@ -910,37 +910,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 # a = np.concatenate(
                 #     (a, low_level_action[3:])
                 # )  # assume rotation should not be subsampled/unsubsampled
-                if self.primitive_name == "top_x_y_grasp":
-                    if sample_step == self.num_low_level_actions_per_primitive - 1:
-                        d = self.high_level_action[
-                            self.num_primitives
-                            + np.array(
-                                self.primitive_name_to_action_idx[self.primitive_name]
-                            )
-                        ][-1]
-                        gripper_target = d * 0.035 + 0.065
-                        current_pos = self.get_gripper_pos()
-                        gripper_ctrl = [
-                            -(gripper_target - current_pos) * 1 / (0.07),
-                            (gripper_target - current_pos) * 1 / (0.07),
-                        ]
-                        a = np.concatenate((a, np.array([1, 0, 1, 0, *gripper_ctrl])))
-                    else:
-                        current_pos = self.get_gripper_pos()
-                        gripper_ctrl = [
-                            -(prev_grasp - current_pos) * 1 / (0.07),
-                            (prev_grasp - current_pos) * 1 / (0.07),
-                        ]
-                        a = np.concatenate(
-                            (
-                                a,
-                                np.array([1, 0, 1, 0, *gripper_ctrl]),
-                            )
-                        )
-                else:
-                    a = np.concatenate(
-                        (a, np.array([1, 0, 1, 0, *compute_action()[-2:]]))
-                    )
+                a = np.concatenate((a, np.array([1, 0, 1, 0, *low_level_action[-2:]])))
                 if self.render_every_step:
                     if self.render_mode == "rgb_array":
                         self.img_array.append(
