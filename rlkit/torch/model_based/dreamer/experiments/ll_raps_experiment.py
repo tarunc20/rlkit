@@ -232,4 +232,4 @@ def experiment(variant):
         algorithm.to(ptu.device)
         algorithm.train()
         if variant.get("save_video", False):
-            post_epoch_visualize_func(algorithm, 0)
+            post_epoch_visualize_func(algorithm, -1)
