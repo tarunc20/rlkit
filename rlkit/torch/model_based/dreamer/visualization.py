@@ -69,6 +69,7 @@ def visualize_rollout(
         (num_rollouts, max_path_length + 1, *img_shape),
         dtype=np.uint8,
     )
+    img_array = []
     for rollout in range(num_rollouts):
         for step in range(0, max_path_length + 1):
             if step == 0:
@@ -88,8 +89,10 @@ def visualize_rollout(
                 )
                 state = state["state"]
                 observation, reward, done, info = env.step(
-                    high_level_action[0],
+                    high_level_action[0], render_every_step=True
                 )
+                img_array.extend(env.img_array)
+
                 if low_level_primitives:
                     low_level_obs = np.expand_dims(np.array(info["low_level_obs"]), 0)
                     low_level_action = np.expand_dims(
@@ -184,6 +187,7 @@ def visualize_rollout(
                 img_size * step : img_size * (step + 1),
             ] = reconstructions[rollout, step]
     cv2.imwrite(file_path, im)
+    make_video(img_array, logdir)
     print(f"Saved Rollout Visualization to {file_path}")
     print()
 
@@ -327,6 +331,17 @@ def visualize_primitive_unsubsampled_rollout(
             ] = obs3[rollout, step]
     cv2.imwrite(file_path, im)
     print(f"Saved Rollout Visualization to {file_path}")
+
+def make_video(frames, logdir):
+    height, width, _ = frames[0].shape
+    size = (width, height)
+
+    out = cv2.VideoWriter(logdir + '/' + 'viz.avi', cv2.VideoWriter_fourcc(*'DIVX'), 60, size)
+
+    for frame in frames:
+        out.write(frame)
+
+    out.release()
 
 
 def post_epoch_visualize_func(algorithm, epoch):

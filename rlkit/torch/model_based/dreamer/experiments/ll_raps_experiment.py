@@ -227,9 +227,10 @@ def experiment(variant):
         )
     else:
         if variant.get("save_video", False):
+            post_epoch_visualize_func(algorithm, 0)
+        assert False
+        if variant.get("save_video", False):
             algorithm.post_epoch_funcs.append(post_epoch_visualize_func)
         print("TRAINING")
         algorithm.to(ptu.device)
         algorithm.train()
-        if variant.get("save_video", False):
-            post_epoch_visualize_func(algorithm, -1)
