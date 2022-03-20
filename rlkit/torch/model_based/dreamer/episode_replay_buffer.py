@@ -559,10 +559,84 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         return batch
 
     def save(self, path, suffix):
-        pass
+        low_level_observations = self._low_level_observations
+        low_level_float_observations = self._low_level_float_observations
+        low_level_actions = self._low_level_actions
+        high_level_actions = self._high_level_actions
+        low_level_rewards = self._low_level_rewards
+        low_level_terminals = self._low_level_terminals
+
+        delattr(self, "_low_level_observations")
+        delattr(self, "_low_level_float_observations")
+        delattr(self, "_low_level_actions")
+        delattr(self, "_high_level_actions")
+        delattr(self, "_low_level_rewards")
+        delattr(self, "_low_level_terminals")
+
+        pickle.dump(self, open(os.path.join(path, suffix), "wb"))
+
+        base_suffix = suffix.replace(".pkl", "")
+        f = h5py.File(os.path.join(path, base_suffix + "_contents.hdf5"), "w")
+        f.create_dataset(
+            "low_level_observations",
+            data=low_level_observations,
+            compression="gzip",
+            compression_opts=9,
+        )
+        f.create_dataset(
+            "low_level_float_observations",
+            data=low_level_float_observations,
+            compression="gzip",
+            compression_opts=9,
+        )
+        f.create_dataset(
+            "low_level_actions",
+            data=low_level_actions,
+            compression="gzip",
+            compression_opts=9,
+        )
+        f.create_dataset(
+            "high_level_actions",
+            data=high_level_actions,
+            compression="gzip",
+            compression_opts=9,
+        )
+        f.create_dataset(
+            "low_level_rewards",
+            data=low_level_rewards,
+            compression="gzip",
+            compression_opts=9,
+        )
+        f.create_dataset(
+            "low_level_terminals",
+            data=low_level_terminals,
+            compression="gzip",
+            compression_opts=9,
+        )
+        f.close()
+
+        self._low_level_observations = low_level_observations
+        self._low_level_float_observations = low_level_float_observations
+        self._low_level_actions = low_level_actions
+        self._high_level_actions = high_level_actions
+        self._low_level_rewards = low_level_rewards
+        self._low_level_terminals = low_level_terminals
 
     def load(self, path, suffix):
-        pass
+        replay_buffer = pickle.load(open(os.path.join(path, suffix), "rb"))
+        base_suffix = suffix.replace(".pkl", "")
+        f = h5py.File(os.path.join(path, base_suffix + "_contents.hdf5"), "r")
+        replay_buffer._low_level_observations = f["low_level_observations"][:]
+        replay_buffer._low_level_float_observations = f["low_level_float_observations"][
+            :
+        ]
+        replay_buffer._low_level_actions = f["low_level_actions"][:]
+        replay_buffer._high_level_actions = f["high_level_actions"][:]
+        replay_buffer._low_level_rewards = f["low_level_rewards"][:]
+        replay_buffer._low_level_terminals = f["low_level_terminals"][:]
+        f.close()
+
+        return replay_buffer
 
     def get_diagnostics(self):
         diagnostics = OrderedDict([("size", self._size)])
