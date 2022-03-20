@@ -857,7 +857,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         target,
         compute_action,
     ):
-        prev_grasp = self.get_gripper_pos()
         self.processed_high_level_action = np.zeros_like(self.high_level_action)
         self.processed_high_level_action[
             : self.num_primitives
