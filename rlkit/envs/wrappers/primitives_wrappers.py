@@ -994,9 +994,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 ) == 0:
                     low_level_reward = self.compute_low_level_reward(action[7:], target)
                     self.primitives_info["low_level_reward"].append(low_level_reward)
-                if (self.primitive_step_counter + 1) % (
-                    self.num_low_level_steps // self.num_low_level_actions_per_primitive
-                ) == 0:
                     self.primitives_info["low_level_terminal"].append(0)
             self.primitives_info["low_level_float_obs"].append(
                 np.concatenate((self.get_endeff_pos(), [self.get_gripper_pos()]))
@@ -1092,6 +1089,8 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     self.num_primitives
                     + self.primitive_name_to_action_idx[self.primitive_name]
                 ]
+        else:
+            self.high_level_action = self.old_hl
         return action
 
     def move_gripper(self, d, target=None, iterations=None):

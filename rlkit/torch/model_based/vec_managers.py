@@ -152,7 +152,7 @@ class Manager:
         visualize_primitive_rollout(
             self.eval_env,
             snapshot_dir,
-            num_rollouts=5,
+            num_rollouts=10,
             suffix=self.env_name,
             epoch=epoch,
         )
