@@ -37,7 +37,7 @@ class ActorModel(Mlp):
         self.action_space = action_space
 
         if self.exploration_strategy is not None:
-            self.exploration_strategy = OUStrategy(self.action_space)
+            self.strategy = OUStrategy(self.action_space)
         
         if self.discrete_continuous_dist:
             self.t = 0
@@ -134,7 +134,7 @@ class ActorModel(Mlp):
                 if self.exploration_strategy is None:
                     continuous = torch.normal(continuous, expl_amount)
                 else:
-                    new_action = torch.Tensor(self.exploration_strategy.get_action_from_raw_action(action.cpu().numpy()))
+                    new_action = torch.Tensor(self.strategy.get_action_from_raw_action(action.cpu().numpy()))
                     continuous = new_action[:, self.discrete_action_dim :].to(ptu.device)
                 if self.use_tanh_normal:
                     continuous = torch.clamp(continuous, -1, 1)

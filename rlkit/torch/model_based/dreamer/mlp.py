@@ -4,7 +4,6 @@ from torch.nn import functional as F
 
 from rlkit.pythonplusplus import identity
 
-
 class Mlp(jit.ScriptModule):
     def __init__(
         self,
