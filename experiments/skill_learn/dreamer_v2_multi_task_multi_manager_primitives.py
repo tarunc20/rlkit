@@ -160,6 +160,7 @@ if __name__ == "__main__":
         train_primitive_model=False,
         save_video=True,
         primitive_learning_algorithm="gcsl",
+        freeze_point=None,
     )
 
     setup_sweep_and_launch_exp(

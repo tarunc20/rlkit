@@ -359,6 +359,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         train_primitive_model=False,
         discount=1,
         primitive_learning_algorithm="gcsl",
+        freeze_point=None,
     ):
         self._start_epoch = 0
         self.manager = manager
@@ -391,6 +392,10 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
         self.discount = discount
         self.primitive_learning_algorithm = primitive_learning_algorithm
         self.primitive_model_trainer = primitive_model_trainer
+        if freeze_point is None:
+            self.freeze_point = num_epochs
+        else:
+            self.freeze_point = freeze_point
 
     def _train(self):
         print("Initial Primitive Model Sync")
@@ -455,7 +460,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
                 self.manager.train()
                 gt.stamp("manager training", unique=False)
                 print("Primitive Model Training")
-                if self.train_primitive_model:
+                if self.train_primitive_model and epoch < self.freeze_point:
                     if self.primitive_learning_algorithm == "gcsl":
                         self.training_mode(True)
                         for train_step in range(

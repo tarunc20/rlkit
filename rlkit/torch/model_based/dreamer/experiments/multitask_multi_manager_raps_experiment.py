@@ -302,6 +302,7 @@ def experiment(variant):
         discount=variant["trainer_kwargs"]["discount"],
         primitive_learning_algorithm=variant["primitive_learning_algorithm"],
         train_primitive_model=variant.get("train_primitive_model", False),
+        freeze_point=variant.get("freeze_point", None),
         **variant["algorithm_kwargs"],
         **variant["primitive_model_algorithm_kwargs"],
     )
