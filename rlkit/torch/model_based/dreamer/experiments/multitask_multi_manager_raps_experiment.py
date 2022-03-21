@@ -49,16 +49,19 @@ def experiment(variant):
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
+        "output_activation"
+    ] = nn.ELU()
+    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
         "hidden_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["image_encoder_kwargs"][
         "output_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "hidden_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "output_activation"
     ] = nn.Tanh()
@@ -260,10 +263,12 @@ def experiment(variant):
         action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
-    valid_primitive_model_buffer = valid_primitive_model_buffer.load(
-        "/home/mdalal/research/skill_learn/rlkit/data/03-20-save-valid-buffer/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
+    valid_primitive_model_buffer_new = valid_primitive_model_buffer.load(
+        "/home/mdalal/research/skill_learn/rlkit/data/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
         "replay_buffer.pkl",
     )
+    del valid_primitive_model_buffer
+    valid_primitive_model_buffer = valid_primitive_model_buffer_new
     vec_manager.set_primitive_model_buffer(primitive_model_buffer)
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (

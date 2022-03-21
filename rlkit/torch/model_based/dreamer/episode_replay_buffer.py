@@ -626,14 +626,20 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         replay_buffer = pickle.load(open(os.path.join(path, suffix), "rb"))
         base_suffix = suffix.replace(".pkl", "")
         f = h5py.File(os.path.join(path, base_suffix + "_contents.hdf5"), "r")
-        replay_buffer._low_level_observations = f["low_level_observations"][:]
-        replay_buffer._low_level_float_observations = f["low_level_float_observations"][
-            :
+        replay_buffer._low_level_observations = f["low_level_observations"][
+            : replay_buffer._size
         ]
-        replay_buffer._low_level_actions = f["low_level_actions"][:]
-        replay_buffer._high_level_actions = f["high_level_actions"][:]
-        replay_buffer._low_level_rewards = f["low_level_rewards"][:]
-        replay_buffer._low_level_terminals = f["low_level_terminals"][:]
+        replay_buffer._low_level_float_observations = f["low_level_float_observations"][
+            : replay_buffer._size
+        ]
+        replay_buffer._low_level_actions = f["low_level_actions"][: replay_buffer._size]
+        replay_buffer._high_level_actions = f["high_level_actions"][
+            : replay_buffer._size
+        ]
+        replay_buffer._low_level_rewards = f["low_level_rewards"][: replay_buffer._size]
+        replay_buffer._low_level_terminals = f["low_level_terminals"][
+            : replay_buffer._size
+        ]
         f.close()
 
         return replay_buffer

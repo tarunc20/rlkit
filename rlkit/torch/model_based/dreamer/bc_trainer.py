@@ -83,6 +83,7 @@ class BCTrainer(TorchTrainer, LossFunction):
         ).item()
         eval_statistics["Policy Loss"] = loss.item()
         eval_statistics["Predicted Actions Mean"] = action_preds.mean().item()
+        eval_statistics["Predicted Actions Max"] = action_preds.abs().max().item()
         eval_statistics["Actions Mean"] = actions.mean().item()
 
         with torch.no_grad():
@@ -98,6 +99,9 @@ class BCTrainer(TorchTrainer, LossFunction):
             eval_statistics[
                 "Valid Predicted Actions Mean"
             ] = valid_action_preds.mean().item()
+            eval_statistics["Valid Predicted Actions Mean"] = (
+                valid_action_preds.abs().mean().item()
+            )
             eval_statistics["Valid Actions Mean"] = valid_actions.mean().item()
 
         print(f"Policy Loss: {loss.item()}")

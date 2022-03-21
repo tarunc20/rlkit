@@ -27,7 +27,7 @@ if __name__ == "__main__":
         )
     else:
         algorithm_kwargs = dict(
-            num_epochs=250,
+            num_epochs=1000,
             num_eval_steps_per_epoch=60,
             min_num_steps_before_training=10000,
             num_pretrain_steps=0,
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=256,
             primitive_model_num_pretrain_steps=0,
-            primitive_model_num_trains_per_train_loop=100,
+            primitive_model_num_trains_per_train_loop=1,
         )
     variant = dict(
         algorithm="MultiTaskMultiManagerRAPS",
@@ -137,12 +137,12 @@ if __name__ == "__main__":
                 input_height=64,
                 input_channels=3,
                 kernel_sizes=[4] * 4,
-                n_channels=[16, 16 * 2, 16 * 4, 16 * 8],
+                n_channels=[8, 8 * 2, 8 * 4, 8 * 8],
                 strides=[2] * 4,
                 paddings=[0] * 4,
             ),
             state_encoder_args=(),
-            state_encoder_kwargs=dict(hidden_sizes=[64, 64, 64], output_size=64),
+            state_encoder_kwargs=dict(hidden_sizes=[256, 128], output_size=64),
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
@@ -159,7 +159,7 @@ if __name__ == "__main__":
         num_steps=5,
         collect_data_using_primitive_model=False,
         train_primitive_model=True,
-        save_video=True,
+        save_video=False,
         primitive_learning_algorithm="gcsl",
     )
 
