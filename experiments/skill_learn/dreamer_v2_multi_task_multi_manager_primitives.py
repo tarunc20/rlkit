@@ -21,7 +21,7 @@ if __name__ == "__main__":
             batch_size=417,
         )
         primitive_model_algorithm_kwargs = dict(
-            primitive_model_batch_size=256,
+            primitive_model_batch_size=512,
             primitive_model_num_pretrain_steps=100,
             primitive_model_num_trains_per_train_loop=50,
         )
@@ -37,7 +37,7 @@ if __name__ == "__main__":
             num_trains_per_train_loop=0,
         )
         primitive_model_algorithm_kwargs = dict(
-            primitive_model_batch_size=256,
+            primitive_model_batch_size=512,
             primitive_model_num_pretrain_steps=0,
             primitive_model_num_trains_per_train_loop=1,
         )
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
-            policy_lr=1e-3,
+            policy_lr=1e-4,
         ),
         primitive_model_algorithm_kwargs=primitive_model_algorithm_kwargs,
         primitive_model_trainer_kwargs=dict(
