@@ -900,7 +900,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 (
                     self.primitives_info["low_level_float_obs"][-1],
                     self.processed_high_level_action,
-                    [1 / (sample_step + 1)],
+                    [(sample_step + 1) / (self.num_low_level_actions_per_primitive)],
                 )
             )
             inputs = np.concatenate((observation, action))
@@ -1099,7 +1099,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.high_level_action[
                 : self.num_primitives
             ] = self.processed_high_level_action[
-                self.num_primitives
+                : self.num_primitives
             ]  # in case there was re-mapping
         else:
             self.processed_high_level_action = np.zeros_like(self.high_level_action)
