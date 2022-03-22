@@ -273,7 +273,11 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         primitive_to_model=None,
         relabel_high_level_actions=False,
         split_top_grasp=False,
+        axis_misalignment_threshold=0.1,
+        remap_primitives=False,
     ):
+        self.axis_misalignment_threshold = axis_misalignment_threshold
+        self.remap_primitives = remap_primitives
         self.split_top_grasp = split_top_grasp
         self.relabel_high_level_actions = relabel_high_level_actions
         self.primitive_to_model = primitive_to_model
@@ -656,7 +660,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         if self.control_mode == "primitives":
             if self.collect_primitives_info:
                 info.update(self.primitives_info)
-            info["relabel_distance"] = self.relabel_distance
+            info["axis misalignment error"] = self.axis_misalignment_error
             info["num low level steps"] = (
                 self._num_low_level_steps_total // self.frame_skip
             )
@@ -1011,51 +1015,37 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             : self.num_primitives
         ] = self.high_level_action[: self.num_primitives]
         if self.primitive_name == "move_along_x":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[0] - self.pre_action_pos[0])
             self.processed_high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
             ] = (self.get_endeff_pos()[0] - self.pre_action_pos[0])
-        elif self.primitive_name == "move_along_y":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[1] - self.pre_action_pos[1])
-            self.processed_high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[1] - self.pre_action_pos[1])
-        elif self.primitive_name == "move_along_z":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[2] - self.pre_action_pos[2])
-            self.processed_high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[2] - self.pre_action_pos[2])
-        elif self.primitive_name == "move_delta_ee":
-            self.high_level_action[
-                self.num_primitives
-                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-            ] = (self.get_endeff_pos() - self.pre_action_pos)
-            self.processed_high_level_action[
-                self.num_primitives
-                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-            ] = (self.get_endeff_pos() - self.pre_action_pos)
-        elif self.primitive_name == "top_x_y_grasp":
-            self.high_level_action[
-                self.num_primitives
-                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-            ] = np.concatenate(
-                (
-                    self.get_endeff_pos() - self.pre_action_pos,
-                    [(self.get_gripper_pos() - 0.065) / 0.035],
-                )
+            self.axis_misalignment_error = np.linalg.norm(
+                self.get_endeff_pos()[1:] - self.pre_action_pos[1:]
             )
+        elif self.primitive_name == "move_along_y":
+            self.processed_high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = (self.get_endeff_pos()[1] - self.pre_action_pos[1])
+            self.axis_misalignment_error = np.linalg.norm(
+                np.array((self.get_endeff_pos()[0], self.get_endeff_pos()[2]))
+                - np.array((self.pre_action_pos[0], self.pre_action_pos[2]))
+            )
+        elif self.primitive_name == "move_along_z":
+            self.processed_high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ] = (self.get_endeff_pos()[2] - self.pre_action_pos[2])
+            self.axis_misalignment_error = np.linalg.norm(
+                self.get_endeff_pos()[:-1] - self.pre_action_pos[:-1]
+            )
+        elif self.primitive_name == "move_delta_ee":
+            self.processed_high_level_action[
+                self.num_primitives
+                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+            ] = (self.get_endeff_pos() - self.pre_action_pos)
+            self.axis_misalignment_error = 0
+        elif self.primitive_name == "top_x_y_grasp":
             self.processed_high_level_action[
                 self.num_primitives
                 + np.array(self.primitive_name_to_action_idx[self.primitive_name])
@@ -1066,17 +1056,52 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 )
             )
         elif self.primitive_name == "move_gripper":
-            self.high_level_action[
-                self.num_primitives
-                + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_gripper_pos() - 0.065) / 0.035
             self.processed_high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
             ] = (self.get_gripper_pos() - 0.065) / 0.035
-        self.relabel_distance = np.linalg.norm(self.high_level_action - self.old_hl)
-        if not self.relabel_high_level_actions:
-            self.high_level_action = self.old_hl
+            self.axis_misalignment_error = 0
+
+        if self.primitive_name in ["move_along_x", "move_along_y", "move_along_z"]:
+            if (
+                self.remap_primitives
+                and self.axis_misalignment_error > self.axis_misalignment_threshold
+            ):
+                self.processed_high_level_action = np.zeros_like(self.high_level_action)
+                self.processed_high_level_action[: self.num_primitives] = np.eye(
+                    self.num_primitives
+                )[
+                    0
+                ]  # set primitive selection to move_delta_ee
+                self.processed_high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx["move_delta_ee"])
+                ] = (self.get_endeff_pos() - self.pre_action_pos)
+                self.axis_misalignment_error = 0
+
+        if self.relabel_high_level_actions:
+            if self.primitive_name == "move_delta_ee":
+                self.high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+                ] = self.processed_high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+                ]
+            else:
+                self.high_level_action[
+                    self.num_primitives
+                    + self.primitive_name_to_action_idx[self.primitive_name]
+                ] = self.processed_high_level_action[
+                    self.num_primitives
+                    + self.primitive_name_to_action_idx[self.primitive_name]
+                ]
+            self.high_level_action[
+                : self.num_primitives
+            ] = self.processed_high_level_action[
+                self.num_primitives
+            ]  # in case there was re-mapping
+        else:
             self.processed_high_level_action = np.zeros_like(self.high_level_action)
             self.processed_high_level_action[
                 : self.num_primitives
@@ -1097,8 +1122,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     self.num_primitives
                     + self.primitive_name_to_action_idx[self.primitive_name]
                 ]
-        else:
-            self.high_level_action = self.old_hl
         return action
 
     def move_gripper(self, d, target=None, iterations=None):

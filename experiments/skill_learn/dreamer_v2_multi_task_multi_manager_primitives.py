@@ -27,7 +27,7 @@ if __name__ == "__main__":
         )
     else:
         algorithm_kwargs = dict(
-            num_epochs=250,
+            num_epochs=100,
             num_eval_steps_per_epoch=60,
             min_num_steps_before_training=10000,
             num_pretrain_steps=100,
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=512,
             primitive_model_num_pretrain_steps=10000,
-            primitive_model_num_trains_per_train_loop=100,
+            primitive_model_num_trains_per_train_loop=10000,
         )
     variant = dict(
         algorithm="MultiTaskMultiManagerRAPS",
@@ -76,7 +76,10 @@ if __name__ == "__main__":
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
                 low_level_reward_type="none",
-                relabel_high_level_actions=False,
+                relabel_high_level_actions=True,
+                remap_primitives=True,
+                goto_pose_iterations=100,
+                axis_misalignment_threshold=0.01,
             ),
         ),
         actor_kwargs=dict(
@@ -127,7 +130,7 @@ if __name__ == "__main__":
         num_eval_envs=1,
         expl_amount=0.3,
         max_path_length=5,
-        num_low_level_actions_per_primitive=5,
+        num_low_level_actions_per_primitive=100,
         low_level_action_dim=5,
         primitive_model_kwargs=dict(
             image_encoder_args=(),
@@ -145,7 +148,7 @@ if __name__ == "__main__":
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
-            scale=15,
+            scale=1,
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
@@ -156,8 +159,8 @@ if __name__ == "__main__":
             policy_lr=1e-4,
         ),
         num_steps=5,
-        collect_data_using_primitive_model=False,
-        train_primitive_model=False,
+        collect_data_using_primitive_model=True,
+        train_primitive_model=True,
         save_video=True,
         primitive_learning_algorithm="gcsl",
         freeze_point=None,
