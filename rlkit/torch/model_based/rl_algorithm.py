@@ -501,7 +501,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             gt.stamp("saving")
             self._log_stats(epoch)
 
-            # self.manager._end_epoch(epoch)
+            self.manager._end_epoch(epoch)
             self.manager.save(logger.get_snapshot_dir())
 
             if self.primitive_learning_algorithm == "gcsl":
@@ -531,7 +531,7 @@ class MultiManagerBatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
     def _log_stats(self, epoch):
         logger.log(f"Epoch {epoch} finished", with_timestamp=True)
 
-        # self.manager._log_stats()
+        self.manager._log_stats()
 
         logger.record_dict(
             self.primitive_model_pretrain_trainer.get_diagnostics(),

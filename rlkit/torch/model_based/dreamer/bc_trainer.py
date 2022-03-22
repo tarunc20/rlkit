@@ -39,8 +39,6 @@ class BCTrainer(TorchTrainer, LossFunction):
         self._need_to_update_eval_statistics = True
         self.eval_statistics = OrderedDict()
         self.scaler = torch.cuda.amp.GradScaler()
-        self.train_losses = []
-        self.valid_losses = []
         self.valid_buffer = valid_buffer
 
     def train_from_torch(self, batch):
@@ -86,38 +84,41 @@ class BCTrainer(TorchTrainer, LossFunction):
         eval_statistics["Predicted Actions Max"] = action_preds.abs().max().item()
         eval_statistics["Actions Mean"] = actions.mean().item()
 
-        with torch.no_grad():
-            valid_batch = self.valid_buffer.random_batch(actions.shape[0] * 16)
-            valid_obs = ptu.from_numpy(valid_batch["observations"])
-            valid_actions = ptu.from_numpy(valid_batch["actions"])
-            valid_action_preds = self.policy(valid_obs)
-            valid_loss = self.policy_criterion(valid_action_preds, valid_actions)
-            eval_statistics["Valid Policy MSE"] = self.policy_criterion(
-                valid_action_preds, valid_actions
-            ).item()
-            eval_statistics["Valid Policy Loss"] = valid_loss.item()
-            eval_statistics[
-                "Valid Predicted Actions Mean"
-            ] = valid_action_preds.mean().item()
-            eval_statistics["Valid Predicted Actions Mean"] = (
-                valid_action_preds.abs().mean().item()
-            )
-            eval_statistics["Valid Actions Mean"] = valid_actions.mean().item()
-
         print(f"Policy Loss: {loss.item()}")
         print(f"Policy MSE: {eval_statistics['Policy MSE']}")
         print(f"Predicted Actions Max {action_preds.abs().max().item()}")
         print(f"Actions Max {actions.abs().max().item()}")
         print()
 
-        print(f"Valid Policy Loss: {valid_loss.item()}")
-        print(f"Valid Policy MSE: {eval_statistics['Valid Policy MSE']}")
-        print(f"Valid Predicted Actions Max {valid_action_preds.abs().max().item()}")
-        print(f"Valid Actions Max {valid_actions.abs().max().item()}")
-        print()
+        with torch.no_grad():
+            if self.valid_buffer:
+                valid_batch = self.valid_buffer.random_batch(actions.shape[0] * 16)
+                valid_obs = ptu.from_numpy(valid_batch["observations"])
+                valid_actions = ptu.from_numpy(valid_batch["actions"])
+                valid_action_preds = self.policy(valid_obs)
+                valid_loss = self.policy_criterion(valid_action_preds, valid_actions)
+                eval_statistics["Valid Policy MSE"] = self.policy_criterion(
+                    valid_action_preds, valid_actions
+                ).item()
+                eval_statistics["Valid Policy Loss"] = valid_loss.item()
+                eval_statistics[
+                    "Valid Predicted Actions Mean"
+                ] = valid_action_preds.mean().item()
+                eval_statistics["Valid Predicted Actions Mean"] = (
+                    valid_action_preds.abs().mean().item()
+                )
+                eval_statistics["Valid Actions Mean"] = valid_actions.mean().item()
+                eval_statistics["Valid Predicted Actions Max"] = (
+                    valid_action_preds.abs().max().item()
+                )
 
-        self.train_losses.append(loss.item())
-        self.valid_losses.append(valid_loss.item())
+                print(f"Valid Policy Loss: {valid_loss.item()}")
+                print(f"Valid Policy MSE: {eval_statistics['Valid Policy MSE']}")
+                print(
+                    f"Valid Predicted Actions Max {valid_action_preds.abs().max().item()}"
+                )
+                print(f"Valid Actions Max {valid_actions.abs().max().item()}")
+                print()
 
         loss = BCLosses(
             policy_loss=loss,
@@ -131,14 +132,6 @@ class BCTrainer(TorchTrainer, LossFunction):
 
     def end_epoch(self, epoch):
         self._need_to_update_eval_statistics = True
-        plt.plot(self.train_losses, label="train")
-        plt.plot(self.valid_losses, label="valid")
-        plt.xlabel("Iteration")
-        plt.ylabel("Loss")
-        plt.legend()
-        plt.savefig(os.path.join(logger.get_snapshot_dir(), "losses.png"))
-        print("saved losses.png")
-        plt.clf()
 
     @property
     def networks(self):
