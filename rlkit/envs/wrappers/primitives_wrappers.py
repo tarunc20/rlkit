@@ -877,6 +877,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
             ]
+        action_errors = 0
         for sample_step in range(self.num_low_level_actions_per_primitive):
             self.primitives_info["low_level_float_obs"].append(
                 np.concatenate((self.get_endeff_pos(), [self.get_gripper_pos()]))
@@ -903,6 +904,11 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 np.expand_dims(inputs, 0)
             )
             low_level_action *= self.primitive_model.scale
+            true_action = compute_action()
+            true_action = np.concatenate(
+                (true_action[:3] * self.pos_ctrl_action_scale, true_action[-2:])
+            )
+            action_errors += np.linalg.norm(low_level_action - true_action) ** 2
             t = self.get_endeff_pos() + low_level_action[:3]
             for step in range(num_subsample_steps):
                 a = (t - self.get_endeff_pos()) / num_subsample_steps
@@ -948,6 +954,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitives_info["low_level_terminal"].append(0)
         self.primitives_info["low_level_float_obs"].append(
             np.concatenate((self.get_endeff_pos(), [self.get_gripper_pos()]))
+        )
+        self.primitives_info["action_execution_error"] = (
+            action_errors / self.num_low_level_actions_per_primitive
         )
         return low_level_action
 

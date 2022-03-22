@@ -49,16 +49,19 @@ def experiment(variant):
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
+        "output_activation"
+    ] = nn.ELU()
+    variant["primitive_model_kwargs"]["image_encoder_kwargs"][
         "hidden_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["image_encoder_kwargs"][
         "output_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "hidden_activation"
-    ] = nn.ReLU
+    ] = nn.ELU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "output_activation"
     ] = nn.Tanh()
@@ -254,6 +257,21 @@ def experiment(variant):
         action_dim,
         **variant["primitive_model_replay_buffer_kwargs"],
     )
+    if variant["env_kwargs"]["action_space_kwargs"]["relabel_high_level_actions"]:
+        valid_primitive_model_buffer = None
+    else:
+        valid_primitive_model_buffer = EpisodeReplayBufferSkillLearn(
+            variant["num_expl_envs"],
+            obs_dim,
+            action_dim,
+            **variant["primitive_model_replay_buffer_kwargs"],
+        )
+        valid_primitive_model_buffer_new = valid_primitive_model_buffer.load(
+            "/home/mdalal/research/skill_learn/rlkit/data/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
+            "replay_buffer.pkl",
+        )
+        del valid_primitive_model_buffer
+        valid_primitive_model_buffer = valid_primitive_model_buffer_new
     vec_manager.set_primitive_model_buffer(primitive_model_buffer)
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
@@ -263,7 +281,9 @@ def experiment(variant):
     if variant["primitive_learning_algorithm"] == "gcsl":
         policy = CNNMLP(**variant["primitive_model_kwargs"])
         primitive_model_trainer = BCTrainer(
-            policy, **variant["primitive_model_pretrain_trainer_kwargs"]
+            policy,
+            **variant["primitive_model_pretrain_trainer_kwargs"],
+            valid_buffer=valid_primitive_model_buffer,
         )
         rollouts = None
     elif variant["algorithm_kwargs"]["primitive_learning_algorithm"] == "ppo":
@@ -286,7 +306,9 @@ def experiment(variant):
     policy.to(ptu.device)
 
     primitive_model_pretrain_trainer = BCTrainer(
-        policy, **variant["primitive_model_pretrain_trainer_kwargs"]
+        policy,
+        **variant["primitive_model_pretrain_trainer_kwargs"],
+        valid_buffer=valid_primitive_model_buffer,
     )
 
     algorithm = TorchMultiManagerBatchRLAlgorithm(

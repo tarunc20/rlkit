@@ -21,7 +21,7 @@ if __name__ == "__main__":
             batch_size=417,
         )
         primitive_model_algorithm_kwargs = dict(
-            primitive_model_batch_size=256,
+            primitive_model_batch_size=512,
             primitive_model_num_pretrain_steps=100,
             primitive_model_num_trains_per_train_loop=50,
         )
@@ -37,8 +37,8 @@ if __name__ == "__main__":
             num_trains_per_train_loop=20,
         )
         primitive_model_algorithm_kwargs = dict(
-            primitive_model_batch_size=256,
-            primitive_model_num_pretrain_steps=5000,
+            primitive_model_batch_size=512,
+            primitive_model_num_pretrain_steps=10000,
             primitive_model_num_trains_per_train_loop=100,
         )
     variant = dict(
@@ -136,12 +136,12 @@ if __name__ == "__main__":
                 input_height=64,
                 input_channels=3,
                 kernel_sizes=[4] * 4,
-                n_channels=[16, 16 * 2, 16 * 4, 16 * 8],
+                n_channels=[8, 8 * 2, 8 * 4, 8 * 8],
                 strides=[2] * 4,
                 paddings=[0] * 4,
             ),
             state_encoder_args=(),
-            state_encoder_kwargs=dict(hidden_sizes=[64, 64, 64], output_size=64),
+            state_encoder_kwargs=dict(hidden_sizes=[256, 128], output_size=64),
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
-            policy_lr=1e-3,
+            policy_lr=1e-4,
         ),
         primitive_model_algorithm_kwargs=primitive_model_algorithm_kwargs,
         primitive_model_trainer_kwargs=dict(
