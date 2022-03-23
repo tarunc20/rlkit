@@ -14,16 +14,16 @@ if __name__ == "__main__":
             num_epochs=5,
             num_eval_steps_per_epoch=5,
             num_expl_steps_per_train_loop=3 * 5,
-            min_num_steps_before_training=0,
-            num_pretrain_steps=0,
+            min_num_steps_before_training=100,
+            num_pretrain_steps=1,
             num_train_loops_per_epoch=1,
             num_trains_per_train_loop=1,
             batch_size=417,
         )
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=512,
-            primitive_model_num_pretrain_steps=0,
-            primitive_model_num_trains_per_train_loop=1000,
+            primitive_model_num_pretrain_steps=100,
+            primitive_model_num_trains_per_train_loop=50,
         )
     else:
         algorithm_kwargs = dict(
@@ -76,7 +76,7 @@ if __name__ == "__main__":
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
                 low_level_reward_type="none",
-                relabel_high_level_actions=False,
+                relabel_high_level_actions=True,
                 remap_primitives=False,
                 goto_pose_iterations=100,
                 axis_misalignment_threshold=0.01,
@@ -148,7 +148,7 @@ if __name__ == "__main__":
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
-            scale=2,
+            scale=5,
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(

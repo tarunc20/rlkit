@@ -286,7 +286,7 @@ def vec_rollout_skill_learn(
             (one_hots, high_level_action[:, num_primitives:]), axis=-1
         )
 
-        high_level_obs, reward, done, info = env.step(high_level_action)
+        policy_obs, reward, done, info = env.step(high_level_action)
 
         observations.append(high_level_obs)
         rewards.append(reward)
@@ -319,12 +319,9 @@ def vec_rollout_skill_learn(
             step * num_envs : (step + 1) * num_envs
         ] = low_level_float_obs
 
-        high_level_action = np.repeat(
-            np.array(processed_high_level_action).reshape(num_envs, 1, -1),
-            num_low_level_actions_per_primitive,
-            axis=1,
-        )
-        high_level_actions[step * num_envs : (step + 1) * num_envs] = high_level_action
+        high_level_actions[
+            step * num_envs : (step + 1) * num_envs
+        ] = processed_high_level_action
 
         low_level_rewards[step * num_envs : (step + 1) * num_envs] = np.expand_dims(
             low_level_reward, -1
@@ -336,7 +333,6 @@ def vec_rollout_skill_learn(
 
         if done.all():
             break
-        policy_obs = high_level_obs
     rewards = np.array(rewards)
     actions = np.array(actions)
     observations = np.array(observations)

@@ -480,9 +480,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.act(action)
             self.primitives_info["low_level_terminal"][-1] = 1
             self.primitives_info["high_level_action"] = self.high_level_action
-            self.primitives_info[
-                "processed_high_level_action"
-            ] = self.processed_high_level_action
+            self.primitives_info["processed_high_level_action"] = [
+                self.processed_high_level_action
+            ] * len(self.primitives_info["low_level_action"])
 
         self.curr_path_length += 1
 
@@ -758,15 +758,14 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 ] = (self.get_endeff_pos() - self.pre_action_pos)
                 self.axis_misalignment_error = 0
 
-    @torch.cuda.amp.autocast()
     @torch.no_grad()
     def execute_primitive(self, compute_action, num_iterations, target):
         self.compute_processed_hl()
         for step in range(num_iterations):
             float_obs = np.concatenate(
                 (
-                    self.get_endeff_pos(),
-                    [self.get_gripper_pos(), step + 1 / (num_iterations)],
+                    self.get_endeff_pos().copy(),
+                    [self.get_gripper_pos(), (step + 1) / (num_iterations)],
                 )
             )
             observation = (
@@ -777,12 +776,12 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 )
                 .transpose(2, 0, 1)
                 .flatten()
-            )
+            ).astype(np.float32)
             inputs = np.concatenate(
                 (observation, float_obs, self.processed_high_level_action)
             )
             if self.use_primitive_model:
-                low_level_action_pred = self.primitive_model.get_action(inputs)
+                low_level_action_pred = self.primitive_model.get_action(inputs)[0]
                 low_level_action_pred *= self.primitive_model.scale
                 action = np.concatenate(
                     (
@@ -791,76 +790,68 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     )
                 )
                 action_to_save = low_level_action_pred / self.primitive_model.scale
-                new_action = self.primitive_model.get_action(inputs)
-                assert (action_to_save == new_action).all(), (
-                    self.processed_high_level_action,
-                    action_to_save,
-                    new_action,
-                )
             else:
                 action = compute_action()
                 action_to_save = (
                     np.concatenate((action[:3], action[-2:]))
                     / self.primitive_model.scale
                 )
-            assert np.abs(action_to_save).max() < 1.0, self.primitive_name
+            assert np.abs(action_to_save).max() < 1.0, (self.primitive_name, action)
             self._set_action(action)
             self.sim.step()
             self.call_render_every_step()
             self._num_low_level_steps_total += 1
-            self.primitives_info["low_level_obs"].append(observation)
+            self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
             self.primitives_info["low_level_float_obs"].append(float_obs)
             self.primitives_info["low_level_reward"].append(0)
             self.primitives_info["low_level_terminal"].append(0)
             self.primitives_info["low_level_action"].append(action_to_save)
             self.prev_low_level_action = action
-        self.axis_misalignment_error = 0
+        self.compute_relabelled_hl()
 
-        # self.compute_relabelled_hl()
-
-        # if self.relabel_high_level_actions:
-        #     if self.primitive_name == "move_delta_ee":
-        #         self.high_level_action[
-        #             self.num_primitives
-        #             + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-        #         ] = self.processed_high_level_action[
-        #             self.num_primitives
-        #             + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-        #         ]
-        #     else:
-        #         self.high_level_action[
-        #             self.num_primitives
-        #             + self.primitive_name_to_action_idx[self.primitive_name]
-        #         ] = self.processed_high_level_action[
-        #             self.num_primitives
-        #             + self.primitive_name_to_action_idx[self.primitive_name]
-        #         ]
-        #     self.high_level_action[
-        #         : self.num_primitives
-        #     ] = self.processed_high_level_action[
-        #         : self.num_primitives
-        #     ]  # in case there was re-mapping
-        # else:
-        #     self.processed_high_level_action = np.zeros_like(self.high_level_action)
-        #     self.processed_high_level_action[
-        #         : self.num_primitives
-        #     ] = self.high_level_action[: self.num_primitives]
-        #     if self.primitive_name == "move_delta_ee":
-        #         self.processed_high_level_action[
-        #             self.num_primitives
-        #             + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-        #         ] = self.high_level_action[
-        #             self.num_primitives
-        #             + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-        #         ]
-        #     else:
-        #         self.processed_high_level_action[
-        #             self.num_primitives
-        #             + self.primitive_name_to_action_idx[self.primitive_name]
-        #         ] = self.high_level_action[
-        #             self.num_primitives
-        #             + self.primitive_name_to_action_idx[self.primitive_name]
-        #         ]
+        if self.relabel_high_level_actions:
+            if self.primitive_name == "move_delta_ee":
+                self.high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+                ] = self.processed_high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+                ]
+            else:
+                self.high_level_action[
+                    self.num_primitives
+                    + self.primitive_name_to_action_idx[self.primitive_name]
+                ] = self.processed_high_level_action[
+                    self.num_primitives
+                    + self.primitive_name_to_action_idx[self.primitive_name]
+                ]
+            self.high_level_action[
+                : self.num_primitives
+            ] = self.processed_high_level_action[
+                : self.num_primitives
+            ]  # in case there was re-mapping
+        else:
+            self.processed_high_level_action = np.zeros_like(self.high_level_action)
+            self.processed_high_level_action[
+                : self.num_primitives
+            ] = self.high_level_action[: self.num_primitives]
+            if self.primitive_name == "move_delta_ee":
+                self.processed_high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+                ] = self.high_level_action[
+                    self.num_primitives
+                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+                ]
+            else:
+                self.processed_high_level_action[
+                    self.num_primitives
+                    + self.primitive_name_to_action_idx[self.primitive_name]
+                ] = self.high_level_action[
+                    self.num_primitives
+                    + self.primitive_name_to_action_idx[self.primitive_name]
+                ]
         return action
 
     def move_gripper(self, d, target=None, iterations=None):

@@ -38,10 +38,10 @@ class BCTrainer(TorchTrainer, LossFunction):
         self._n_train_steps_total = 0
         self._need_to_update_eval_statistics = True
         self.eval_statistics = OrderedDict()
-        self.scaler = torch.cuda.amp.GradScaler()
         self.valid_buffer = valid_buffer
 
     def train_from_torch(self, batch):
+        self.policy_optimizer.zero_grad(set_to_none=True)
         losses, stats = self.compute_loss(
             batch,
             skip_statistics=not self._need_to_update_eval_statistics,
@@ -49,15 +49,13 @@ class BCTrainer(TorchTrainer, LossFunction):
         """
         Update networks
         """
-        # self.scaler.scale(losses.policy_loss).backward()
-        # update_network(self.policy, self.policy_optimizer, 0, self.scaler)
-        # self.scaler.update()
+        losses.policy_loss.backward()
+        self.policy_optimizer.step()
 
         self._n_train_steps_total += 1
 
         self.eval_statistics = stats
 
-    @torch.cuda.amp.autocast()
     def compute_loss(
         self,
         batch,
@@ -65,18 +63,10 @@ class BCTrainer(TorchTrainer, LossFunction):
     ) -> Tuple[BCLosses, LossStatistics]:
         obs = batch["observations"]
         actions = batch["actions"]
-        import ipdb
-
-        ipdb.set_trace()
         """
         Policy Loss
         """
-        # action_dist = self.policy.get_dist(
-        #     obs, torch.zeros_like(obs), torch.zeros_like(obs)
-        # )
-        # loss = -1 * action_dist.log_prob(actions).mean()
         action_preds = self.policy(obs)
-        print((action_preds == actions).all())
         loss = self.policy_criterion(action_preds, actions)
         eval_statistics = OrderedDict()
         eval_statistics["Policy MSE"] = self.policy_criterion(
