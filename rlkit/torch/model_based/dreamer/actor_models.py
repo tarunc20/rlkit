@@ -86,8 +86,8 @@ class ActorModel(Mlp):
             if len(split) == 2:
                 discrete_logits, continuous_action_mean = split
             else:
-                discrete_logits, continuous_action_mean, extra = split
-                continuous_action_mean = torch.cat((continuous_action_mean, extra), -1)
+                discrete_logits = split[0]
+                continuous_action_mean = torch.cat(split[1:], dim=-1)
             dist1 = OneHotDist(logits=discrete_logits)
             dist2 = self.get_continuous_dist(
                 continuous_action_mean, continuous_action_std

@@ -7,6 +7,7 @@ import torch
 from d4rl.kitchen.adept_envs.simulation.renderer import DMRenderer
 from gym import spaces
 from gym.spaces.box import Box
+from matplotlib import pyplot as plt
 from metaworld.envs.mujoco.mujoco_env import _assert_task_is_set
 from metaworld.envs.mujoco.sawyer_xyz.sawyer_xyz_env import SawyerXYZEnv
 from robosuite.wrappers.gym_wrapper import GymWrapper
@@ -275,7 +276,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         split_top_grasp=False,
         axis_misalignment_threshold=0.1,
         remap_primitives=False,
+        exploration_noise=0,
     ):
+        self.exploration_noise = exploration_noise
         self.axis_misalignment_threshold = axis_misalignment_threshold
         self.remap_primitives = remap_primitives
         self.split_top_grasp = split_top_grasp
@@ -358,36 +361,36 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.primitive_idx_to_name = {
             0: "move_delta_ee",
             # 1: "top_x_y_grasp",
-            1: "move_along_x",
-            2: "move_along_y",
-            3: "move_along_z",
-            4: "move_gripper",
+            # 1: "move_along_x",
+            # 2: "move_along_y",
+            # 3: "move_along_z",
+            # 4: "move_gripper",
         }
         self.primitive_idx_to_num_low_level_steps = {
             0: goto_pose_iterations,
             # 1: goto_pose_iterations * 4,
-            1: goto_pose_iterations,
-            2: goto_pose_iterations,
-            3: goto_pose_iterations,
-            4: goto_pose_iterations,
+            # 1: goto_pose_iterations,
+            # 2: goto_pose_iterations,
+            # 3: goto_pose_iterations,
+            # 4: goto_pose_iterations,
         }
         self.primitive_name_to_func = dict(
             move_delta_ee=self.move_delta_ee,
             # top_x_y_grasp=self.top_x_y_grasp,
-            move_along_x=self.move_along_x,
-            move_along_y=self.move_along_y,
-            move_along_z=self.move_along_z,
-            move_gripper=self.move_gripper,
+            # move_along_x=self.move_along_x,
+            # move_along_y=self.move_along_y,
+            # move_along_z=self.move_along_z,
+            # move_gripper=self.move_gripper,
         )
         self.primitive_name_to_action_idx = dict(
             move_delta_ee=[0, 1, 2],
             # top_x_y_grasp=[3, 4, 5, 6],
-            move_along_x=3,
-            move_along_y=4,
-            move_along_z=5,
-            move_gripper=6,
+            # move_along_x=3,
+            # move_along_y=4,
+            # move_along_z=5,
+            # move_gripper=6,
         )
-        self.max_arg_len = 7
+        self.max_arg_len = 3
         self.num_primitives = len(self.primitive_name_to_func)
         self.control_mode = control_mode
         if self.control_mode == "primitives":
@@ -586,7 +589,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         action = np.concatenate([pos_ctrl, rot_ctrl])
         # Apply action to simulation.
         self.mocap_set_action(self.sim, action)
-        self.ctrl_set_action(self.sim, gripper_ctrl)
+        # self.ctrl_set_action(self.sim, gripper_ctrl)q
 
     def low_level_step(self, action, render_obs=False):
         self.mocap_set_action(self.sim, action[:7])
@@ -689,10 +692,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ]
 
     def compute_relabelled_hl(self):
-        self.processed_high_level_action = np.zeros_like(self.high_level_action)
-        self.processed_high_level_action[
-            : self.num_primitives
-        ] = self.high_level_action[: self.num_primitives]
         if self.primitive_name == "move_along_x":
             self.processed_high_level_action[
                 self.num_primitives
@@ -782,17 +781,20 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 (observation, float_obs, self.processed_high_level_action)
             )
             if self.use_primitive_model:
-                low_level_action_pred = self.primitive_model.get_action(inputs)[0]
+                low_level_action_pred = self.primitive_model.get_action(inputs)[
+                    0
+                ] + np.random.normal(0, self.exploration_noise, 3)
+                low_level_action_pred = np.clip(low_level_action_pred, -1, 1)
                 action = np.concatenate(
                     (
                         low_level_action_pred[:3],
-                        np.array([1, 0, 1, 0, *low_level_action_pred[3:]]),
+                        np.array([1, 0, 1, 0, *compute_action()[-2:]]),
                     )
                 )
                 action_to_save = low_level_action_pred
             else:
                 action = np.clip(compute_action(), -1, 1)
-                action_to_save = np.concatenate((action[:3], action[-2:]))
+                action_to_save = action[:3]
             assert np.abs(action_to_save).max() <= 1.0, (self.primitive_name, action)
             self._set_action(action)
             self.sim.step()
@@ -804,9 +806,20 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitives_info["low_level_terminal"].append(0)
             self.primitives_info["low_level_action"].append(action_to_save)
             self.prev_low_level_action = action
-        self.compute_relabelled_hl()
-
         if self.relabel_high_level_actions:
+            old_processed_hl = self.processed_high_level_action.copy()
+            # Creating figure
+            fig = plt.figure(figsize=(10, 7))
+            ax = plt.axes(projection="3d")
+
+            # Creating plot
+            ax.scatter3D(old_processed_hl[-3:], color="green")
+            plt.title("simple 3D scatter plot")
+            self.compute_relabelled_hl()
+            print(self.processed_high_level_action - old_processed_hl)
+            print(old_processed_hl)
+            print(self.processed_high_level_action)
+            print()
             if self.primitive_name == "move_delta_ee":
                 self.high_level_action[
                     self.num_primitives
@@ -829,26 +842,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 : self.num_primitives
             ]  # in case there was re-mapping
         else:
-            self.processed_high_level_action = np.zeros_like(self.high_level_action)
-            self.processed_high_level_action[
-                : self.num_primitives
-            ] = self.high_level_action[: self.num_primitives]
-            if self.primitive_name == "move_delta_ee":
-                self.processed_high_level_action[
-                    self.num_primitives
-                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-                ] = self.high_level_action[
-                    self.num_primitives
-                    + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-                ]
-            else:
-                self.processed_high_level_action[
-                    self.num_primitives
-                    + self.primitive_name_to_action_idx[self.primitive_name]
-                ] = self.high_level_action[
-                    self.num_primitives
-                    + self.primitive_name_to_action_idx[self.primitive_name]
-                ]
+            self.axis_misalignment_error = 0
         return action
 
     def move_gripper(self, d, target=None, iterations=None):

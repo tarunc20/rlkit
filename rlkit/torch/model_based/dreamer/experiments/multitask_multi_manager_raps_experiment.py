@@ -82,6 +82,8 @@ def experiment(variant):
         env_suite = variant.get("env_suite", "kitchen")
         env_name = variant["env_names"][manager_idx]
         env_kwargs = variant["env_kwargs"]
+        expl_env_kwargs = env_kwargs.copy()
+        expl_env_kwargs["action_space_kwargs"]["exploration_noise"] = 0
         num_expl_envs = variant["num_expl_envs"]
         env_fns = [
             lambda: primitives_make_env.make_env(env_suite, env_name, env_kwargs)

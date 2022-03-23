@@ -72,16 +72,22 @@ class BCTrainer(TorchTrainer, LossFunction):
         eval_statistics["Policy MSE"] = self.policy_criterion(
             action_preds, actions
         ).item()
-        eval_statistics["Policy Loss"] = loss.item()
+        eval_statistics["Predicted Actions Abs Max"] = action_preds.abs().max().item()
+        eval_statistics["Predicted Actions Abs Mean"] = action_preds.abs().mean().item()
         eval_statistics["Predicted Actions Mean"] = action_preds.mean().item()
-        eval_statistics["Predicted Actions Max"] = action_preds.abs().max().item()
+        eval_statistics["Actions Abs Max"] = actions.abs().max().item()
+        eval_statistics["Actions Abs Mean"] = actions.abs().mean().item()
         eval_statistics["Actions Mean"] = actions.mean().item()
 
         print(self._n_train_steps_total)
-        print(f"Policy Loss: {loss.item()}")
         print(f"Policy MSE: {eval_statistics['Policy MSE']}")
-        print(f"Predicted Actions Max {action_preds.abs().max().item()}")
-        print(f"Actions Max {actions.abs().max().item()}")
+        print(f"Predicted Actions Abs Max {action_preds.abs().max().item()}")
+        print(f"Predicted Actions Abs Mean {action_preds.abs().mean().item()}")
+        print(f"Predicted Actions Mean {action_preds.mean().item()}")
+
+        print(f"Actions Abs Max {actions.abs().max().item()}")
+        print(f"Actions Abs Mean {actions.abs().mean().item()}")
+        print(f"Actions Mean {actions.mean().item()}")
         print()
 
         with torch.no_grad():
@@ -94,24 +100,37 @@ class BCTrainer(TorchTrainer, LossFunction):
                 eval_statistics["Valid Policy MSE"] = self.policy_criterion(
                     valid_action_preds, valid_actions
                 ).item()
-                eval_statistics["Valid Policy Loss"] = valid_loss.item()
+                eval_statistics["Valid Predicted Actions Abs Max"] = (
+                    valid_action_preds.abs().max().item()
+                )
+                eval_statistics["Valid Predicted Actions Abs Mean"] = (
+                    valid_action_preds.abs().mean().item()
+                )
                 eval_statistics[
                     "Valid Predicted Actions Mean"
                 ] = valid_action_preds.mean().item()
-                eval_statistics["Valid Predicted Actions Mean"] = (
-                    valid_action_preds.abs().mean().item()
-                )
-                eval_statistics["Valid Actions Mean"] = valid_actions.mean().item()
-                eval_statistics["Valid Predicted Actions Max"] = (
+                eval_statistics["Valid Predicted Actions Abs Max"] = (
                     valid_action_preds.abs().max().item()
                 )
+                eval_statistics[
+                    "Valid Actions Abs Mean"
+                ] = valid_actions.abs.mean().item()
+                eval_statistics["Valid Actions Mean"] = valid_actions.mean().item()
 
-                print(f"Valid Policy Loss: {valid_loss.item()}")
                 print(f"Valid Policy MSE: {eval_statistics['Valid Policy MSE']}")
                 print(
-                    f"Valid Predicted Actions Max {valid_action_preds.abs().max().item()}"
+                    f"Valid Predicted Actions Abs Max {valid_action_preds.abs().max().item()}"
                 )
-                print(f"Valid Actions Max {valid_actions.abs().max().item()}")
+                print(
+                    f"Valid Predicted Actions Abs Mean {valid_action_preds.abs().mean().item()}"
+                )
+                print(
+                    f"Valid Predicted Actions Mean {valid_action_preds.mean().item()}"
+                )
+
+                print(f"Valid Actions Abs Max {valid_actions.abs().max().item()}")
+                print(f"Valid Actions Abs Mean {valid_actions.abs().mean().item()}")
+                print(f"Valid Actions Mean {valid_actions.mean().item()}")
                 print()
 
         loss = BCLosses(
