@@ -796,7 +796,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                     np.concatenate((action[:3], action[-2:]))
                     / self.primitive_model.scale
                 )
-            assert np.abs(action_to_save).max() < 1.0, (self.primitive_name, action)
+            assert np.abs(action_to_save).max() <= 1.0, (self.primitive_name, action)
             self._set_action(action)
             self.sim.step()
             self.call_render_every_step()

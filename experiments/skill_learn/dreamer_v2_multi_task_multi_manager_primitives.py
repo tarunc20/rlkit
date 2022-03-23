@@ -148,7 +148,7 @@ if __name__ == "__main__":
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
-            scale=5,
+            scale=2,
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
