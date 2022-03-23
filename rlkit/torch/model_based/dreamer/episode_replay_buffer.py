@@ -413,7 +413,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self._low_level_observations = np.zeros(
             (
                 max_replay_buffer_size * max_path_length,
-                num_low_level_actions_per_primitive + 1,
+                num_low_level_actions_per_primitive,
                 observation_dim,
             ),
             dtype=np.uint8,
@@ -421,15 +421,15 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
         self._low_level_float_observations = np.zeros(
             (
                 max_replay_buffer_size * max_path_length,
-                num_low_level_actions_per_primitive + 1,
-                4,
+                num_low_level_actions_per_primitive,
+                5,
             ),
         )
         self._high_level_actions = np.zeros(
             (
                 max_replay_buffer_size * max_path_length,
                 num_low_level_actions_per_primitive,
-                action_dim + 1,
+                action_dim,
             )
         )
         self._low_level_actions = np.zeros(
@@ -523,14 +523,8 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
                 self.num_low_level_actions_per_primitive,
             ),
         )
-        low_level_observations = self._low_level_observations[:, :-1][unraveled_indices]
-        low_level_float_observations = self._low_level_float_observations[:, :-1][
-            unraveled_indices
-        ]
-        next_low_level_observations = self._low_level_observations[:, 1:][
-            unraveled_indices
-        ]
-        next_low_level_float_observations = self._low_level_float_observations[:, 1:][
+        low_level_observations = self._low_level_observations[unraveled_indices]
+        low_level_float_observations = self._low_level_float_observations[
             unraveled_indices
         ]
         high_level_actions = self._high_level_actions[unraveled_indices]
@@ -538,20 +532,11 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
             (low_level_observations, low_level_float_observations, high_level_actions),
             axis=-1,
         )
-        next_combined_observations = np.concatenate(
-            (
-                next_low_level_observations,
-                next_low_level_float_observations,
-                high_level_actions,
-            ),
-            axis=-1,
-        )
         low_level_actions = self._low_level_actions[unraveled_indices]
         rewards = self._low_level_rewards[unraveled_indices]
         terminals = self._low_level_terminals[unraveled_indices]
         batch = dict(
             observations=combined_observations,
-            next_observations=next_combined_observations,
             actions=low_level_actions,
             rewards=rewards,
             terminals=terminals,

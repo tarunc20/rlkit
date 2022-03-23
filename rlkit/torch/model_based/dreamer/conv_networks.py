@@ -227,7 +227,7 @@ class CNNMLP(jit.ScriptModule):
         if len(obs_np.shape) == 1:
             obs_np = obs_np.reshape(1, -1)
         actions = ptu.get_numpy(self.forward(ptu.from_numpy(obs_np)))
-        return actions[0, :], {}
+        return actions[0, :]
 
     def reset(self):
         pass

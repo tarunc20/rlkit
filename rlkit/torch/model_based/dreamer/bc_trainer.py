@@ -49,9 +49,9 @@ class BCTrainer(TorchTrainer, LossFunction):
         """
         Update networks
         """
-        self.scaler.scale(losses.policy_loss).backward()
-        update_network(self.policy, self.policy_optimizer, 0, self.scaler)
-        self.scaler.update()
+        # self.scaler.scale(losses.policy_loss).backward()
+        # update_network(self.policy, self.policy_optimizer, 0, self.scaler)
+        # self.scaler.update()
 
         self._n_train_steps_total += 1
 
@@ -65,7 +65,9 @@ class BCTrainer(TorchTrainer, LossFunction):
     ) -> Tuple[BCLosses, LossStatistics]:
         obs = batch["observations"]
         actions = batch["actions"]
+        import ipdb
 
+        ipdb.set_trace()
         """
         Policy Loss
         """
@@ -74,6 +76,7 @@ class BCTrainer(TorchTrainer, LossFunction):
         # )
         # loss = -1 * action_dist.log_prob(actions).mean()
         action_preds = self.policy(obs)
+        print((action_preds == actions).all())
         loss = self.policy_criterion(action_preds, actions)
         eval_statistics = OrderedDict()
         eval_statistics["Policy MSE"] = self.policy_criterion(
@@ -84,6 +87,7 @@ class BCTrainer(TorchTrainer, LossFunction):
         eval_statistics["Predicted Actions Max"] = action_preds.abs().max().item()
         eval_statistics["Actions Mean"] = actions.mean().item()
 
+        print(self._n_train_steps_total)
         print(f"Policy Loss: {loss.item()}")
         print(f"Policy MSE: {eval_statistics['Policy MSE']}")
         print(f"Predicted Actions Max {action_preds.abs().max().item()}")

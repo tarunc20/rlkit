@@ -49,19 +49,19 @@ def experiment(variant):
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "hidden_activation"
-    ] = nn.ELU
+    ] = nn.ReLU
     variant["primitive_model_kwargs"]["state_encoder_kwargs"][
         "output_activation"
-    ] = nn.ELU()
+    ] = nn.ReLU()
     variant["primitive_model_kwargs"]["image_encoder_kwargs"][
         "hidden_activation"
-    ] = nn.ELU
+    ] = nn.ReLU
     variant["primitive_model_kwargs"]["image_encoder_kwargs"][
         "output_activation"
-    ] = nn.ELU
+    ] = nn.ReLU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "hidden_activation"
-    ] = nn.ELU
+    ] = nn.ReLU
     variant["primitive_model_kwargs"]["joint_processor_kwargs"][
         "output_activation"
     ] = nn.Tanh()
@@ -130,7 +130,7 @@ def experiment(variant):
         actor = ActorModel(
             variant["model_kwargs"]["model_hidden_size"],
             world_model.feature_size,
-            hidden_activation=nn.ELU,
+            hidden_activation=nn.ReLU,
             discrete_action_dim=discrete_action_dim,
             continuous_action_dim=continuous_action_dim,
             **variant["actor_kwargs"],
@@ -140,14 +140,14 @@ def experiment(variant):
             * variant["vf_kwargs"]["num_layers"],
             output_size=1,
             input_size=world_model.feature_size,
-            hidden_activation=nn.ELU,
+            hidden_activation=nn.ReLU,
         )
         target_vf = Mlp(
             hidden_sizes=[variant["model_kwargs"]["model_hidden_size"]]
             * variant["vf_kwargs"]["num_layers"],
             output_size=1,
             input_size=world_model.feature_size,
-            hidden_activation=nn.ELU,
+            hidden_activation=nn.ReLU,
         )
 
         expl_policy = DreamerPolicy(
@@ -267,11 +267,13 @@ def experiment(variant):
             **variant["primitive_model_replay_buffer_kwargs"],
         )
         valid_primitive_model_buffer_new = valid_primitive_model_buffer.load(
-            "/home/mdalal/research/skill_learn/rlkit/data/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
+            # "/home/mdalal/research/skill_learn/rlkit/data/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
+            "/home/mdalal/research/skill_learn/rlkit/data/03-20-save-valid-buffer/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
             "replay_buffer.pkl",
         )
         del valid_primitive_model_buffer
         valid_primitive_model_buffer = valid_primitive_model_buffer_new
+    valid_primitive_model_buffer = None
     vec_manager.set_primitive_model_buffer(primitive_model_buffer)
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (

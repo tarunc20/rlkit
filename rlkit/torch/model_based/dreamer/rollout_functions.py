@@ -231,14 +231,14 @@ def vec_rollout_skill_learn(
         (
             num_envs * max_path_length,
             num_low_level_actions_per_primitive,
-            env.action_space.low.shape[0] + 1,  # Plus 1 includes phase variable.
+            env.action_space.low.shape[0],
         ),
         dtype=np.float32,
     )
     low_level_observations = np.zeros(
         (
             num_envs * max_path_length,
-            num_low_level_actions_per_primitive + 1,
+            num_low_level_actions_per_primitive,
             env.observation_space.low.shape[0],
         ),
         dtype=np.uint8,
@@ -246,8 +246,8 @@ def vec_rollout_skill_learn(
     low_level_float_observations = np.zeros(
         (
             num_envs * max_path_length,
-            num_low_level_actions_per_primitive + 1,
-            4,
+            num_low_level_actions_per_primitive,
+            5,
         ),
     )
 
@@ -268,7 +268,6 @@ def vec_rollout_skill_learn(
     )
 
     high_level_obs = env.reset()
-    start_obs = high_level_obs
     agent.reset(high_level_obs)
     observations = [high_level_obs]
     actions = [np.zeros((num_envs, env.action_space.low.size))]
@@ -279,16 +278,6 @@ def vec_rollout_skill_learn(
     env_infos = [{}]
 
     policy_obs = np.array(high_level_obs)
-    phases = (
-        np.linspace(
-            0,
-            1,
-            num_low_level_actions_per_primitive,
-            endpoint=False,
-        )
-        + 1 / (num_low_level_actions_per_primitive)
-    )
-    phases = np.repeat(phases.reshape(1, -1), num_envs, axis=0)
     for step in range(0, max_path_length):
         high_level_action, agent_info = agent.get_action(policy_obs)
         argmax = np.argmax(high_level_action[:, :num_primitives], axis=-1)
@@ -311,7 +300,6 @@ def vec_rollout_skill_learn(
         low_level_terminal = np.array(info["low_level_terminal"])
         high_level_action = np.array(info["high_level_action"])
         processed_high_level_action = np.array(info["processed_high_level_action"])
-        actions.append(high_level_action)
         del info["low_level_action"]
         del info["low_level_obs"]
         del info["low_level_float_obs"]
@@ -321,12 +309,8 @@ def vec_rollout_skill_learn(
         del info["processed_high_level_action"]
         gc.collect()
         env_infos.append(info)
+        actions.append(high_level_action)
 
-        # add last low level obs to the start of new low level obs to account
-        # for low level obs storing the observation after the corresponding low level action.
-        low_level_obs = np.concatenate(
-            (np.expand_dims(start_obs, 1), low_level_obs), axis=1
-        )
         low_level_actions[step * num_envs : (step + 1) * num_envs] = np.array(
             low_level_action
         )
@@ -339,9 +323,6 @@ def vec_rollout_skill_learn(
             np.array(processed_high_level_action).reshape(num_envs, 1, -1),
             num_low_level_actions_per_primitive,
             axis=1,
-        )
-        high_level_action = np.concatenate(
-            (high_level_action, np.expand_dims(phases, -1)), axis=2
         )
         high_level_actions[step * num_envs : (step + 1) * num_envs] = high_level_action
 
@@ -356,9 +337,6 @@ def vec_rollout_skill_learn(
         if done.all():
             break
         policy_obs = high_level_obs
-        # The high level obs is the effect of the latest high level action, which is the starting obs
-        # for the next primitive.
-        start_obs = high_level_obs
     rewards = np.array(rewards)
     actions = np.array(actions)
     observations = np.array(observations)
