@@ -422,7 +422,7 @@ class EpisodeReplayBufferSkillLearn(EpisodeReplayBuffer):
             (
                 max_replay_buffer_size * max_path_length,
                 num_low_level_actions_per_primitive,
-                5,
+                8,
             ),
         )
         self._high_level_actions = np.zeros(

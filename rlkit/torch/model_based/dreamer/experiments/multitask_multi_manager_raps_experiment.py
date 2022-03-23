@@ -277,7 +277,7 @@ def experiment(variant):
     vec_manager.set_primitive_model_buffer(primitive_model_buffer)
 
     variant["primitive_model_kwargs"]["state_encoder_kwargs"]["input_size"] = (
-        action_dim + 5
+        action_dim + 8
     )
 
     if variant["primitive_learning_algorithm"] == "gcsl":

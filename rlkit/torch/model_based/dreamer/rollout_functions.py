@@ -247,7 +247,7 @@ def vec_rollout_skill_learn(
         (
             num_envs * max_path_length,
             num_low_level_actions_per_primitive,
-            5,
+            8,
         ),
     )
 

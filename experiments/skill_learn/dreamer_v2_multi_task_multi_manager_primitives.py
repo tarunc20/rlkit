@@ -77,7 +77,7 @@ if __name__ == "__main__":
                 render_intermediate_obs_to_info=True,
                 low_level_reward_type="none",
                 relabel_high_level_actions=True,
-                remap_primitives=False,
+                remap_primitives=True,
                 goto_pose_iterations=100,
                 axis_misalignment_threshold=0.01,
             ),
@@ -148,7 +148,7 @@ if __name__ == "__main__":
             joint_processor_args=(),
             joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
-            scale=2,
+            scale=1,
         ),
         primitive_model_replay_buffer_kwargs=dict(discount=0.8),
         primitive_model_pretrain_trainer_kwargs=dict(
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         num_steps=5,
         collect_data_using_primitive_model=True,
         train_primitive_model=True,
-        save_video=False,
+        save_video=True,
         primitive_learning_algorithm="gcsl",
         freeze_point=None,
     )

@@ -409,7 +409,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.collect_primitives_info = collect_primitives_info
         if primitive_model_kwargs is not None:
             primitive_model_kwargs["state_encoder_kwargs"]["input_size"] = (
-                self.action_space.low.shape[0] + 5
+                self.action_space.low.shape[0] + 8
             )
             # self.primitive_model = PrimitivePolicy(
             #     (self.observation_space.low.size + self.action_space.low.size,),
@@ -764,6 +764,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         for step in range(num_iterations):
             float_obs = np.concatenate(
                 (
+                    self.pre_action_pos,
                     self.get_endeff_pos().copy(),
                     [self.get_gripper_pos(), (step + 1) / (num_iterations)],
                 )
@@ -782,20 +783,16 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             )
             if self.use_primitive_model:
                 low_level_action_pred = self.primitive_model.get_action(inputs)[0]
-                low_level_action_pred *= self.primitive_model.scale
                 action = np.concatenate(
                     (
                         low_level_action_pred[:3],
                         np.array([1, 0, 1, 0, *low_level_action_pred[3:]]),
                     )
                 )
-                action_to_save = low_level_action_pred / self.primitive_model.scale
+                action_to_save = low_level_action_pred
             else:
-                action = compute_action()
-                action_to_save = (
-                    np.concatenate((action[:3], action[-2:]))
-                    / self.primitive_model.scale
-                )
+                action = np.clip(compute_action(), -1, 1)
+                action_to_save = np.concatenate((action[:3], action[-2:]))
             assert np.abs(action_to_save).max() <= 1.0, (self.primitive_name, action)
             self._set_action(action)
             self.sim.step()
