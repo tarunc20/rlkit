@@ -76,6 +76,9 @@ def preprocess_variant_multi_task_multi_manager_raps(variant):
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
     variant["replay_buffer_kwargs"]["max_path_length"] = variant["max_path_length"]
 
+    variant["env_kwargs"]["action_space_kwargs"]["goto_pose_iterations"] = variant[
+        "num_low_level_actions_per_primitive"
+    ]
     variant["env_kwargs"]["usage_kwargs"]["max_path_length"] = variant[
         "max_path_length"
     ]
