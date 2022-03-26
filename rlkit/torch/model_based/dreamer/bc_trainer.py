@@ -75,19 +75,27 @@ class BCTrainer(TorchTrainer, LossFunction):
         eval_statistics["Predicted Actions Abs Max"] = action_preds.abs().max().item()
         eval_statistics["Predicted Actions Abs Mean"] = action_preds.abs().mean().item()
         eval_statistics["Predicted Actions Mean"] = action_preds.mean().item()
+        eval_statistics["Predicted Actions Std"] = action_preds.std().item()
         eval_statistics["Actions Abs Max"] = actions.abs().max().item()
         eval_statistics["Actions Abs Mean"] = actions.abs().mean().item()
         eval_statistics["Actions Mean"] = actions.mean().item()
+        eval_statistics["Actions Std"] = actions.std().item()
+        eval_statistics["High Level Actions Std"] = (
+            obs[:, 64 * 64 * 3 + 8 : -1].std().item()
+        )
 
         print(self._n_train_steps_total)
         print(f"Policy MSE: {eval_statistics['Policy MSE']}")
         print(f"Predicted Actions Abs Max {action_preds.abs().max().item()}")
         print(f"Predicted Actions Abs Mean {action_preds.abs().mean().item()}")
         print(f"Predicted Actions Mean {action_preds.mean().item()}")
+        print(f"Predicted Actions Std {action_preds.std().item()}")
 
         print(f"Actions Abs Max {actions.abs().max().item()}")
         print(f"Actions Abs Mean {actions.abs().mean().item()}")
         print(f"Actions Mean {actions.mean().item()}")
+        print(f"Actions Std {actions.std().item()}")
+        print(f"High level action std {obs[:, 64*64*3+8:-1].std().item()}")
         print()
 
         with torch.no_grad():

@@ -361,36 +361,36 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.primitive_idx_to_name = {
             0: "move_delta_ee",
             # 1: "top_x_y_grasp",
-            # 1: "move_along_x",
-            # 2: "move_along_y",
-            # 3: "move_along_z",
-            # 4: "move_gripper",
+            1: "move_along_x",
+            2: "move_along_y",
+            3: "move_along_z",
+            4: "move_gripper",
         }
         self.primitive_idx_to_num_low_level_steps = {
             0: goto_pose_iterations,
             # 1: goto_pose_iterations * 4,
-            # 1: goto_pose_iterations,
-            # 2: goto_pose_iterations,
-            # 3: goto_pose_iterations,
-            # 4: goto_pose_iterations,
+            1: goto_pose_iterations,
+            2: goto_pose_iterations,
+            3: goto_pose_iterations,
+            4: goto_pose_iterations,
         }
         self.primitive_name_to_func = dict(
             move_delta_ee=self.move_delta_ee,
             # top_x_y_grasp=self.top_x_y_grasp,
-            # move_along_x=self.move_along_x,
-            # move_along_y=self.move_along_y,
-            # move_along_z=self.move_along_z,
-            # move_gripper=self.move_gripper,
+            move_along_x=self.move_along_x,
+            move_along_y=self.move_along_y,
+            move_along_z=self.move_along_z,
+            move_gripper=self.move_gripper,
         )
         self.primitive_name_to_action_idx = dict(
             move_delta_ee=[0, 1, 2],
             # top_x_y_grasp=[3, 4, 5, 6],
-            # move_along_x=3,
-            # move_along_y=4,
-            # move_along_z=5,
-            # move_gripper=6,
+            move_along_x=3,
+            move_along_y=4,
+            move_along_z=5,
+            move_gripper=6,
         )
-        self.max_arg_len = 3
+        self.max_arg_len = 7
         self.num_primitives = len(self.primitive_name_to_func)
         self.control_mode = control_mode
         if self.control_mode == "primitives":
@@ -516,6 +516,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             if self.collect_primitives_info:
                 info.update(self.primitives_info)
             info["axis misalignment error"] = self.axis_misalignment_error
+            info["relabel_distance"] = self.relabel_distance
             info["num low level steps"] = (
                 self._num_low_level_steps_total // self.frame_skip
             )
@@ -566,7 +567,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
             pos_delta = action[:, :3]
             quat_delta = action[:, 3:]
-            self.reset_mocap2body_xpos(sim)
             new_mocap_pos = self.data.mocap_pos + pos_delta[None]
             new_mocap_quat = self.data.mocap_quat + quat_delta[None]
 
@@ -691,37 +691,62 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 + self.primitive_name_to_action_idx[self.primitive_name]
             ]
 
+    def compute_high_level_pos(self, processed_high_level_action):
+        high_level_pos = self.pre_action_pos
+        if self.primitive_name == "move_along_x":
+            high_level_pos[0] = processed_high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ]
+        elif self.primitive_name == "move_along_y":
+            high_level_pos[1] = processed_high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ]
+        elif self.primitive_name == "move_along_z":
+            high_level_pos[2] = processed_high_level_action[
+                self.num_primitives
+                + self.primitive_name_to_action_idx[self.primitive_name]
+            ]
+        elif self.primitive_name == "move_delta_ee":
+            high_level_pos = processed_high_level_action[
+                self.num_primitives
+                + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+            ]
+        return high_level_pos
+
     def compute_relabelled_hl(self):
+        high_level_pos = self.compute_high_level_pos(self.processed_high_level_action)
         if self.primitive_name == "move_along_x":
             self.processed_high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[0] - self.pre_action_pos[0])
+            ] = self.get_endeff_pos()[0]
             self.axis_misalignment_error = np.linalg.norm(
-                self.get_endeff_pos()[1:] - self.pre_action_pos[1:]
+                self.get_endeff_pos()[1:] - high_level_pos[1:]
             )
         elif self.primitive_name == "move_along_y":
             self.processed_high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[1] - self.pre_action_pos[1])
+            ] = self.get_endeff_pos()[1]
             self.axis_misalignment_error = np.linalg.norm(
                 np.array((self.get_endeff_pos()[0], self.get_endeff_pos()[2]))
-                - np.array((self.pre_action_pos[0], self.pre_action_pos[2]))
+                - np.array((high_level_pos[0], high_level_pos[2]))
             )
         elif self.primitive_name == "move_along_z":
             self.processed_high_level_action[
                 self.num_primitives
                 + self.primitive_name_to_action_idx[self.primitive_name]
-            ] = (self.get_endeff_pos()[2] - self.pre_action_pos[2])
+            ] = self.get_endeff_pos()[2]
             self.axis_misalignment_error = np.linalg.norm(
-                self.get_endeff_pos()[:-1] - self.pre_action_pos[:-1]
+                self.get_endeff_pos()[:-1] - high_level_pos[:-1]
             )
         elif self.primitive_name == "move_delta_ee":
             self.processed_high_level_action[
                 self.num_primitives
                 + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-            ] = (self.get_endeff_pos() - self.pre_action_pos)
+            ] = self.get_endeff_pos()
             self.axis_misalignment_error = 0
         elif self.primitive_name == "top_x_y_grasp":
             self.processed_high_level_action[
@@ -746,15 +771,14 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 and self.axis_misalignment_error > self.axis_misalignment_threshold
             ):
                 self.processed_high_level_action = np.zeros_like(self.high_level_action)
+                # set primitive selection to move_delta_ee
                 self.processed_high_level_action[: self.num_primitives] = np.eye(
                     self.num_primitives
-                )[
-                    0
-                ]  # set primitive selection to move_delta_ee
+                )[0]
                 self.processed_high_level_action[
                     self.num_primitives
                     + np.array(self.primitive_name_to_action_idx["move_delta_ee"])
-                ] = (self.get_endeff_pos() - self.pre_action_pos)
+                ] = self.get_endeff_pos()
                 self.axis_misalignment_error = 0
 
     @torch.no_grad()
@@ -797,7 +821,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 action_to_save = action[:3]
             assert np.abs(action_to_save).max() <= 1.0, (self.primitive_name, action)
             self._set_action(action)
-            self.sim.step()
+            fs = 5
+            for _ in range(fs):
+                self.sim.step()
             self.call_render_every_step()
             self._num_low_level_steps_total += 1
             self.primitives_info["low_level_obs"].append(observation.astype(np.uint8))
@@ -808,18 +834,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.prev_low_level_action = action
         if self.relabel_high_level_actions:
             old_processed_hl = self.processed_high_level_action.copy()
-            # Creating figure
-            fig = plt.figure(figsize=(10, 7))
-            ax = plt.axes(projection="3d")
-
-            # Creating plot
-            ax.scatter3D(old_processed_hl[-3:], color="green")
-            plt.title("simple 3D scatter plot")
             self.compute_relabelled_hl()
-            print(self.processed_high_level_action - old_processed_hl)
-            print(old_processed_hl)
-            print(self.processed_high_level_action)
-            print()
             if self.primitive_name == "move_delta_ee":
                 self.high_level_action[
                     self.num_primitives
@@ -841,8 +856,12 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ] = self.processed_high_level_action[
                 : self.num_primitives
             ]  # in case there was re-mapping
+            self.relabel_distance = np.linalg.norm(
+                self.processed_high_level_action - old_processed_hl
+            )
         else:
             self.axis_misalignment_error = 0
+            self.relabel_distance = 0
         return action
 
     def move_gripper(self, d, target=None, iterations=None):
@@ -869,19 +888,37 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.prev_low_level_action = action
 
     def move_along_x(self, x_dist):
-        self.goto_pose(
-            self.get_endeff_pos() + np.array([x_dist, 0.0, 0]),
+        x_dist = x_dist * (self.mocap_high[0] - self.mocap_low[0]) / 2 + (
+            self.mocap_low[0] + ((self.mocap_high[0] - self.mocap_low[0]) / 2)
         )
+        pose = self.get_endeff_pos()
+        pose[0] = x_dist
+        self.high_level_action[
+            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
+        ] = pose[0]
+        self.goto_pose(pose)
 
     def move_along_y(self, y_dist):
-        self.goto_pose(
-            self.get_endeff_pos() + np.array([0.0, y_dist, 0]),
+        y_dist = y_dist * (self.mocap_high[1] - self.mocap_low[1]) / 2 + (
+            self.mocap_low[1] + ((self.mocap_high[1] - self.mocap_low[1]) / 2)
         )
+        pose = self.get_endeff_pos()
+        pose[1] = y_dist
+        self.high_level_action[
+            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
+        ] = pose[1]
+        self.goto_pose(pose)
 
     def move_along_z(self, z_dist):
-        self.goto_pose(
-            self.get_endeff_pos() + np.array([0.0, 0.0, z_dist]),
+        z_dist = z_dist * (self.mocap_high[2] - self.mocap_low[2]) / 2 + (
+            self.mocap_low[2] + ((self.mocap_high[2] - self.mocap_low[2]) / 2)
         )
+        pose = self.get_endeff_pos()
+        pose[2] = z_dist
+        self.high_level_action[
+            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
+        ] = pose[2]
+        self.goto_pose(pose)
 
     def close_gripper(self, d, target=None, iterations=None):
         d = np.abs(d)
@@ -972,8 +1009,26 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 )
                 self.move_gripper(d, target=target)
 
+    def process_pose_to_mocap_bounds(self, pose):
+        # assume input is bounded between -1 and 1
+        pose[0] = pose[0] * (self.mocap_high[0] - self.mocap_low[0]) / 2 + (
+            self.mocap_low[0] + ((self.mocap_high[0] - self.mocap_low[0]) / 2)
+        )
+        pose[1] = pose[1] * (self.mocap_high[1] - self.mocap_low[1]) / 2 + (
+            self.mocap_low[1] + ((self.mocap_high[1] - self.mocap_low[1]) / 2)
+        )
+        pose[2] = pose[2] * (self.mocap_high[2] - self.mocap_low[2]) / 2 + (
+            self.mocap_low[2] + ((self.mocap_high[2] - self.mocap_low[2]) / 2)
+        )
+        return pose
+
     def move_delta_ee(self, pose):
-        self.goto_pose(self.get_endeff_pos() + pose)
+        pose = self.process_pose_to_mocap_bounds(pose)
+        self.high_level_action[
+            self.num_primitives
+            + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+        ] = pose
+        self.goto_pose(pose)
 
     def lift(self, z_dist):
         z_dist = np.abs(z_dist)

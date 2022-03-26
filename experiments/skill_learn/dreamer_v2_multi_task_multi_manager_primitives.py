@@ -23,13 +23,13 @@ if __name__ == "__main__":
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=512,
             primitive_model_num_pretrain_steps=100,
-            primitive_model_num_trains_per_train_loop=50,
+            primitive_model_num_trains_per_train_loop=25,
         )
     else:
         algorithm_kwargs = dict(
             num_epochs=100,
             num_eval_steps_per_epoch=60,
-            min_num_steps_before_training=10000,
+            min_num_steps_before_training=2500,
             num_pretrain_steps=100,
             batch_size=417,
             num_expl_steps_per_train_loop=15,
@@ -38,8 +38,8 @@ if __name__ == "__main__":
         )
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=512,
-            primitive_model_num_pretrain_steps=5000,
-            primitive_model_num_trains_per_train_loop=100,
+            primitive_model_num_pretrain_steps=2500,
+            primitive_model_num_trains_per_train_loop=25,
         )
     variant = dict(
         algorithm="MultiTaskMultiManagerRAPS",
@@ -76,11 +76,12 @@ if __name__ == "__main__":
                 collect_primitives_info=True,
                 render_intermediate_obs_to_info=True,
                 low_level_reward_type="none",
-                relabel_high_level_actions=False,
+                relabel_high_level_actions=True,
                 remap_primitives=False,
-                goto_pose_iterations=100,
+                goto_pose_iterations=200,
                 axis_misalignment_threshold=0.01,
                 exploration_noise=0,
+                pos_ctrl_action_scale=0.05,
             ),
         ),
         actor_kwargs=dict(
@@ -127,11 +128,11 @@ if __name__ == "__main__":
         replay_buffer_kwargs=dict(
             max_replay_buffer_size=int(1e5),
         ),
-        num_expl_envs=3,
+        num_expl_envs=4,
         num_eval_envs=1,
         expl_amount=0.3,
         max_path_length=5,
-        num_low_level_actions_per_primitive=100,
+        num_low_level_actions_per_primitive=200,
         low_level_action_dim=3,
         primitive_model_kwargs=dict(
             image_encoder_args=(),
@@ -157,7 +158,7 @@ if __name__ == "__main__":
         ),
         primitive_model_algorithm_kwargs=primitive_model_algorithm_kwargs,
         primitive_model_trainer_kwargs=dict(
-            policy_lr=1e-4,
+            policy_lr=1e-3,
         ),
         num_steps=5,
         collect_data_using_primitive_model=True,
