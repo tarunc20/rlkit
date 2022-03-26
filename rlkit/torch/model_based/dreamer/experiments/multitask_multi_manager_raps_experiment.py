@@ -269,7 +269,6 @@ def experiment(variant):
             **variant["primitive_model_replay_buffer_kwargs"],
         )
         valid_primitive_model_buffer_new = valid_primitive_model_buffer.load(
-            # "/home/mdalal/research/skill_learn/rlkit/data/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
             "/home/mdalal/research/skill_learn/rlkit/data/03-20-save-valid-buffer/03-20-save_valid_buffer_2022_03_20_12_40_54_0000--s-6699",
             "replay_buffer.pkl",
         )

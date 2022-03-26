@@ -132,7 +132,7 @@ if __name__ == "__main__":
         expl_amount=0.3,
         max_path_length=5,
         num_low_level_actions_per_primitive=200,
-        low_level_action_dim=3,
+        low_level_action_dim=5,
         primitive_model_kwargs=dict(
             image_encoder_args=(),
             image_encoder_kwargs=dict(
@@ -147,7 +147,7 @@ if __name__ == "__main__":
             state_encoder_args=(),
             state_encoder_kwargs=dict(hidden_sizes=[256, 128], output_size=64),
             joint_processor_args=(),
-            joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=3),
+            joint_processor_kwargs=dict(hidden_sizes=[512, 256], output_size=5),
             image_dim=64 * 64 * 3,
             scale=1,
         ),

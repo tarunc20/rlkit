@@ -805,20 +805,17 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                 (observation, float_obs, self.processed_high_level_action)
             )
             if self.use_primitive_model:
-                low_level_action_pred = self.primitive_model.get_action(inputs)[
-                    0
-                ] + np.random.normal(0, self.exploration_noise, 3)
-                low_level_action_pred = np.clip(low_level_action_pred, -1, 1)
+                low_level_action_pred = self.primitive_model.get_action(inputs)[0]
                 action = np.concatenate(
                     (
                         low_level_action_pred[:3],
-                        np.array([1, 0, 1, 0, *compute_action()[-2:]]),
+                        np.array([1, 0, 1, 0, *low_level_action_pred[-2:]]),
                     )
                 )
                 action_to_save = low_level_action_pred
             else:
                 action = np.clip(compute_action(), -1, 1)
-                action_to_save = action[:3]
+                action_to_save = np.concatenate((action[:3], action[-2:]))
             assert np.abs(action_to_save).max() <= 1.0, (self.primitive_name, action)
             self._set_action(action)
             fs = 5
