@@ -44,7 +44,7 @@ git clone git@github.com:mihdalal/doodad.git
 git clone git@github.com:mihdalal/metaworld.git
 git clone git@github.com:mihdalal/rlkit.git
 git clone git@github.com:mihdalal/robosuite.git
-git clone git@github.com:mihdalal/viskit.git
+git clone git@github.com:vitchyr/viskit.git
 ```
 
 Install Ananconda environment
