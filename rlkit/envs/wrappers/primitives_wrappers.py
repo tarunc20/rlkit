@@ -589,7 +589,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         action = np.concatenate([pos_ctrl, rot_ctrl])
         # Apply action to simulation.
         self.mocap_set_action(self.sim, action)
-        # self.ctrl_set_action(self.sim, gripper_ctrl)q
+        self.ctrl_set_action(self.sim, gripper_ctrl)
 
     def low_level_step(self, action, render_obs=False):
         self.mocap_set_action(self.sim, action[:7])
