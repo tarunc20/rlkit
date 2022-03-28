@@ -267,9 +267,9 @@ def vec_rollout_skill_learn(
         )
     )
 
-    high_level_obs = env.reset()
-    agent.reset(high_level_obs)
-    observations = [high_level_obs]
+    policy_obs = env.reset()
+    agent.reset(policy_obs)
+    observations = [policy_obs]
     actions = [np.zeros((num_envs, env.action_space.low.size))]
     rewards = [np.zeros((num_envs,))]
     terminals = [[False] * num_envs]
@@ -277,7 +277,6 @@ def vec_rollout_skill_learn(
     agent_infos = [{}]
     env_infos = [{}]
 
-    policy_obs = np.array(high_level_obs)
     for step in range(0, max_path_length):
         high_level_action, agent_info = agent.get_action(policy_obs)
         argmax = np.argmax(high_level_action[:, :num_primitives], axis=-1)
