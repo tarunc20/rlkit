@@ -692,7 +692,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ]
 
     def compute_high_level_pos(self, processed_high_level_action):
-        high_level_pos = self.pre_action_pos
+        high_level_pos = self.pre_action_pos.copy()
         if self.primitive_name == "move_along_x":
             high_level_pos[0] = processed_high_level_action[
                 self.num_primitives
@@ -912,9 +912,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         pose = self.get_endeff_pos()
         pose[0] = x_dist
-        self.high_level_action[
-            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
-        ] = pose[0]
         self.goto_pose(pose)
 
     def move_along_y(self, y_dist):
@@ -923,9 +920,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         pose = self.get_endeff_pos()
         pose[1] = y_dist
-        self.high_level_action[
-            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
-        ] = pose[1]
         self.goto_pose(pose)
 
     def move_along_z(self, z_dist):
@@ -934,9 +928,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         pose = self.get_endeff_pos()
         pose[2] = z_dist
-        self.high_level_action[
-            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
-        ] = pose[2]
         self.goto_pose(pose)
 
     def process_pose_to_mocap_bounds(self, pose):
@@ -948,10 +939,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
     def move_delta_ee(self, pose):
         pose = self.process_pose_to_mocap_bounds(pose)
-        self.high_level_action[
-            self.num_primitives
-            + np.array(self.primitive_name_to_action_idx[self.primitive_name])
-        ] = pose
         self.goto_pose(pose)
 
     def close_gripper(self, d, target=None, iterations=None):

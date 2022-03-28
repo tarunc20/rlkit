@@ -32,9 +32,9 @@ if __name__ == "__main__":
             min_num_steps_before_training=2500,
             num_pretrain_steps=100,
             batch_size=417,
-            num_expl_steps_per_train_loop=15,
-            num_train_loops_per_epoch=66,
-            num_trains_per_train_loop=3,
+            num_expl_steps_per_train_loop=126,
+            num_train_loops_per_epoch=10,
+            num_trains_per_train_loop=20,
         )
         primitive_model_algorithm_kwargs = dict(
             primitive_model_batch_size=512,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         num_eval_envs=1,
         expl_amount=0.3,
         max_path_length=5,
-        num_low_level_actions_per_primitive=200,
+        num_low_level_actions_per_primitive=100,
         low_level_action_dim=5,
         primitive_model_kwargs=dict(
             image_encoder_args=(),
