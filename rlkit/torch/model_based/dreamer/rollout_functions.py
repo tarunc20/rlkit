@@ -288,7 +288,7 @@ def vec_rollout_skill_learn(
 
         policy_obs, reward, done, info = env.step(high_level_action)
 
-        observations.append(high_level_obs)
+        observations.append(policy_obs)
         rewards.append(reward)
         terminals.append(done)
         agent_infos.append(agent_info)
