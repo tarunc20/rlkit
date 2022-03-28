@@ -915,7 +915,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.high_level_action[
             self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
         ] = pose[0]
-        assert (pose >= self.mocap_low).all() and (pose <= self.mocap_high).all()
         self.goto_pose(pose)
 
     def move_along_y(self, y_dist):
@@ -927,7 +926,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.high_level_action[
             self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
         ] = pose[1]
-        assert (pose >= self.mocap_low).all() and (pose <= self.mocap_high).all()
         self.goto_pose(pose)
 
     def move_along_z(self, z_dist):
@@ -939,7 +937,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.high_level_action[
             self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
         ] = pose[2]
-        assert (pose >= self.mocap_low).all() and (pose <= self.mocap_high).all()
         self.goto_pose(pose)
 
     def process_pose_to_mocap_bounds(self, pose):
@@ -947,7 +944,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         pose = pose * (self.mocap_high - self.mocap_low) / 2 + (
             self.mocap_low + ((self.mocap_high - self.mocap_low) / 2)
         )
-        assert (pose >= self.mocap_low).all() and (pose <= self.mocap_high).all()
         return pose
 
     def move_delta_ee(self, pose):
