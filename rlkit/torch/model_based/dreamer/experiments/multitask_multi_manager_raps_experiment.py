@@ -132,7 +132,7 @@ def experiment(variant):
         actor = ActorModel(
             variant["model_kwargs"]["model_hidden_size"],
             world_model.feature_size,
-            hidden_activation=nn.ReLU,
+            hidden_activation=nn.ELU,
             discrete_action_dim=discrete_action_dim,
             continuous_action_dim=continuous_action_dim,
             **variant["actor_kwargs"],
@@ -142,14 +142,14 @@ def experiment(variant):
             * variant["vf_kwargs"]["num_layers"],
             output_size=1,
             input_size=world_model.feature_size,
-            hidden_activation=nn.ReLU,
+            hidden_activation=nn.ELU,
         )
         target_vf = Mlp(
             hidden_sizes=[variant["model_kwargs"]["model_hidden_size"]]
             * variant["vf_kwargs"]["num_layers"],
             output_size=1,
             input_size=world_model.feature_size,
-            hidden_activation=nn.ReLU,
+            hidden_activation=nn.ELU,
         )
 
         expl_policy = DreamerPolicy(
