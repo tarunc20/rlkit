@@ -424,6 +424,8 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.use_primitive_model = False
         self.low_level_reward_type = low_level_reward_type
         self.set_render_every_step()
+        fig = plt.figure()
+        self.ax = plt.axes(projection="3d")
 
     def sync_primitive_model_from_path(self, path):
         # TODO: figure out how to get this to be on GPU without blowing up GPU memory usage
@@ -830,7 +832,6 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.primitives_info["low_level_action"].append(action_to_save)
             self.prev_low_level_action = action
         if self.relabel_high_level_actions:
-            old_processed_hl = self.processed_high_level_action.copy()
             self.compute_relabelled_hl()
             if self.primitive_name == "move_delta_ee":
                 self.high_level_action[
@@ -853,9 +854,24 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             ] = self.processed_high_level_action[
                 : self.num_primitives
             ]  # in case there was re-mapping
+            self.old_updated_hl[
+                : self.num_primitives
+            ] = self.processed_high_level_action[: self.num_primitives]
             self.relabel_distance = np.linalg.norm(
-                self.processed_high_level_action - old_processed_hl
+                self.high_level_action - self.old_updated_hl
             )
+            # self.ax.scatter3D(*self.compute_high_level_pos(self.old_updated_hl), color="green")
+            # self.ax.scatter3D(*self.compute_high_level_pos(self.processed_high_level_action), color="blue")
+            # self.ax.set_xlabel("X")
+            # self.ax.set_ylabel("Y")
+            # self.ax.set_zlabel("Z")
+            # plt.title(
+            #     f"XYZ Points Pre/Post Relabelling Num LL: {self.num_low_level_actions_per_primitive} Pos Ctrl Scale: {self.pos_ctrl_action_scale} Frameskip: {fs}"
+            # )
+            # plt.savefig(
+            #     f"/home/mdalal/research/skill_learn/rlkit/relabel_{self.num_low_level_actions_per_primitive}_{self.pos_ctrl_action_scale}_{fs}.png"
+            # )
+            # print(self.relabel_distance, self.axis_misalignment_error)
         else:
             self.axis_misalignment_error = 0
             self.relabel_distance = 0
@@ -912,6 +928,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         pose = self.get_endeff_pos()
         pose[0] = x_dist
+        self.old_updated_hl[
+            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
+        ] = x_dist
         self.goto_pose(pose)
 
     def move_along_y(self, y_dist):
@@ -920,6 +939,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         pose = self.get_endeff_pos()
         pose[1] = y_dist
+        self.old_updated_hl[
+            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
+        ] = y_dist
         self.goto_pose(pose)
 
     def move_along_z(self, z_dist):
@@ -928,6 +950,9 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         )
         pose = self.get_endeff_pos()
         pose[2] = z_dist
+        self.old_updated_hl[
+            self.num_primitives + self.primitive_name_to_action_idx[self.primitive_name]
+        ] = z_dist
         self.goto_pose(pose)
 
     def process_pose_to_mocap_bounds(self, pose):
@@ -939,6 +964,10 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
 
     def move_delta_ee(self, pose):
         pose = self.process_pose_to_mocap_bounds(pose)
+        self.old_updated_hl[
+            self.num_primitives
+            + np.array(self.primitive_name_to_action_idx[self.primitive_name])
+        ] = pose
         self.goto_pose(pose)
 
     def close_gripper(self, d, target=None, iterations=None):
@@ -1073,7 +1102,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         primitive_name_to_action_dict = self.break_apart_action(primitive_args)
         primitive_action = primitive_name_to_action_dict[primitive_name]
         primitive = self.primitive_name_to_func[primitive_name]
-        self.old_hl = self.high_level_action.copy()
+        self.old_updated_hl = self.high_level_action.copy()
         self.pre_action_pos = self.get_endeff_pos().copy()
         self.pre_action_grip = self.get_gripper_pos()
         self.primitive_name = primitive_name
