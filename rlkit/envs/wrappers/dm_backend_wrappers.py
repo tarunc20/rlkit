@@ -496,13 +496,7 @@ class DMControlBackendMetaworldMujocoEnv(MujocoEnv):
             self.sim.set_state(new_state)
         self.sim.forward()
 
-    def render(
-        self,
-        mode="human",
-        imwidth=64,
-        imheight=64,
-        use_wrist_cam=False
-    ):
+    def render(self, mode="human", imwidth=64, imheight=64, use_wrist_cam=False):
         if mode == "human":
             self.renderer.render_to_window()
         elif mode == "rgb_array":
@@ -513,14 +507,12 @@ class DMControlBackendMetaworldMujocoEnv(MujocoEnv):
 
             if use_wrist_cam:
                 gripper_img = self.renderer.render_offscreen(
-                    imwidth,
-                    imheight,
-                    camera_id=self.model.camera_name2id('gripperPOV')
-                )[:, :, :: -1]
+                    imwidth, imheight, camera_id=self.model.camera_name2id("gripperPOV")
+                )[:, :, ::-1]
                 return np.concatenate([fixed_view_img, gripper_img], axis=2)
             else:
                 return fixed_view_img
-        
+
         else:
             raise ValueError("mode can only be either 'human' or 'rgb_array'")
 

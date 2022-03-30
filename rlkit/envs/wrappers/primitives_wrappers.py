@@ -1,7 +1,6 @@
 import gym
 import mujoco_py
 import numpy as np
-
 from d4rl.kitchen.adept_envs.simulation.renderer import DMRenderer
 from gym import spaces
 from gym.spaces.box import Box
@@ -193,12 +192,14 @@ class MetaworldWrapper(gym.Wrapper):
 
         self.reward_scale = reward_scale
         self.use_image_obs = use_image_obs
-        
 
     def _get_image(self):
         if hasattr(self.env, "_use_dm_backend"):
             img = self.env.render(
-                mode="rgb_array", imwidth=self.imwidth, imheight=self.imheight, use_wrist_cam=self.use_wrist_cam
+                mode="rgb_array",
+                imwidth=self.imwidth,
+                imheight=self.imheight,
+                use_wrist_cam=self.use_wrist_cam,
             )
         else:
             img = self.env.sim.render(
@@ -264,7 +265,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         open_gripper_iterations=200,
         close_gripper_iterations=300,
         pos_ctrl_action_scale=0.05,
-        use_wrist_cam=False
+        use_wrist_cam=False,
     ):
         self.goto_pose_iterations = goto_pose_iterations
         self.open_gripper_iterations = open_gripper_iterations
@@ -554,7 +555,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                         "rgb_array",
                         self.render_im_shape[0],
                         self.render_im_shape[1],
-                        use_wrist_cam=self.use_wrist_cam
+                        use_wrist_cam=self.use_wrist_cam,
                     )
                     .transpose(2, 0, 1)
                     .flatten()
@@ -567,7 +568,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                         self.render_mode,
                         self.render_im_shape[0],
                         self.render_im_shape[1],
-                        use_wrist_cam=self.use_wrist_cam
+                        use_wrist_cam=self.use_wrist_cam,
                     )
                 )
             else:

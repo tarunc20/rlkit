@@ -60,12 +60,12 @@ def preprocess_variant_llraps(variant):
 
     # Ensure that the buffer size is a multiple of the number of environments
     max_replay_buffer_size = variant["replay_buffer_kwargs"]["max_replay_buffer_size"]
-    num_expl_envs = variant['num_expl_envs']
+    num_expl_envs = variant["num_expl_envs"]
 
     rem = max_replay_buffer_size % num_expl_envs
     max_replay_buffer_size -= rem
 
-    variant["replay_buffer_kwargs"]["max_replay_buffer_size"]  = max_replay_buffer_size
+    variant["replay_buffer_kwargs"]["max_replay_buffer_size"] = max_replay_buffer_size
 
     variant["replay_buffer_kwargs"]["num_low_level_actions_per_primitive"] = variant[
         "num_low_level_actions_per_primitive"
