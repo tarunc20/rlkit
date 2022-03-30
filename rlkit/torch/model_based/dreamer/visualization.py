@@ -15,16 +15,16 @@ def reconstruct_from_state(state, world_model):
     new_img = (torch.clamp(world_model.decode(feat) + 0.5, 0, 1) * 255.0).type(
         torch.ByteTensor
     )
-    
+
     new_img = ptu.get_numpy(new_img.permute(0, 2, 3, 1)[0]).astype(np.uint8)
     new_img = np.ascontiguousarray(np.copy(new_img), dtype=np.uint8)
     return new_img
 
 
 def convert_img_to_save(img, img_size):
-    
+
     channels = img.shape[1] // (img_size * img_size)
-    
+
     img = np.copy(img.reshape(channels, img_size, img_size).transpose(1, 2, 0))
     if channels == 6:
         img1 = img[:, :, :3]
@@ -71,7 +71,7 @@ def visualize_rollout(
     channels = observation.shape[0] // (img_size * img_size)
     file_path += file_suffix
     img_shape = (img_size, img_size, channels)
-    
+
     reconstructions = np.zeros(
         (num_rollouts, max_path_length + 1, *img_shape),
         dtype=np.uint8,
@@ -97,7 +97,7 @@ def visualize_rollout(
                     world_model.get_image_from_obs(
                         torch.from_numpy(observation.reshape(1, -1))
                     ).numpy(),
-                    img_size
+                    img_size,
                 )
                 add_text(vis, "Ground Truth", (1, 60), 0.25, (0, 255, 0))
             else:
@@ -128,12 +128,14 @@ def visualize_rollout(
                     world_model.get_image_from_obs(
                         torch.from_numpy(observation.reshape(1, -1))
                     ).numpy(),
-                    img_size
+                    img_size,
                 )
                 add_text(vis, primitive_name, (1, 60), 0.25, (0, 255, 0))
                 add_text(vis, f"r: {reward}", (35, 7), 0.3, (0, 0, 0))
 
-            img = np.copy(observation.reshape(channels, img_size, img_size).transpose(1, 2, 0))
+            img = np.copy(
+                observation.reshape(channels, img_size, img_size).transpose(1, 2, 0)
+            )
             img = np.ascontiguousarray(img, dtype=np.uint8)
             obs[rollout, step] = img
             if step != 0:
@@ -221,7 +223,6 @@ def visualize_rollout(
         width = img_size
         height = img_size
 
-    
     for rollout in range(num_rollouts):
         for step in range(max_path_length + 1):
             temp_img = obs[rollout, step]
@@ -390,11 +391,14 @@ def visualize_primitive_unsubsampled_rollout(
     cv2.imwrite(file_path, im)
     print(f"Saved Rollout Visualization to {file_path}")
 
+
 def make_video(frames, logdir):
     height, width, _ = frames[0].shape
     size = (width, height)
 
-    out = cv2.VideoWriter(logdir + '/' + 'viz.avi', cv2.VideoWriter_fourcc(*'DIVX'), 60, size)
+    out = cv2.VideoWriter(
+        logdir + "/" + "viz.avi", cv2.VideoWriter_fourcc(*"DIVX"), 60, size
+    )
 
     for frame in frames:
         out.write(frame)
