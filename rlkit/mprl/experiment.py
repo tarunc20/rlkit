@@ -1,4 +1,5 @@
 def experiment(variant):
+    from rlkit.mprl.mp_env import RobosuiteEnv
     from rlkit.mprl.mp_env import MPEnv
 
     from rlkit.torch.networks.mlp import ConcatMlp
@@ -42,8 +43,8 @@ def experiment(variant):
         expl_env = MPEnv(NormalizedBoxEnv(GymWrapper(suites[0])))
         eval_env = MPEnv(NormalizedBoxEnv(GymWrapper(suites[1])))
     else:
-        expl_env = NormalizedBoxEnv(GymWrapper(suites[0]))
-        eval_env = NormalizedBoxEnv(GymWrapper(suites[1]))
+        expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(suites[0])))
+        eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(suites[1])))
 
     obs_dim = expl_env.observation_space.low.size
     action_dim = eval_env.action_space.low.size

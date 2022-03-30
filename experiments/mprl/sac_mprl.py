@@ -10,7 +10,7 @@ if __name__ == "__main__":
     args = get_args()
     variant = {
         "mprl": True,
-        "algorithm": "SAC",
+        "algorithm": "MPRL-SAC",
         "algorithm_kwargs": {
             "batch_size": 128,
             "max_path_length": 100,
@@ -42,7 +42,7 @@ if __name__ == "__main__":
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
-        "replay_buffer_size": 1000000,
+        "replay_buffer_size": int(1e6),
         "seed": 129,
         "trainer_kwargs": {
             "discount": 0.99,

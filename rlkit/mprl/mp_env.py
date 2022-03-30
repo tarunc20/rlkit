@@ -29,6 +29,25 @@ class MPEnv(ProxyEnv):
         pos = self._wrapped_env.sim.data.body_xpos[self._wrapped_env.cube_body_id] + np.array([0, 0, .05])
         error = set_robot_based_on_ee_pos(self._wrapped_env, pos, self.ik_ctrl)
         obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
-
+        self.ctr = 0
         return obs
+
+    def step(self, action):
+        o, r, d, i = self._wrapped_env.step(action)
+        self.ctr += 1
+        is_grasped = self._wrapped_env._check_grasp(gripper=self._wrapped_env.robots[0].gripper, object_geoms=self._wrapped_env.cube)
+        if self.ctr == self.horizon and is_grasped:
+            _, r, _, i = self._wrapped_env.step(np.array([0, 0, .1, 0, 0, 0, 0]))
+        i['success'] = float(self._wrapped_env._check_success())
+        i['grasped'] = float(self._wrapped_env._check_grasp(gripper=self._wrapped_env.robots[0].gripper, object_geoms=self._wrapped_env.cube))
+        return o, r, d, i
+
+class RobosuiteEnv(ProxyEnv):
+    def step(self, action):
+        o, r, d, i = self._wrapped_env.step(action)
+        i['success'] = float(self._wrapped_env._check_success())
+        i['grasped'] = float(self._wrapped_env._check_grasp(gripper=self._wrapped_env.robots[0].gripper, object_geoms=self._wrapped_env.cube))
+        return o, r, d, i
+
+
 
