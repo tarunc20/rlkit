@@ -29,6 +29,7 @@ def get_args():
     )
     parser.add_argument("-st", "--search_types", nargs="*", default=[])
     parser.add_argument("-g", "--use_gpu", action="store_true", default=True)
+    parser.add_argument("-sw", "--skip_wait", action="store_true", default=False)
 
     args = parser.parse_args()
 

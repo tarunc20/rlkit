@@ -33,11 +33,14 @@ def experiment(variant):
             suite.make(
                 **env_config,
                 has_renderer=False,
-                has_offscreen_renderer=False,
+                has_offscreen_renderer=True,
                 use_object_obs=True,
                 use_camera_obs=False,
                 reward_shaping=True,
                 controller_configs=controller_config,
+                camera_names="frontview",
+                camera_heights=1024,
+                camera_widths=1024,
             )
         )
     # Create gym-compatible envs

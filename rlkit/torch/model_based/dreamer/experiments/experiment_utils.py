@@ -116,5 +116,5 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
                 python_cmd=python_cmd,
                 seed=seed,
                 exp_id=exp_id,
-                skip_wait=True,
+                skip_wait=args.skip_wait,
             )

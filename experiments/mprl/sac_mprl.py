@@ -6,6 +6,9 @@ from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
 
 
 def preprocess_variant(variant):
+    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
+    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
     return variant
 
 
@@ -15,9 +18,9 @@ if __name__ == "__main__":
     variant = {
         "mprl": True,
         "algorithm": "MPRL-SAC",
+        "max_path_length": 50,
         "algorithm_kwargs": {
             "batch_size": 128,
-            "max_path_length": 100,
             "min_num_steps_before_training": 3300,
             "num_epochs": 2000,
             "num_eval_steps_per_epoch": 500,
@@ -29,7 +32,6 @@ if __name__ == "__main__":
             "controller": "OSC_POSE",
             "env_name": "Lift",
             "hard_reset": False,
-            "horizon": 100,
             "ignore_done": True,
             "reward_scale": 1.0,
             "robots": ("Panda"),
@@ -39,7 +41,6 @@ if __name__ == "__main__":
             "controller": "OSC_POSE",
             "env_name": "Lift",
             "hard_reset": False,
-            "horizon": 100,
             "ignore_done": True,
             "reward_scale": 1.0,
             "robots": ("Panda"),
