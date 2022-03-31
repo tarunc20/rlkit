@@ -80,42 +80,44 @@ class MPEnv(ProxyEnv):
         pos = self.sim.data.body_xpos[self.cube_body_id] + np.array([0, 0, 0.025])
         error = set_robot_based_on_ee_pos(self, pos, self.ik_ctrl)
         obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
-        self.ctr = 0
+        self.num_steps = 50 #assume it takes at least this many steps to actually reach near the cube (this might be unfair)
         return obs
 
     def step(self, action):
         o, r, d, i = self._wrapped_env.step(action)
-        self.ctr += 1
+        self.num_steps += 1
         is_grasped = self._check_grasp(
             gripper=self.robots[0].gripper,
             object_geoms=self.cube,
         )
         is_success = self._check_success()
-        if self.ctr == self.horizon and is_grasped and not is_success:
+        if is_grasped and not is_success:
             action = np.array([0, 0, 0.05, 0, 0, 0, 1])
             for _ in range(50):
-                self._wrapped_env.step(action)
-            new_r = self.reward(action)
-            if (
-                self._check_grasp(
-                    gripper=self.robots[0].gripper,
-                    object_geoms=self.cube,
-                )
-                and new_r > r
-            ):
+                new_r = self._wrapped_env.step(action)[1]
+                self.num_steps += 1
+                if new_r == 1.0:
+                    break
+            if new_r > r:
                 r = new_r
-                print(r)
-        i["success"] = float(self._check_success())
-        i["grasped"] = float(
-            self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.cube,
-            )
+            if new_r == 1.0:
+                d = True
+        is_grasped = self._check_grasp(
+            gripper=self.robots[0].gripper,
+            object_geoms=self.cube,
         )
+        is_success = self._check_success()
+        i["success"] = float(is_grasped)
+        i["grasped"] = float(is_success)
+        i["num_steps"] = self.num_steps
         return o, r, d, i
 
 
 class RobosuiteEnv(ProxyEnv):
+    def reset(self, **kwargs):
+        self.num_steps = 50
+        return super().reset(**kwargs)
+
     def step(self, action):
         o, r, d, i = self.step(action)
         i["success"] = float(self._check_success())
@@ -125,4 +127,7 @@ class RobosuiteEnv(ProxyEnv):
                 object_geoms=self.cube,
             )
         )
+        i["num_steps"] = self.num_steps
+        if r == 1.0:
+            d = True
         return o, r, d, i
