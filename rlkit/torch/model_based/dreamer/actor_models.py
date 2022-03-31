@@ -1,4 +1,4 @@
-from rlkit.exploration_strategies.ou_strategy import OUStrategy
+from rlkit.torch.model_based.dreamer.ou_strategy import OUStrategy
 import torch
 import pdb
 import torch.nn.functional as F
@@ -37,7 +37,15 @@ class ActorModel(Mlp):
         self.action_space = action_space
 
         if self.exploration_strategy is not None:
-            self.strategy = OUStrategy(self.action_space)
+            dim = 1
+
+            for i in range(len(self.action_space.shape)):
+                dim *= self.action_space[i]
+            
+            high = self.action_space.high
+            low = self.action_space.low
+
+            self.strategy = OUStrategy(dim=dim, low=low, high=high)
         
         if self.discrete_continuous_dist:
             self.t = 0
