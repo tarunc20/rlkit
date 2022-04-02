@@ -1,9 +1,8 @@
 import numpy as np
 import numpy.random as nr
 import torch
-from rlkit.exploration_strategies.base import RawExplorationStrategy
+from torch import jit
 
-@torch.jit.script
 class OUStrategy():
     """
     This strategy implements the Ornstein-Uhlenbeck process, which adds
@@ -45,6 +44,7 @@ class OUStrategy():
     def reset(self):
         self.state = torch.ones(self.dim) * self.mu
 
+    @jit.script_method
     def evolve_state(self):
         with torch.no_grad():
             x = self.state
@@ -52,6 +52,7 @@ class OUStrategy():
             self.state = x + dx
             return self.state
 
+    @jit.script_method
     def get_action_from_raw_action(self, action, t=0):
         with torch.no_grad():
             ou_state = self.evolve_state()
