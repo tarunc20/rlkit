@@ -46,6 +46,7 @@ class MPEnv(ProxyEnv):
                 modality="image",
             )
             self.cam_sensor = cam_sensors
+        self.num_steps = 0
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -80,7 +81,7 @@ class MPEnv(ProxyEnv):
         pos = self.sim.data.body_xpos[self.cube_body_id] + np.array([0, 0, 0.025])
         error = set_robot_based_on_ee_pos(self, pos, self.ik_ctrl)
         obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
-        self.num_steps = 50 #assume it takes at least this many steps to actually reach near the cube (this might be unfair)
+        self.num_steps += 50  # assume it takes at least this many steps to actually reach near the cube (this might be unfair)
         return obs
 
     def step(self, action):
@@ -94,14 +95,10 @@ class MPEnv(ProxyEnv):
         if is_grasped and not is_success:
             action = np.array([0, 0, 0.05, 0, 0, 0, 1])
             for _ in range(50):
-                new_r = self._wrapped_env.step(action)[1]
+                o, r = self._wrapped_env.step(action)[:2]
                 self.num_steps += 1
-                if new_r == 1.0:
+                if r == 1.0:
                     break
-            if new_r > r:
-                r = new_r
-            if new_r == 1.0:
-                d = True
         is_grasped = self._check_grasp(
             gripper=self.robots[0].gripper,
             object_geoms=self.cube,
@@ -114,12 +111,39 @@ class MPEnv(ProxyEnv):
 
 
 class RobosuiteEnv(ProxyEnv):
+    def __init__(self, env):
+        super().__init__(env)
+        for (cam_name, cam_w, cam_h, cam_d, cam_segs) in zip(
+            self.camera_names,
+            self.camera_widths,
+            self.camera_heights,
+            self.camera_depths,
+            self.camera_segmentations,
+        ):
+
+            # Add cameras associated to our arrays
+            cam_sensors, cam_sensor_names = self._create_camera_sensors(
+                cam_name,
+                cam_w=cam_w,
+                cam_h=cam_h,
+                cam_d=cam_d,
+                cam_segs=cam_segs,
+                modality="image",
+            )
+            self.cam_sensor = cam_sensors
+        self.num_steps = 0
+
+    def get_image(self):
+        im = self.cam_sensor[0](None)
+        im = cv2.flip(im[:, :, ::-1], 0)
+        return im
+
     def reset(self, **kwargs):
-        self.num_steps = 50
         return super().reset(**kwargs)
 
     def step(self, action):
-        o, r, d, i = self.step(action)
+        o, r, d, i = super().step(action)
+        self.num_steps += 1
         i["success"] = float(self._check_success())
         i["grasped"] = float(
             self._check_grasp(
@@ -128,6 +152,4 @@ class RobosuiteEnv(ProxyEnv):
             )
         )
         i["num_steps"] = self.num_steps
-        if r == 1.0:
-            d = True
         return o, r, d, i

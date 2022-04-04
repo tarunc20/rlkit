@@ -22,7 +22,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 2000,
+            "num_epochs": 500,
             "num_eval_steps_per_epoch": 500,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,

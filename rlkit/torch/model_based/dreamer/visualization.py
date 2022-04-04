@@ -392,12 +392,12 @@ def visualize_primitive_unsubsampled_rollout(
     print(f"Saved Rollout Visualization to {file_path}")
 
 
-def make_video(frames, logdir):
+def make_video(frames, logdir, epoch):
     height, width, _ = frames[0].shape
     size = (width, height)
 
     out = cv2.VideoWriter(
-        logdir + "/" + "viz.avi", cv2.VideoWriter_fourcc(*"DIVX"), 60, size
+        logdir + "/" + f"viz_{epoch}.avi", cv2.VideoWriter_fourcc(*"DIVX"), 60, size
     )
 
     for frame in frames:

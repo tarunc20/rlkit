@@ -18,7 +18,7 @@ if __name__ == "__main__":
             "batch_size": 128,
             "max_path_length": 500,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 2000,
+            "num_epochs": 500,
             "num_eval_steps_per_epoch": 2500,
             "num_expl_steps_per_train_loop": 2500,
             "num_trains_per_train_loop": 1000,

@@ -1,3 +1,44 @@
+def video_func(algorithm, epoch):
+    import os
+    import pickle
+    import numpy as np
+    from rlkit.torch.model_based.dreamer.visualization import make_video
+    from rlkit.core import logger
+    import copy
+
+    if epoch % 50 == 0 or epoch == -1:
+        policy = algorithm.eval_data_collector._policy
+        max_path_length = algorithm.max_path_length
+        env = algorithm.eval_env
+        num_rollouts = 5
+        frames = []
+        for _ in range(num_rollouts):
+            policy.reset()
+            o = env.reset()
+            for path_length in range(max_path_length):
+                a, agent_info = policy.get_action(o)
+                o, r, d, i = env.step(copy.deepcopy(a))
+                im = env.get_image()
+                if len(frames) > path_length:
+                    frames[path_length] = np.concatenate(
+                        (frames[path_length], im), axis=1
+                    )
+                else:
+                    frames.append(im)
+                if d:
+                    break
+        logdir = logger.get_snapshot_dir()
+        make_video(frames, logdir, epoch)
+        print("saved video for epoch {}".format(epoch))
+        pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
+
+
+def load_policy(path):
+    import pickle
+
+    return pickle.load(open(path, "rb"))
+
+
 def experiment(variant):
     import robosuite as suite
     from robosuite.controllers import ALL_CONTROLLERS, load_controller_config
@@ -39,8 +80,8 @@ def experiment(variant):
                 reward_shaping=True,
                 controller_configs=controller_config,
                 camera_names="frontview",
-                camera_heights=1024,
-                camera_widths=1024,
+                camera_heights=256,
+                camera_widths=256,
             )
         )
     # Create gym-compatible envs
@@ -67,10 +108,6 @@ def experiment(variant):
     target_qf2 = ConcatMlp(
         input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
     )
-    # Define references to variables that are agent-specific
-    trainer = None
-    eval_policy = None
-    expl_policy = None
 
     # Instantiate trainer with appropriate agent
     expl_policy = TanhGaussianPolicy(
@@ -113,4 +150,6 @@ def experiment(variant):
         **variant["algorithm_kwargs"],
     )
     algorithm.to(ptu.device)
+    video_func(algorithm, -1)
+    algorithm.post_epoch_funcs.append(video_func)
     algorithm.train()
