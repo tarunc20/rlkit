@@ -2,7 +2,9 @@ import numpy as np
 import numpy.random as nr
 import torch
 from torch import jit
-
+import rlkit.torch.pytorch_util as ptu
+    
+@jit.script
 class OUStrategy():
     """
     This strategy implements the Ornstein-Uhlenbeck process, which adds
@@ -16,35 +18,36 @@ class OUStrategy():
 
     def __init__(
         self,
-        dim,
-        low,
-        high,
-        mu=0,
-        theta=0.15,
-        max_sigma=0.3,
-        min_sigma=None,
-        decay_period=100000,
+        dim:int,
+        low:torch.Tensor,
+        high:torch.Tensor,
+        mu:int=0,
+        theta:float=0.15,
+        max_sigma:float=0.3,
+        min_sigma:float=0,
+        decay_period:float=100000,
     ):
         if min_sigma is None:
             min_sigma = max_sigma
-        self.mu = torch.Tensor(mu)
-        self.theta = theta
-        self.sigma = max_sigma
+        self.mu = torch.tensor(mu)
+        self.theta = torch.tensor(theta)
+        self.sigma = torch.tensor(max_sigma)
         self._max_sigma = max_sigma
-        if min_sigma is None:
+        if min_sigma == 0:
             min_sigma = max_sigma
         self._min_sigma = min_sigma
         self._decay_period = decay_period
-        self.dim = dim
-        self.low = low
-        self.high = high
+        self.dim = torch.tensor(dim)
+        self.low = torch.tensor(low).to(ptu.device)
+        self.high = torch.tensor(high).to(ptu.device)
+        
         self.state = torch.ones(self.dim) * self.mu
-        self.reset()
-
+    
+    
     def reset(self):
         self.state = torch.ones(self.dim) * self.mu
 
-    @jit.script_method
+    
     def evolve_state(self):
         with torch.no_grad():
             x = self.state
@@ -52,11 +55,17 @@ class OUStrategy():
             self.state = x + dx
             return self.state
 
-    @jit.script_method
-    def get_action_from_raw_action(self, action, t=0):
+    
+    def get_action_from_raw_action(self, action:torch.Tensor, t:int=0):
         with torch.no_grad():
             ou_state = self.evolve_state()
-            self.sigma = self._max_sigma - (self._max_sigma - self._min_sigma) * min(
+            self.sigma = self._max_sigma - (self._max_sigma - self._min_sigma) * torch.tensor(min(
                 1.0, t * 1.0 / self._decay_period
-            )
-            return torch.clip(action + ou_state, self.low, self.high)
+            ))
+
+            ou_state = ou_state.to(ptu.device)
+            new_action = action + ou_state
+            new_action = torch.where(new_action < self.low, self.low, new_action)
+            new_action = torch.where(new_action > self.high, self.high, new_action)
+
+            return new_action
