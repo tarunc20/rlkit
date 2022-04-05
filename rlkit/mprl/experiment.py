@@ -1,10 +1,12 @@
 def video_func(algorithm, epoch):
+    import copy
     import os
     import pickle
+
     import numpy as np
-    from rlkit.torch.model_based.dreamer.visualization import make_video
+
     from rlkit.core import logger
-    import copy
+    from rlkit.torch.model_based.dreamer.visualization import make_video
 
     if epoch % 50 == 0 or epoch == -1:
         policy = algorithm.eval_data_collector._policy
@@ -15,7 +17,12 @@ def video_func(algorithm, epoch):
         for _ in range(num_rollouts):
             policy.reset()
             o = env.reset()
-            for path_length in range(max_path_length):
+            im = env.get_image()
+            if len(frames) > 0:
+                frames[0] = np.concatenate((frames[0], im), axis=1)
+            else:
+                frames.append(im)
+            for path_length in range(1, max_path_length + 1):
                 a, agent_info = policy.get_action(o)
                 o, r, d, i = env.step(copy.deepcopy(a))
                 im = env.get_image()
@@ -87,8 +94,12 @@ def experiment(variant):
     # Create gym-compatible envs
 
     if variant.get("mprl", False):
-        expl_env = MPEnv(NormalizedBoxEnv(GymWrapper(suites[0])))
-        eval_env = MPEnv(NormalizedBoxEnv(GymWrapper(suites[1])))
+        expl_env = MPEnv(
+            NormalizedBoxEnv(GymWrapper(suites[0])), **variant.get("mp_env_kwargs")
+        )
+        eval_env = MPEnv(
+            NormalizedBoxEnv(GymWrapper(suites[1])), **variant.get("mp_env_kwargs")
+        )
     else:
         expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(suites[0])))
         eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(suites[1])))

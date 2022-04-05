@@ -24,11 +24,9 @@ def check_robot_collision(env):
             return True
     return False
 
-
 def isCollisionFreeVertex(env, pos):
     set_robot_based_on_ee_pos(env, pos)
     return check_robot_collision(env)
-
 
 class MPEnv(ProxyEnv):
     def __init__(self, env):
@@ -58,13 +56,14 @@ class MPEnv(ProxyEnv):
         im = cv2.flip(im[:, :, ::-1], 0)
         return im
 
-    def reach_point(
-        self,
-    ):
+    def reach_point(self,):
+        """
+
+        """
         pass
 
     def reset(self, **kwargs):
-        self._wrapped_env.reset(**kwargs)
+        o = self._wrapped_env.reset(**kwargs)
         controller_config = {
             "type": "IK_POSE",
             "ik_pos_limit": 0.02,
@@ -118,13 +117,14 @@ class MPEnv(ProxyEnv):
                 and new_r > r
             ):
                 r = new_r
-        i["success"] = float(self._check_success())
-        i["grasped"] = float(
-            self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.cube,
-            )
+        is_grasped = self._check_grasp(
+            gripper=self.robots[0].gripper,
+            object_geoms=self.cube,
         )
+        is_success = self._check_success()
+        i["success"] = float(is_grasped)
+        i["grasped"] = float(is_success)
+        i["num_steps"] = self.num_steps
         return o, r, d, i
 
 
