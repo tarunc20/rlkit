@@ -34,7 +34,7 @@ if __name__ == "__main__":
             "hard_reset": False,
             "ignore_done": True,
             "reward_scale": 1.0,
-            "robots": ("Panda"),
+            "robots": "Panda",
         },
         "expl_environment_kwargs": {
             "control_freq": 20,
@@ -43,7 +43,7 @@ if __name__ == "__main__":
             "hard_reset": False,
             "ignore_done": True,
             "reward_scale": 1.0,
-            "robots": ("Panda"),
+            "robots": "Panda",
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},

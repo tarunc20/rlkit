@@ -25,6 +25,11 @@ def check_robot_collision(env):
     return False
 
 
+def isCollisionFreeVertex(env, pos):
+    set_robot_based_on_ee_pos(env, pos)
+    return check_robot_collision(env)
+
+
 class MPEnv(ProxyEnv):
     def __init__(self, env):
         super().__init__(env)
@@ -53,8 +58,13 @@ class MPEnv(ProxyEnv):
         im = cv2.flip(im[:, :, ::-1], 0)
         return im
 
+    def reach_point(
+        self,
+    ):
+        pass
+
     def reset(self, **kwargs):
-        o = self._wrapped_env.reset(**kwargs)
+        self._wrapped_env.reset(**kwargs)
         controller_config = {
             "type": "IK_POSE",
             "ik_pos_limit": 0.02,
@@ -82,31 +92,39 @@ class MPEnv(ProxyEnv):
         error = set_robot_based_on_ee_pos(self, pos, self.ik_ctrl)
         obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
         self.num_steps += 50  # assume it takes at least this many steps to actually reach near the cube (this might be unfair)
+        self.ep_step_ctr = 0
         return obs
 
     def step(self, action):
         o, r, d, i = self._wrapped_env.step(action)
         self.num_steps += 1
+        self.ep_step_ctr += 1
         is_grasped = self._check_grasp(
             gripper=self.robots[0].gripper,
             object_geoms=self.cube,
         )
         is_success = self._check_success()
-        if is_grasped and not is_success:
+        if self.ep_step_ctr == self.horizon and is_grasped and not is_success:
             action = np.array([0, 0, 0.05, 0, 0, 0, 1])
             for _ in range(50):
-                o, r = self._wrapped_env.step(action)[:2]
+                self._wrapped_env.step(action)
                 self.num_steps += 1
-                if r == 1.0:
-                    break
-        is_grasped = self._check_grasp(
-            gripper=self.robots[0].gripper,
-            object_geoms=self.cube,
+            new_r = self.reward(action)
+            if (
+                self._check_grasp(
+                    gripper=self.robots[0].gripper,
+                    object_geoms=self.cube,
+                )
+                and new_r > r
+            ):
+                r = new_r
+        i["success"] = float(self._check_success())
+        i["grasped"] = float(
+            self._check_grasp(
+                gripper=self.robots[0].gripper,
+                object_geoms=self.cube,
+            )
         )
-        is_success = self._check_success()
-        i["success"] = float(is_grasped)
-        i["grasped"] = float(is_success)
-        i["num_steps"] = self.num_steps
         return o, r, d, i
 
 
