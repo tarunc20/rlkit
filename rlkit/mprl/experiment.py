@@ -48,7 +48,7 @@ def load_policy(path):
 
 def experiment(variant):
     import robosuite as suite
-    from robosuite.controllers import ALL_CONTROLLERS, load_controller_config
+    from robosuite.controllers import load_controller_config
     from robosuite.wrappers import GymWrapper
 
     import rlkit.torch.pytorch_util as ptu
@@ -61,48 +61,66 @@ def experiment(variant):
     from rlkit.torch.sac.sac import SACTrainer
     from rlkit.torch.torch_rl_algorithm import TorchBatchRLAlgorithm
 
-    # Get environment configs for expl and eval envs and create the appropriate envs
-    # suites[0] is expl and suites[1] is eval
-    suites = []
-    for env_config in (
-        variant["expl_environment_kwargs"],
-        variant["eval_environment_kwargs"],
-    ):
-        # Load controller
-        controller = env_config.pop("controller")
-        if controller in set(ALL_CONTROLLERS):
-            # This is a default controller
-            controller_config = load_controller_config(default_controller=controller)
-        else:
-            # This is a string to the custom controller
-            controller_config = load_controller_config(custom_fpath=controller)
-        # Create robosuite env and append to our list
-        suites.append(
-            suite.make(
-                **env_config,
-                has_renderer=False,
-                has_offscreen_renderer=True,
-                use_object_obs=True,
-                use_camera_obs=False,
-                reward_shaping=True,
-                controller_configs=controller_config,
-                camera_names="frontview",
-                camera_heights=256,
-                camera_widths=256,
-            )
+    # Load controller
+    controller = variant["expl_environment_kwargs"].pop("controller")
+    controller_config = load_controller_config(default_controller=controller)
+    # Create robosuite env and append to our list
+    expl_env = suite.make(
+            **variant["expl_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=True,
+            use_object_obs=True,
+            use_camera_obs=False,
+            reward_shaping=True,
+            controller_configs=controller_config,
+            camera_names="frontview",
+            camera_heights=256,
+            camera_widths=256,
+        )
+    expl_mp_env = suite.make(
+            **variant["expl_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=False,
+            use_object_obs=True,
+            use_camera_obs=False,
+            reward_shaping=True,
+            controller_configs=controller_config,
+        )
+    controller = variant["eval_environment_kwargs"].pop("controller")
+    controller_config = load_controller_config(default_controller=controller)
+    eval_env = suite.make(
+            **variant["eval_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=True,
+            use_object_obs=True,
+            use_camera_obs=False,
+            reward_shaping=True,
+            controller_configs=controller_config,
+            camera_names="frontview",
+            camera_heights=256,
+            camera_widths=256,
+        )
+    eval_mp_env = suite.make(
+            **variant["eval_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=False,
+            use_object_obs=True,
+            use_camera_obs=False,
+            reward_shaping=True,
+            controller_configs=controller_config,
         )
     # Create gym-compatible envs
 
     if variant.get("mprl", False):
         expl_env = MPEnv(
-            NormalizedBoxEnv(GymWrapper(suites[0])), **variant.get("mp_env_kwargs")
+            NormalizedBoxEnv(GymWrapper(expl_env)), mp_env=expl_mp_env, **variant.get("mp_env_kwargs")
         )
         eval_env = MPEnv(
-            NormalizedBoxEnv(GymWrapper(suites[1])), **variant.get("mp_env_kwargs")
+             NormalizedBoxEnv(GymWrapper(eval_env)), mp_env=eval_mp_env,  **variant.get("mp_env_kwargs")
         )
     else:
-        expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(suites[0])))
-        eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(suites[1])))
+        expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)))
+        eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)))
 
     obs_dim = expl_env.observation_space.low.size
     action_dim = eval_env.action_space.low.size
