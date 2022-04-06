@@ -39,9 +39,11 @@ def check_robot_collision(env):
             return True
     return False
 
+
 def isCollisionFreeVertex(env, pos):
     set_robot_based_on_ee_pos(env, pos)
     return check_robot_collision(env)
+
 
 class MPEnv(ProxyEnv):
     def __init__(self, env, mp_env, vertical_displacement, teleport_position=True):
@@ -153,9 +155,7 @@ class MPEnv(ProxyEnv):
                         grip_ctrl = 1
                     else:
                         grip_ctrl = 0
-                    action = np.concatenate(
-                        (pos_delta, rot_delta, [grip_ctrl])
-                    )
+                    action = np.concatenate((pos_delta, rot_delta, [grip_ctrl]))
                     if np.linalg.norm(action) < 1e-5:
                         break
                     obs = self.wrapped_env.step(action)[0]
@@ -165,12 +165,12 @@ class MPEnv(ProxyEnv):
     def reset(self, **kwargs):
         self._wrapped_env.reset(**kwargs)
         controller_config = {
-                "type": "IK_POSE",
-                "ik_pos_limit": 0.02,
-                "ik_ori_limit": 0.05,
-                "interpolation": None,
-                "ramp_ratio": 0.2,
-            }
+            "type": "IK_POSE",
+            "ik_pos_limit": 0.02,
+            "ik_ori_limit": 0.05,
+            "interpolation": None,
+            "ramp_ratio": 0.2,
+        }
         if self.teleport_position:
             controller_config["robot_name"] = self.robots[0].name
             controller_config["sim"] = self.robots[0].sim
@@ -187,8 +187,12 @@ class MPEnv(ProxyEnv):
             controller_config["policy_freq"] = self.robots[0].control_freq
             controller_config["ndim"] = len(self.robots[0].robot_joints)
             self.ik_ctrl = controller_factory("IK_POSE", controller_config)
-            self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
-            pos = self.sim.data.body_xpos[self.cube_body_id] + np.array([0, 0, self.vertical_displacement])
+            self.ik_ctrl.update_base_pose(
+                self.robots[0].base_pos, self.robots[0].base_ori
+            )
+            pos = self.sim.data.body_xpos[self.cube_body_id] + np.array(
+                [0, 0, self.vertical_displacement]
+            )
             error = set_robot_based_on_ee_pos(self, pos, self.ik_ctrl)
             obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
             self.num_steps += 100
@@ -200,9 +204,9 @@ class MPEnv(ProxyEnv):
 
             controller_config["robot_name"] = self.mp_env.robots[0].name
             controller_config["sim"] = self.mp_env.robots[0].sim
-            controller_config["eef_name"] = self.mp_env.robots[0].gripper.important_sites[
-                "grip_site"
-            ]
+            controller_config["eef_name"] = self.mp_env.robots[
+                0
+            ].gripper.important_sites["grip_site"]
             controller_config["eef_rot_offset"] = self.mp_env.robots[0].eef_rot_offset
             controller_config["joint_indexes"] = {
                 "joints": self.mp_env.robots[0].joint_indexes,
