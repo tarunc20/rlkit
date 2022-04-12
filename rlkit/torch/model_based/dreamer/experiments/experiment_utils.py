@@ -1,3 +1,6 @@
+from functools import reduce
+import operator
+
 def preprocess_variant_p2exp(variant):
     variant = variant.copy()
     if variant["reward_type"] == "intrinsic":
@@ -24,6 +27,12 @@ def preprocess_variant_p2exp(variant):
         variant["trainer_kwargs"]["detach_rewards"] = False
     return variant
 
+# https://stackoverflow.com/a/14692747
+def get_from_dict(data_dict, map_list):
+    return reduce(operator.getitem, map_list, data_dict)
+
+def set_in_dict(data_dict, map_list, value):
+    get_from_dict(data_dict, map_list[:-1])[map_list[-1]] = value
 
 def preprocess_variant_raps(variant):
     variant = variant.copy()
@@ -36,7 +45,7 @@ def preprocess_variant_raps(variant):
     return variant
 
 
-def preprocess_variant_llraps(variant):
+def preprocess_variant_llraps(variant, args):
     variant = variant.copy()
     variant["trainer_kwargs"]["batch_length"] = int(
         variant["num_low_level_actions_per_primitive"] * variant["max_path_length"] + 1
@@ -78,6 +87,10 @@ def preprocess_variant_llraps(variant):
         "num_low_level_actions_per_primitive"
     ] = variant["num_low_level_actions_per_primitive"]
 
+    for key, value in zip(args.param_keys, args.param_values):
+        key = key.split('.')
+        set_in_dict(variant, key, value)
+    
     variant = preprocess_variant_raps(variant)
 
     return variant
@@ -98,7 +111,7 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
         default_parameters=variant,
     )
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        variant = preprocess_variant_fn(variant)
+        variant = preprocess_variant_fn(variant, args)
         for _ in range(args.num_seeds):
             seed = random.randint(0, 100000)
             variant["seed"] = seed
