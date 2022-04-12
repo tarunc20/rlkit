@@ -1,4 +1,5 @@
 import argparse
+from turtle import update
 
 
 def convert_value_to_type(value, type_):
@@ -15,6 +16,19 @@ def convert_value_to_type(value, type_):
         raise NotImplementedError(f"type {type_} not implemented")
     return value
 
+def get_type(values, types):
+    updated_search_values = []
+    for value, type_ in zip(values, types):
+        if type(value) == list:
+            updated_value = []
+            for nested_value in value:
+                nested_value = convert_value_to_type(nested_value, type_)
+                updated_value.append(nested_value)
+        else:
+            updated_value = convert_value_to_type(value, type_)
+        updated_search_values.append(updated_value)
+    
+    return updated_search_values
 
 def get_args():
     parser = argparse.ArgumentParser(description="Experiment Launcher Arguments")
@@ -29,20 +43,14 @@ def get_args():
     )
     parser.add_argument("-st", "--search_types", nargs="*", default=[])
     parser.add_argument("-g", "--use_gpu", action="store_true", default=True)
+    parser.add_argument("-pk", "--param_keys", type=str, nargs="*", default=[])
+    parser.add_argument("-pv", "--param_values", type=str, nargs="*", default=[])
+    parser.add_argument("-pt", "--param_types", type=str, nargs="*", default=[])
 
     args = parser.parse_args()
 
     # Convert search values from string to the specified types.
-    updated_search_values = []
-    for value, type_ in zip(args.search_values, args.search_types):
-        if type(value) == list:
-            updated_value = []
-            for nested_value in value:
-                nested_value = convert_value_to_type(nested_value, type_)
-                updated_value.append(nested_value)
-        else:
-            updated_value = convert_value_to_type(value, type_)
-        updated_search_values.append(updated_value)
-    args.search_values = updated_search_values
+    args.search_values = get_type(args.search_values, args.search_types)
+    args.param_values = get_type(args.param_values, args.param_types)
 
     return args
