@@ -22,7 +22,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 150,
+            "num_epochs": 500,
             "num_eval_steps_per_epoch": 500,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,
@@ -46,7 +46,7 @@ if __name__ == "__main__":
             "robots": "Panda",
         },
         "mp_env_kwargs": {
-            "vertical_displacement": 0.025,
+            "vertical_displacement": 0.08,
             "teleport_position": True,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},

@@ -77,15 +77,6 @@ def experiment(variant):
         camera_heights=256,
         camera_widths=256,
     )
-    expl_mp_env = suite.make(
-        **variant["expl_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=False,
-        use_object_obs=True,
-        use_camera_obs=False,
-        reward_shaping=True,
-        controller_configs=controller_config,
-    )
     controller = variant["eval_environment_kwargs"].pop("controller")
     controller_config = load_controller_config(default_controller=controller)
     eval_env = suite.make(
@@ -100,26 +91,15 @@ def experiment(variant):
         camera_heights=256,
         camera_widths=256,
     )
-    eval_mp_env = suite.make(
-        **variant["eval_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=False,
-        use_object_obs=True,
-        use_camera_obs=False,
-        reward_shaping=True,
-        controller_configs=controller_config,
-    )
     # Create gym-compatible envs
 
     if variant.get("mprl", False):
         expl_env = MPEnv(
             NormalizedBoxEnv(GymWrapper(expl_env)),
-            mp_env=expl_mp_env,
             **variant.get("mp_env_kwargs"),
         )
         eval_env = MPEnv(
             NormalizedBoxEnv(GymWrapper(eval_env)),
-            mp_env=eval_mp_env,
             **variant.get("mp_env_kwargs"),
         )
     else:
