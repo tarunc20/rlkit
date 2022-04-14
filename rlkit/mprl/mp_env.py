@@ -22,10 +22,11 @@ except ImportError:
 
 def set_robot_based_on_ee_pos(env, pos, quat, ctrl):
     ctrl.sync_state()
-    joint_pos = ctrl.inverse_kinematics(pos, quat)
+    desired_rot = quat2mat(quat)
+    cur_rot = quat2mat(env._eef_xquat)
+    rot_diff = desired_rot @ np.linalg.inv(cur_rot)
+    joint_pos = ctrl.joint_positions_for_eef_command(pos-env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
-    # print(np.linalg.norm(env._eef_xpos - pos)**2)
-
 
 def check_robot_string(string):
     return string.startswith("robot") or string.startswith("gripper")
@@ -108,7 +109,7 @@ def apply_controller(controller, action, robot, policy_step):
 
 
 def mp_to_point(
-    env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False, ignore_object_collision=False
+    env, ik_ctrl, osc_ctrl, pos, grasp=False, ignore_object_collision=False
 ):
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -126,6 +127,9 @@ def mp_to_point(
         )
         return valid
 
+    qpos = env.sim.data.qpos.copy()
+    qvel = env.sim.data.qvel.copy()
+    og_eef_xpos = env._eef_xpos
     # create an SE3 state space
     space = ob.SE3StateSpace()
 
@@ -174,6 +178,7 @@ def mp_to_point(
         env.sim.data.qpos[:] = qpos.copy()
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
+        assert (env._eef_xpos == og_eef_xpos).all()
 
         path = pdef.getSolutionPath()
 
@@ -312,8 +317,6 @@ class MPEnv(ProxyEnv):
                 self,
                 self.ik_ctrl,
                 self.osc_ctrl,
-                self.sim.data.qpos,
-                self.sim.data.qvel,
                 pos,
                 grasp=False,
             )
@@ -371,8 +374,6 @@ class MPEnv(ProxyEnv):
                     self,
                     self.ik_ctrl,
                     self.osc_ctrl,
-                    self.sim.data.qpos,
-                    self.sim.data.qvel,
                     np.concatenate((target_pose, self._eef_xquat)),
                     grasp=True,
                     ignore_object_collision=True,

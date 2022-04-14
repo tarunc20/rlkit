@@ -46,7 +46,7 @@ if __name__ == "__main__":
             "robots": "Panda",
         },
         "mp_env_kwargs": {
-            "vertical_displacement": 0.08,
+            "vertical_displacement": 0.04,
             "teleport_position": True,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
