@@ -337,7 +337,7 @@ class MPEnv(ProxyEnv):
             )
         return is_grasped
 
-    def get_target_pose(
+    def get_target_pos(
         self,
     ):
         if self.name.endswith("Lift"):
@@ -360,11 +360,11 @@ class MPEnv(ProxyEnv):
         is_grasped = self.check_grasp()
         is_success = self._check_success()
         if self.ep_step_ctr == self.horizon and is_grasped and not is_success:
-            target_pose = self.get_target_pose()
+            target_pos = self.get_target_pos()
             if self.teleport_position:
                 for _ in range(50):
                     self._wrapped_env.step(
-                        np.concatenate((target_pose - self._eef_xpos, [0, 0, 0, 1]))
+                        np.concatenate((target_pos - self._eef_xpos, [0, 0, 0, 1]))
                     )
                     self.num_steps += 1
             else:
@@ -372,7 +372,7 @@ class MPEnv(ProxyEnv):
                     self,
                     self.ik_ctrl,
                     self.osc_ctrl,
-                    np.concatenate((target_pose, self._eef_xquat)),
+                    np.concatenate((target_pos, self._eef_xquat)),
                     grasp=True,
                     ignore_object_collision=True,
                 )
