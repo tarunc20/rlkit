@@ -172,14 +172,13 @@ def mp_to_point(
     planner.setup()
     # attempt to solve the problem within one second of planning time
     solved = planner.solve(1)
-
     if solved:
         # reset env to original qpos/qvel
+        env._wrapped_env.reset()
         env.sim.data.qpos[:] = qpos.copy()
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
-        assert (env._eef_xpos == og_eef_xpos).all()
-
+        assert (env._eef_xpos == og_eef_xpos).all(), np.linalg.norm(env._eef_xpos, og_eef_xpos)
         path = pdef.getSolutionPath()
 
         converted_path = []
@@ -209,7 +208,6 @@ def mp_to_point(
                 action = np.concatenate((pos_delta, rot_delta, [grip_ctrl]))
                 if np.linalg.norm(action[:-1]) < 1e-5:
                     break
-                # obs = env.wrapped_env.step(action)[0]
                 policy_step = True
                 for i in range(int(env.control_timestep / env.model_timestep)):
                     env.sim.forward()
