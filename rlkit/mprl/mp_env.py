@@ -25,8 +25,9 @@ def set_robot_based_on_ee_pos(env, pos, quat, ctrl):
     desired_rot = quat2mat(quat)
     cur_rot = quat2mat(env._eef_xquat)
     rot_diff = desired_rot @ np.linalg.inv(cur_rot)
-    joint_pos = ctrl.joint_positions_for_eef_command(pos-env._eef_xpos, rot_diff)
+    joint_pos = ctrl.joint_positions_for_eef_command(pos - env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
+
 
 def check_robot_string(string):
     return string.startswith("robot") or string.startswith("gripper")
@@ -49,17 +50,6 @@ def check_robot_collision(env, ignore_object_collision):
                     and ignore_object_collision
                 ):
                     continue
-                return True
-    return False
-
-
-def check_robot_collision_with_cube(env):
-    d = env.sim.data
-    for coni in range(d.ncon):
-        con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
-        con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
-        if check_robot_string(con1) or check_robot_string(con2):
-            if con1.startswith("cube") or con2.startswith("cube"):
                 return True
     return False
 
@@ -109,7 +99,13 @@ def apply_controller(controller, action, robot, policy_step):
 
 
 def mp_to_point(
-    env, ik_controller_config, osc_controller_config, pos, grasp=False, ignore_object_collision=False
+    env,
+    ik_controller_config,
+    osc_controller_config,
+    pos,
+    grasp=False,
+    ignore_object_collision=False,
+    planning_time=1,
 ):
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -129,9 +125,7 @@ def mp_to_point(
 
     update_controller_config(env, ik_controller_config)
     ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
-    ik_ctrl.update_base_pose(
-        env.robots[0].base_pos, env.robots[0].base_ori
-    )
+    ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
 
     qpos = env.sim.data.qpos.copy()
     qvel = env.sim.data.qvel.copy()
@@ -180,21 +174,21 @@ def mp_to_point(
     planner.setProblemDefinition(pdef)
     # perform setup steps for the planner
     planner.setup()
-    # attempt to solve the problem within one second of planning time
-    solved = planner.solve(10)
+    # attempt to solve the problem within planning_time seconds of planning time
+    solved = planner.solve(planning_time)
     if solved:
         # reset env to original qpos/qvel
         env._wrapped_env.reset()
         env.sim.data.qpos[:] = qpos.copy()
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
-        assert (env._eef_xpos == og_eef_xpos).all(), np.linalg.norm(env._eef_xpos, og_eef_xpos)
+        assert (env._eef_xpos == og_eef_xpos).all(), np.linalg.norm(
+            env._eef_xpos, og_eef_xpos
+        )
 
         update_controller_config(env, osc_controller_config)
         osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
-        osc_ctrl.update_base_pose(
-            env.robots[0].base_pos, env.robots[0].base_ori
-        )
+        osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
 
         path = pdef.getSolutionPath()
 
@@ -243,7 +237,13 @@ def mp_to_point(
 
 
 class MPEnv(ProxyEnv):
-    def __init__(self, env, vertical_displacement, teleport_position=True):
+    def __init__(
+        self,
+        env,
+        vertical_displacement,
+        teleport_position=True,
+        planning_time=1,
+    ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
             self.camera_names,
@@ -266,6 +266,7 @@ class MPEnv(ProxyEnv):
         self.num_steps = 0
         self.vertical_displacement = vertical_displacement
         self.teleport_position = teleport_position
+        self.planning_time = planning_time
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -324,6 +325,7 @@ class MPEnv(ProxyEnv):
                 self.osc_controller_config,
                 pos,
                 grasp=False,
+                planning_time=self.planning_time,
             )
             obs = self._flatten_obs(obs)
         self.ep_step_ctr = 0
@@ -382,6 +384,7 @@ class MPEnv(ProxyEnv):
                     np.concatenate((target_pos, self._eef_xquat)),
                     grasp=True,
                     ignore_object_collision=True,
+                    planning_time=self.planning_time,
                 )
             new_r = self.reward(action)
             if self.check_grasp() and new_r > r:
