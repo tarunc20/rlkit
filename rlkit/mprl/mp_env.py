@@ -135,8 +135,12 @@ def mp_to_point(
 
     # set lower and upper bounds
     bounds = ob.RealVectorBounds(3)
-    bounds.setLow(-1.5)
-    bounds.setHigh(1.5)
+    bounds.setLow(0, -1)
+    bounds.setLow(1, -1)
+    bounds.setLow(2, 0.7)
+    bounds.setHigh(0, 1)
+    bounds.setHigh(1, 1)
+    bounds.setHigh(2, 1.25)
     space.setBounds(bounds)
 
     # construct an instance of space information from this state space
@@ -171,7 +175,7 @@ def mp_to_point(
     # perform setup steps for the planner
     planner.setup()
     # attempt to solve the problem within one second of planning time
-    solved = planner.solve(1)
+    solved = planner.solve(10)
     if solved:
         # reset env to original qpos/qvel
         env._wrapped_env.reset()
@@ -220,6 +224,8 @@ def mp_to_point(
         env.mp_init_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
+    else:
+        env.mp_init_mse = 0
     return env._get_observations()
 
 
