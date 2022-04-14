@@ -109,7 +109,7 @@ def apply_controller(controller, action, robot, policy_step):
 
 
 def mp_to_point(
-    env, ik_ctrl, osc_ctrl, pos, grasp=False, ignore_object_collision=False
+    env, ik_controller_config, osc_controller_config, pos, grasp=False, ignore_object_collision=False
 ):
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -126,6 +126,12 @@ def mp_to_point(
             env, ignore_object_collision=ignore_object_collision
         )
         return valid
+
+    update_controller_config(env, ik_controller_config)
+    ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
+    ik_ctrl.update_base_pose(
+        env.robots[0].base_pos, env.robots[0].base_ori
+    )
 
     qpos = env.sim.data.qpos.copy()
     qvel = env.sim.data.qvel.copy()
@@ -183,6 +189,13 @@ def mp_to_point(
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
         assert (env._eef_xpos == og_eef_xpos).all(), np.linalg.norm(env._eef_xpos, og_eef_xpos)
+
+        update_controller_config(env, osc_controller_config)
+        osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
+        osc_ctrl.update_base_pose(
+            env.robots[0].base_pos, env.robots[0].base_ori
+        )
+
         path = pdef.getSolutionPath()
 
         converted_path = []
@@ -269,14 +282,14 @@ class MPEnv(ProxyEnv):
 
     def reset(self, **kwargs):
         self._wrapped_env.reset(**kwargs)
-        ik_controller_config = {
+        self.ik_controller_config = {
             "type": "IK_POSE",
             "ik_pos_limit": 0.02,
             "ik_ori_limit": 0.05,
             "interpolation": None,
             "ramp_ratio": 0.2,
         }
-        osc_controller_config = {
+        self.osc_controller_config = {
             "type": "OSC_POSE",
             "input_max": 1,
             "input_min": -1,
@@ -295,32 +308,20 @@ class MPEnv(ProxyEnv):
             "ramp_ratio": 0.2,
         }
         if self.teleport_position:
-            update_controller_config(self, ik_controller_config)
-            ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
+            update_controller_config(self, self.ik_controller_config)
+            ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
             ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
             pos = self.get_init_target_pos()
             set_robot_based_on_ee_pos(self, pos, self._eef_xquat, ik_ctrl)
             obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
             self.num_steps += 100
         else:
-            update_controller_config(self, ik_controller_config)
-            update_controller_config(self, osc_controller_config)
-            self.ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
-            self.ik_ctrl.update_base_pose(
-                self.robots[0].base_pos, self.robots[0].base_ori
-            )
-
-            self.osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
-            self.osc_ctrl.update_base_pose(
-                self.robots[0].base_pos, self.robots[0].base_ori
-            )
-
             pos = self.get_init_target_pos()
             pos = np.concatenate((pos, self._eef_xquat))
             obs = mp_to_point(
                 self,
-                self.ik_ctrl,
-                self.osc_ctrl,
+                self.ik_controller_config,
+                self.osc_controller_config,
                 pos,
                 grasp=False,
             )
@@ -376,8 +377,8 @@ class MPEnv(ProxyEnv):
             else:
                 mp_to_point(
                     self,
-                    self.ik_ctrl,
-                    self.osc_ctrl,
+                    self.ik_controller_config,
+                    self.osc_controller_config,
                     np.concatenate((target_pos, self._eef_xquat)),
                     grasp=True,
                     ignore_object_collision=True,
