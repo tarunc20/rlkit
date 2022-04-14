@@ -21,22 +21,36 @@ except ImportError:
 
 
 def set_robot_based_on_ee_pos(env, pos, quat, ctrl):
+    ctrl.sync_ik_robot()
     joint_pos = ctrl.inverse_kinematics(pos, quat)
     env.robots[0].set_robot_joint_positions(joint_pos)
-
+    # print(np.linalg.norm(env._eef_xpos - pos)**2)
 
 def check_robot_string(string):
     return string.startswith("robot") or string.startswith("gripper")
 
 
-def check_robot_collision(env):
+def check_robot_collision(env, ignore_cube_collision):
     d = env.sim.data
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
         con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
         if check_robot_string(con1) or check_robot_string(con2):
+            if con1.startswith('cube') or con2.startswith('cube') and ignore_cube_collision:
+                continue
             return True
     return False
+
+def check_robot_collision_with_cube(env):
+    d = env.sim.data
+    for coni in range(d.ncon):
+        con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
+        con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
+        if check_robot_string(con1) or check_robot_string(con2):
+            if con1.startswith('cube') or con2.startswith('cube'):
+                return True
+    return False
+
 
 
 def update_controller_config(env, controller_config):
@@ -83,7 +97,7 @@ def apply_controller(controller, action, robot, policy_step):
     robot.sim.data.ctrl[robot._ref_joint_actuator_indexes] = torques
 
 
-def mp_to_point(env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False):
+def mp_to_point(env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False, ignore_cube_collision=False):
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
         quat = np.array(
@@ -95,7 +109,7 @@ def mp_to_point(env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False):
             ]
         )
         set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl)
-        valid = not check_robot_collision(env)
+        valid = not check_robot_collision(env, ignore_cube_collision=ignore_cube_collision)
         return valid
 
     # create an SE3 state space
@@ -125,6 +139,7 @@ def mp_to_point(env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False):
     goal().rotation().y = pos[4]
     goal().rotation().z = pos[5]
     goal().rotation().w = pos[6]
+    print(f"State validity checks: Start: {isStateValid(start())}, Goal: {isStateValid(goal())}")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -158,6 +173,7 @@ def mp_to_point(env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False):
                 state.rotation().w,
             ]
             converted_path.append(new_state)
+        osc_ctrl.reset_goal()
         for state in converted_path:
             state = np.array(state)
             desired_rot = quat2mat(state[3:])
@@ -170,7 +186,7 @@ def mp_to_point(env, ik_ctrl, osc_ctrl, qpos, qvel, pos, grasp=False):
                 else:
                     grip_ctrl = 0
                 action = np.concatenate((pos_delta, rot_delta, [grip_ctrl]))
-                if np.linalg.norm(action) < 1e-5:
+                if np.linalg.norm(action[:-1]) < 1e-5:
                     break
                 # obs = env.wrapped_env.step(action)[0]
                 policy_step = True
@@ -256,13 +272,13 @@ class MPEnv(ProxyEnv):
         else:
             update_controller_config(self, ik_controller_config)
             update_controller_config(self, osc_controller_config)
-            ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
-            ik_ctrl.update_base_pose(
+            self.ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
+            self.ik_ctrl.update_base_pose(
                 self.robots[0].base_pos, self.robots[0].base_ori
             )
 
-            osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
-            osc_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
+            self.osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
+            self.osc_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
 
             pos = self.sim.data.body_xpos[self.cube_body_id] + np.array(
                 [0, 0, self.vertical_displacement]
@@ -270,8 +286,8 @@ class MPEnv(ProxyEnv):
             pos = np.concatenate((pos, self._eef_xquat))
             obs = mp_to_point(
                 self,
-                ik_ctrl,
-                osc_ctrl,
+                self.ik_ctrl,
+                self.osc_ctrl,
                 self.sim.data.qpos,
                 self.sim.data.qvel,
                 pos,
@@ -292,12 +308,21 @@ class MPEnv(ProxyEnv):
         is_success = self._check_success()
         if self.ep_step_ctr == self.horizon and is_grasped and not is_success:
             action = np.array([0, 0, 0.05, 0, 0, 0, 1])
-            # if self.teleport_position:
-            for _ in range(50):
-                self._wrapped_env.step(action)
-                self.num_steps += 1
-            # else:
-            #     self.mp_to_point(self._eef_xpos + action[:3], grasp=True) #TODO: update this to handle the fact that the collisions should be checked between arm + obj. and env
+            if self.teleport_position:
+                for _ in range(50):
+                    self._wrapped_env.step(action)
+                    self.num_steps += 1
+            else:
+                mp_to_point(
+                    self,
+                    self.ik_ctrl,
+                    self.osc_ctrl,
+                    self.sim.data.qpos,
+                    self.sim.data.qvel,
+                    np.concatenate((self._eef_xpos + action[:3], self._eef_xquat)),
+                    grasp=True,
+                    ignore_cube_collision=True,
+                )
             new_r = self.reward(action)
             if (
                 self._check_grasp(
