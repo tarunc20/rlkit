@@ -29,6 +29,7 @@ class TorchBatchRLAlgorithm(BatchRLAlgorithm):
         for net in self.trainer.networks:
             net.train(mode)
 
+
 class TorchBatchModularRLAlgorithm(BatchModularRLAlgorithm):
     def to(self, device):
         for net in self.trainer.networks:
@@ -37,6 +38,7 @@ class TorchBatchModularRLAlgorithm(BatchModularRLAlgorithm):
     def training_mode(self, mode):
         for net in self.trainer.networks:
             net.train(mode)
+
 
 class TorchTrainer(Trainer, metaclass=abc.ABCMeta):
     def __init__(self):

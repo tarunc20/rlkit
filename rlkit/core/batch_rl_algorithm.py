@@ -83,6 +83,7 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
 
             self._end_epoch(epoch)
 
+
 class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
     def __init__(
         self,
@@ -122,7 +123,6 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
         self.planner_replay_buffer = planner_replay_buffer
         self.planner_trainer = planner_trainer
 
-
     def _train(self):
         if self.min_num_steps_before_training > 0:
             init_expl_paths = self.expl_data_collector.collect_new_paths(
@@ -130,7 +130,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
                 self.min_num_steps_before_training,
                 discard_incomplete_paths=False,
             )
-            #TODO: separate into planner keys and others and then add to the planner buffer
+            # TODO: separate into planner keys and others and then add to the planner buffer
             self.replay_buffer.add_paths(init_expl_paths)
             self.expl_data_collector.end_epoch(-1)
 
@@ -153,7 +153,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
                 )
                 gt.stamp("exploration sampling", unique=False)
 
-                #TODO: separate into planner keys and others and then add to the planner buffer
+                # TODO: separate into planner keys and others and then add to the planner buffer
                 self.replay_buffer.add_paths(new_expl_paths)
                 gt.stamp("data storing", unique=False)
 
@@ -162,7 +162,9 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
                     train_data = self.replay_buffer.random_batch(self.batch_size)
                     self.trainer.train(train_data)
                 for _ in range(self.num_trains_per_train_loop):
-                    train_data = self.planner_replay_buffer.random_batch(self.batch_size)
+                    train_data = self.planner_replay_buffer.random_batch(
+                        self.batch_size
+                    )
                     self.planner_trainer.train(train_data)
                 gt.stamp("training", unique=False)
                 self.training_mode(False)

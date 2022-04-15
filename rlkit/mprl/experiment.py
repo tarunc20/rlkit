@@ -47,15 +47,26 @@ def video_func(algorithm, epoch):
                                 j + path_length + prev_intermediate_frames_len
                             ] = np.concatenate(
                                 [
-                                    frames[j + path_length + prev_intermediate_frames_len],
+                                    frames[
+                                        j + path_length + prev_intermediate_frames_len
+                                    ],
                                     fr,
                                 ],
                                 axis=1,
                             )
                         frames[
-                            path_length + prev_intermediate_frames_len + len(intermediate_frames)
+                            path_length
+                            + prev_intermediate_frames_len
+                            + len(intermediate_frames)
                         ] = np.concatenate(
-                            (frames[prev_intermediate_frames_len + len(intermediate_frames) + path_length], im),
+                            (
+                                frames[
+                                    prev_intermediate_frames_len
+                                    + len(intermediate_frames)
+                                    + path_length
+                                ],
+                                im,
+                            ),
                             axis=1,
                         )
                     else:
@@ -181,7 +192,7 @@ def experiment(variant):
         expl_env,
     )
 
-    if variant['plan_to_learned_goals']:
+    if variant["plan_to_learned_goals"]:
         planner_qf1 = ConcatMlp(
             input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
         )
