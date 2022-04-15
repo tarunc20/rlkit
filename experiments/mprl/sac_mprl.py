@@ -9,6 +9,8 @@ def preprocess_variant(variant):
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
     variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
+    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
     return variant
 
 
@@ -55,6 +57,15 @@ if __name__ == "__main__":
         "replay_buffer_size": int(1e6),
         "seed": 129,
         "trainer_kwargs": {
+            "discount": 0.99,
+            "policy_lr": 0.001,
+            "qf_lr": 0.0005,
+            "reward_scale": 1.0,
+            "soft_target_tau": 0.005,
+            "target_update_period": 5,
+            "use_automatic_entropy_tuning": True,
+        },
+        "planner_trainer_kwargs": {
             "discount": 0.99,
             "policy_lr": 0.001,
             "qf_lr": 0.0005,

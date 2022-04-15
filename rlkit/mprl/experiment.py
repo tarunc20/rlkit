@@ -1,4 +1,8 @@
+from rlkit.samplers.rollout_functions import rollout_modular
+
+
 def video_func(algorithm, epoch):
+
     import copy
     import os
     import pickle
@@ -106,7 +110,10 @@ def experiment(variant):
     from rlkit.torch.networks.mlp import ConcatMlp
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
-    from rlkit.torch.torch_rl_algorithm import TorchBatchRLAlgorithm
+    from rlkit.torch.torch_rl_algorithm import (
+        TorchBatchModularRLAlgorithm,
+        TorchBatchRLAlgorithm,
+    )
 
     # Load controller
     controller = variant["expl_environment_kwargs"].pop("controller")
@@ -232,10 +239,12 @@ def experiment(variant):
         eval_path_collector = MdpPathCollector(
             eval_env,
             (planner_eval_policy, eval_policy),
+            rollout_fn=rollout_modular,
         )
         expl_path_collector = MdpPathCollector(
             expl_env,
             (planner_expl_policy, expl_policy),
+            rollout_fn=rollout_modular,
         )
 
         # Define algorithm
@@ -246,8 +255,8 @@ def experiment(variant):
             exploration_data_collector=expl_path_collector,
             evaluation_data_collector=eval_path_collector,
             replay_buffer=replay_buffer,
-            planner_replay_buffer=replay_buffer,
-            planner_trainer=trainer,
+            planner_replay_buffer=planner_replay_buffer,
+            planner_trainer=planner_trainer,
             **variant["algorithm_kwargs"],
         )
     else:
@@ -271,6 +280,6 @@ def experiment(variant):
             **variant["algorithm_kwargs"],
         )
     algorithm.to(ptu.device)
-    video_func(algorithm, -1)
-    algorithm.post_epoch_funcs.append(video_func)
+    # video_func(algorithm, -1)
+    # algorithm.post_epoch_funcs.append(video_func)
     algorithm.train()

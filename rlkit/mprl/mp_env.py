@@ -31,6 +31,7 @@ def set_robot_based_on_ee_pos(env, pos, quat, ctrl, qpos, qvel):
     rot_diff = desired_rot @ np.linalg.inv(cur_rot)
     joint_pos = ctrl.joint_positions_for_eef_command(pos - env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
+    # print(np.linalg.norm(env._eef_xpos - pos))
 
 
 def check_robot_string(string):
@@ -141,11 +142,11 @@ def mp_to_point(
 
     # set lower and upper bounds
     bounds = ob.RealVectorBounds(3)
-    bounds.setLow(0, -1)
-    bounds.setLow(1, -1)
+    bounds.setLow(0, -1.1)
+    bounds.setLow(1, -1.1)
     bounds.setLow(2, 0.75)
-    bounds.setHigh(0, 1)
-    bounds.setHigh(1, 1)
+    bounds.setHigh(0, 1.1)
+    bounds.setHigh(1, 1.1)
     bounds.setHigh(2, 1.25)
     space.setBounds(bounds)
 
@@ -395,7 +396,7 @@ class MPEnv(ProxyEnv):
                     self.robots[0].base_pos, self.robots[0].base_ori
                 )
                 pos = action
-                set_robot_based_on_ee_pos(self, pos, self._eef_xquat, ik_ctrl)
+                set_robot_based_on_ee_pos(self, pos[:3], self._eef_xquat, ik_ctrl)
                 obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
                 self.num_steps += 100
             else:
@@ -404,7 +405,7 @@ class MPEnv(ProxyEnv):
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
-                    pos,
+                    pos.astype(np.float64),
                     grasp=False,
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
@@ -413,24 +414,15 @@ class MPEnv(ProxyEnv):
             info = {}
             is_grasped = self.check_grasp()
             is_success = self._check_success()
-            i["success"] = float(is_grasped)
-            i["grasped"] = float(is_success)
-            i["num_steps"] = self.num_steps
+            info["success"] = float(is_grasped)
+            info["grasped"] = float(is_success)
+            info["num_steps"] = self.num_steps
             if not self.teleport_position:
-                i["mp_init_mse"] = self.mp_init_mse
-            return obs, self.get_reward(), False, info
+                info["mp_init_mse"] = self.mp_init_mse
+            self.ep_step_ctr += 1
+            return obs, self.reward(action), False, info
 
-        o, r, d, i = self._wrapped_env.step(action)
-        self.num_steps += 1
-        self.ep_step_ctr += 1
-        is_grasped = self.check_grasp()
-        is_success = self._check_success()
-        if (
-            self.plan_to_learned_goals
-            and self.ep_step_ctr == self.horizon + 1
-            and is_grasped
-            and not is_success
-        ):
+        if self.plan_to_learned_goals and self.ep_step_ctr == self.horizon + 1:
             target_pos = action
             if self.teleport_position:
                 for _ in range(50):
@@ -439,20 +431,27 @@ class MPEnv(ProxyEnv):
                     )
                     self.num_steps += 1
             else:
-                mp_to_point(
+                o = mp_to_point(
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
-                    target_pos,
+                    target_pos.astype(np.float64),
                     grasp=True,
                     ignore_object_collision=True,
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
                 )
             new_r = self.reward(action)
-            if self.check_grasp() and new_r > r:
-                r = new_r
+            r = new_r
+            i = {}
+            self.ep_step_ctr += 1
+            d = False
         else:
+            o, r, d, i = self._wrapped_env.step(action)
+            self.num_steps += 1
+            self.ep_step_ctr += 1
+            is_grasped = self.check_grasp()
+            is_success = self._check_success()
             if self.ep_step_ctr == self.horizon and is_grasped and not is_success:
                 target_pos = self.get_target_pos()
                 if self.teleport_position:

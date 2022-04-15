@@ -123,6 +123,17 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
         self.planner_replay_buffer = planner_replay_buffer
         self.planner_trainer = planner_trainer
 
+    def get_planner_paths_from_paths(self, paths):
+        planner_paths = []
+        for path in paths:
+            planner_path = {}
+            keys = list(path.keys())
+            for key in keys:
+                if key.startswith("planner"):
+                    planner_path[key] = path[key]
+                    path.remove(key)
+            planner_paths.append(planner_path)
+
     def _train(self):
         if self.min_num_steps_before_training > 0:
             init_expl_paths = self.expl_data_collector.collect_new_paths(
@@ -130,8 +141,10 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
                 self.min_num_steps_before_training,
                 discard_incomplete_paths=False,
             )
-            # TODO: separate into planner keys and others and then add to the planner buffer
             self.replay_buffer.add_paths(init_expl_paths)
+            self.planner_replay_buffer.add_paths(
+                self.get_planner_paths_from_paths(init_expl_paths)
+            )
             self.expl_data_collector.end_epoch(-1)
 
         for epoch in gt.timed_for(
@@ -153,8 +166,10 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
                 )
                 gt.stamp("exploration sampling", unique=False)
 
-                # TODO: separate into planner keys and others and then add to the planner buffer
                 self.replay_buffer.add_paths(new_expl_paths)
+                self.planner_replay_buffer.add_paths(
+                    self.get_planner_paths_from_paths(new_expl_paths)
+                )
                 gt.stamp("data storing", unique=False)
 
                 self.training_mode(True)
