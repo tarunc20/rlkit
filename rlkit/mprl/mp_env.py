@@ -138,7 +138,7 @@ def mp_to_point(
     bounds = ob.RealVectorBounds(3)
     bounds.setLow(0, -1)
     bounds.setLow(1, -1)
-    bounds.setLow(2, 0.7)
+    bounds.setLow(2, 0.8)
     bounds.setHigh(0, 1)
     bounds.setHigh(1, 1)
     bounds.setHigh(2, 1.25)
