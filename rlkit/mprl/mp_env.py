@@ -106,6 +106,7 @@ def mp_to_point(
     grasp=False,
     ignore_object_collision=False,
     planning_time=1,
+    get_intermediate_frames=False,
 ):
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -176,6 +177,8 @@ def mp_to_point(
     planner.setup()
     # attempt to solve the problem within planning_time seconds of planning time
     solved = planner.solve(planning_time)
+
+    intermediate_frames = []
     if solved:
         # reset env to original qpos/qvel
         env._wrapped_env.reset()
@@ -228,11 +231,14 @@ def mp_to_point(
                     policy_step = False
                 if hasattr(env, "num_steps"):
                     env.num_steps += 1
+                if get_intermediate_frames:
+                    intermediate_frames.append(env.get_image())
         env.mp_init_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
     else:
         env.mp_init_mse = 0
+    env.intermediate_frames = intermediate_frames
     return env._get_observations()
 
 
@@ -281,7 +287,7 @@ class MPEnv(ProxyEnv):
         pos += np.array([0, 0, self.vertical_displacement])
         return pos
 
-    def reset(self, **kwargs):
+    def reset(self, get_intermediate_frames=False, **kwargs):
         self._wrapped_env.reset(**kwargs)
         self.ik_controller_config = {
             "type": "IK_POSE",
@@ -326,6 +332,7 @@ class MPEnv(ProxyEnv):
                 pos,
                 grasp=False,
                 planning_time=self.planning_time,
+                get_intermediate_frames=get_intermediate_frames,
             )
             obs = self._flatten_obs(obs)
         self.ep_step_ctr = 0
@@ -362,7 +369,7 @@ class MPEnv(ProxyEnv):
             )
         return pose
 
-    def step(self, action):
+    def step(self, action, get_intermediate_frames=False):
         o, r, d, i = self._wrapped_env.step(action)
         self.num_steps += 1
         self.ep_step_ctr += 1
@@ -385,6 +392,7 @@ class MPEnv(ProxyEnv):
                     grasp=True,
                     ignore_object_collision=True,
                     planning_time=self.planning_time,
+                    get_intermediate_frames=get_intermediate_frames,
                 )
             new_r = self.reward(action)
             if self.check_grasp() and new_r > r:

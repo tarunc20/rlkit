@@ -16,22 +16,58 @@ def video_func(algorithm, epoch):
         frames = []
         for _ in range(num_rollouts):
             policy.reset()
-            o = env.reset()
+            o = env.reset(get_intermediate_frames=True)
             im = env.get_image()
+            intermediate_frames = env.intermediate_frames
             if len(frames) > 0:
-                frames[0] = np.concatenate((frames[0], im), axis=1)
+                for j, fr in enumerate(intermediate_frames):
+                    frames[j] = np.concatenate([frames[j], fr], axis=1)
+                frames[len(intermediate_frames)] = np.concatenate(
+                    (frames[len(intermediate_frames)], im), axis=1
+                )
             else:
+                frames.extend(intermediate_frames)
                 frames.append(im)
+            prev_intermediate_frames_len = len(intermediate_frames)
             for path_length in range(1, max_path_length + 1):
                 a, agent_info = policy.get_action(o)
-                o, r, d, i = env.step(copy.deepcopy(a))
-                im = env.get_image()
-                if len(frames) > path_length:
-                    frames[path_length] = np.concatenate(
-                        (frames[path_length], im), axis=1
-                    )
+                if path_length == max_path_length:
+                    get_intermediate_frames = True
                 else:
-                    frames.append(im)
+                    get_intermediate_frames = False
+                o, r, d, i = env.step(
+                    copy.deepcopy(a), get_intermediate_frames=get_intermediate_frames
+                )
+                im = env.get_image()
+                if get_intermediate_frames:
+                    intermediate_frames = env.intermediate_frames
+                    if len(frames) > path_length + prev_intermediate_frames_len:
+                        for j, fr in enumerate(intermediate_frames):
+                            frames[
+                                j + path_length + prev_intermediate_frames_len
+                            ] = np.concatenate(
+                                [
+                                    frames[j + path_length + prev_intermediate_frames_len],
+                                    fr,
+                                ],
+                                axis=1,
+                            )
+                        frames[
+                            path_length + prev_intermediate_frames_len + len(intermediate_frames)
+                        ] = np.concatenate(
+                            (frames[prev_intermediate_frames_len + len(intermediate_frames) + path_length], im),
+                            axis=1,
+                        )
+                    else:
+                        frames.extend(intermediate_frames)
+                        frames.append(im)
+                else:
+                    if len(frames) > path_length + len(intermediate_frames):
+                        frames[path_length + len(intermediate_frames)] = np.concatenate(
+                            (frames[path_length + len(intermediate_frames)], im), axis=1
+                        )
+                    else:
+                        frames.append(im)
                 if d:
                     break
         logdir = logger.get_snapshot_dir()
