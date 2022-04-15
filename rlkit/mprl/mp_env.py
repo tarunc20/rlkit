@@ -141,11 +141,11 @@ def mp_to_point(
 
     # set lower and upper bounds
     bounds = ob.RealVectorBounds(3)
-    bounds.setLow(0, -1)
-    bounds.setLow(1, -1)
+    bounds.setLow(0, -1.1)
+    bounds.setLow(1, -1.1)
     bounds.setLow(2, 0.75)
-    bounds.setHigh(0, 1)
-    bounds.setHigh(1, 1)
+    bounds.setHigh(0, 1.1)
+    bounds.setHigh(1, 1.1)
     bounds.setHigh(2, 1.25)
     space.setBounds(bounds)
 
@@ -254,6 +254,7 @@ class MPEnv(ProxyEnv):
         vertical_displacement,
         teleport_position=True,
         planning_time=1,
+        execute_hardcoded_policy_to_goal=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -278,6 +279,7 @@ class MPEnv(ProxyEnv):
         self.vertical_displacement = vertical_displacement
         self.teleport_position = teleport_position
         self.planning_time = planning_time
+        self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -396,16 +398,23 @@ class MPEnv(ProxyEnv):
                     )
                     self.num_steps += 1
             else:
-                mp_to_point(
-                    self,
-                    self.ik_controller_config,
-                    self.osc_controller_config,
-                    np.concatenate((target_pos, self._eef_xquat)),
-                    grasp=True,
-                    ignore_object_collision=True,
-                    planning_time=self.planning_time,
-                    get_intermediate_frames=get_intermediate_frames,
-                )
+                if self.execute_hardcoded_policy_to_goal:
+                    for _ in range(50):
+                        self._wrapped_env.step(
+                            np.concatenate((target_pos - self._eef_xpos, [0, 0, 0, 1]))
+                        )
+                        self.num_steps += 1
+                else:
+                    mp_to_point(
+                        self,
+                        self.ik_controller_config,
+                        self.osc_controller_config,
+                        np.concatenate((target_pos, self._eef_xquat)),
+                        grasp=True,
+                        ignore_object_collision=True,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=get_intermediate_frames,
+                    )
             new_r = self.reward(action)
             if self.check_grasp() and new_r > r:
                 r = new_r

@@ -210,6 +210,7 @@ def experiment(variant):
         **variant["algorithm_kwargs"],
     )
     algorithm.to(ptu.device)
-    video_func(algorithm, -1)
-    algorithm.post_epoch_funcs.append(video_func)
+    if not variant['mp_env_kwargs']['teleport_position']:
+        video_func(algorithm, -1)
+        algorithm.post_epoch_funcs.append(video_func)
     algorithm.train()
