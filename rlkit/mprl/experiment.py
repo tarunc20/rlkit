@@ -47,15 +47,26 @@ def video_func(algorithm, epoch):
                                 j + path_length + prev_intermediate_frames_len
                             ] = np.concatenate(
                                 [
-                                    frames[j + path_length + prev_intermediate_frames_len],
+                                    frames[
+                                        j + path_length + prev_intermediate_frames_len
+                                    ],
                                     fr,
                                 ],
                                 axis=1,
                             )
                         frames[
-                            path_length + prev_intermediate_frames_len + len(intermediate_frames)
+                            path_length
+                            + prev_intermediate_frames_len
+                            + len(intermediate_frames)
                         ] = np.concatenate(
-                            (frames[prev_intermediate_frames_len + len(intermediate_frames) + path_length], im),
+                            (
+                                frames[
+                                    prev_intermediate_frames_len
+                                    + len(intermediate_frames)
+                                    + path_length
+                                ],
+                                im,
+                            ),
                             axis=1,
                         )
                     else:

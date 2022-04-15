@@ -20,7 +20,11 @@ except ImportError:
     from ompl import geometric as og
 
 
-def set_robot_based_on_ee_pos(env, pos, quat, ctrl):
+def set_robot_based_on_ee_pos(env, pos, quat, ctrl, qpos, qvel):
+    env.sim.data.qpos[:] = qpos
+    env.sim.data.qvel[:] = qvel
+    env.sim.forward()
+
     ctrl.sync_state()
     desired_rot = quat2mat(quat)
     cur_rot = quat2mat(env._eef_xquat)
@@ -108,6 +112,9 @@ def mp_to_point(
     planning_time=1,
     get_intermediate_frames=False,
 ):
+    qpos = env.sim.data.qpos.copy()
+    qvel = env.sim.data.qvel.copy()
+
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
         quat = np.array(
@@ -118,7 +125,7 @@ def mp_to_point(
                 state.rotation().w,
             ]
         )
-        set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl)
+        set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl, qpos, qvel)
         valid = not check_robot_collision(
             env, ignore_object_collision=ignore_object_collision
         )
@@ -128,8 +135,6 @@ def mp_to_point(
     ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
     ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
 
-    qpos = env.sim.data.qpos.copy()
-    qvel = env.sim.data.qvel.copy()
     og_eef_xpos = env._eef_xpos
     # create an SE3 state space
     space = ob.SE3StateSpace()
@@ -138,7 +143,7 @@ def mp_to_point(
     bounds = ob.RealVectorBounds(3)
     bounds.setLow(0, -1)
     bounds.setLow(1, -1)
-    bounds.setLow(2, 0.8)
+    bounds.setLow(2, 0.75)
     bounds.setHigh(0, 1)
     bounds.setHigh(1, 1)
     bounds.setHigh(2, 1.25)
@@ -319,7 +324,14 @@ class MPEnv(ProxyEnv):
             ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
             ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
             pos = self.get_init_target_pos()
-            set_robot_based_on_ee_pos(self, pos, self._eef_xquat, ik_ctrl)
+            set_robot_based_on_ee_pos(
+                self,
+                pos,
+                self._eef_xquat,
+                ik_ctrl,
+                self.sim.data.qpos,
+                self.sim.data.qvel,
+            )
             obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
             self.num_steps += 100
         else:
