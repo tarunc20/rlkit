@@ -48,7 +48,7 @@ if __name__ == "__main__":
         "mp_env_kwargs": {
             "vertical_displacement": 0.03,
             "teleport_position": True,
-            "planning_time": 10,
+            "planning_time": 5,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
