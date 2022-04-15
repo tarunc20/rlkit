@@ -165,6 +165,7 @@ def experiment(variant):
         **variant["policy_kwargs"],
     )
     eval_policy = MakeDeterministic(expl_policy)
+
     trainer = SACTrainer(
         env=eval_env,
         policy=expl_policy,
@@ -179,25 +180,85 @@ def experiment(variant):
         variant["replay_buffer_size"],
         expl_env,
     )
-    eval_path_collector = MdpPathCollector(
-        eval_env,
-        eval_policy,
-    )
-    expl_path_collector = MdpPathCollector(
-        expl_env,
-        expl_policy,
-    )
 
-    # Define algorithm
-    algorithm = TorchBatchRLAlgorithm(
-        trainer=trainer,
-        exploration_env=expl_env,
-        evaluation_env=eval_env,
-        exploration_data_collector=expl_path_collector,
-        evaluation_data_collector=eval_path_collector,
-        replay_buffer=replay_buffer,
-        **variant["algorithm_kwargs"],
-    )
+    if variant['plan_to_learned_goals']:
+        planner_qf1 = ConcatMlp(
+            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
+        )
+        planner_qf2 = ConcatMlp(
+            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
+        )
+        planner_target_qf1 = ConcatMlp(
+            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
+        )
+        planner_target_qf2 = ConcatMlp(
+            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
+        )
+
+        # Instantiate trainer with appropriate agent
+        planner_expl_policy = TanhGaussianPolicy(
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            **variant["policy_kwargs"],
+        )
+        planner_eval_policy = MakeDeterministic(planner_expl_policy)
+
+        planner_trainer = SACTrainer(
+            env=eval_env,
+            policy=planner_expl_policy,
+            qf1=planner_qf1,
+            qf2=planner_qf2,
+            target_qf1=planner_target_qf1,
+            target_qf2=planner_target_qf2,
+            **variant["planner_trainer_kwargs"],
+        )
+
+        planner_replay_buffer = EnvReplayBuffer(
+            variant["replay_buffer_size"],
+            expl_env,
+        )
+
+        eval_path_collector = MdpPathCollector(
+            eval_env,
+            (planner_eval_policy, eval_policy),
+        )
+        expl_path_collector = MdpPathCollector(
+            expl_env,
+            (planner_expl_policy, expl_policy),
+        )
+
+        # Define algorithm
+        algorithm = TorchBatchModularRLAlgorithm(
+            trainer=trainer,
+            exploration_env=expl_env,
+            evaluation_env=eval_env,
+            exploration_data_collector=expl_path_collector,
+            evaluation_data_collector=eval_path_collector,
+            replay_buffer=replay_buffer,
+            planner_replay_buffer=replay_buffer,
+            planner_trainer=trainer,
+            **variant["algorithm_kwargs"],
+        )
+    else:
+        eval_path_collector = MdpPathCollector(
+            eval_env,
+            eval_policy,
+        )
+        expl_path_collector = MdpPathCollector(
+            expl_env,
+            expl_policy,
+        )
+
+        # Define algorithm
+        algorithm = TorchBatchRLAlgorithm(
+            trainer=trainer,
+            exploration_env=expl_env,
+            evaluation_env=eval_env,
+            exploration_data_collector=expl_path_collector,
+            evaluation_data_collector=eval_path_collector,
+            replay_buffer=replay_buffer,
+            **variant["algorithm_kwargs"],
+        )
     algorithm.to(ptu.device)
     video_func(algorithm, -1)
     algorithm.post_epoch_funcs.append(video_func)

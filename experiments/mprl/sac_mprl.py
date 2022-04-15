@@ -64,5 +64,6 @@ if __name__ == "__main__":
             "use_automatic_entropy_tuning": True,
         },
         "version": "normal",
+        "plan_to_learned_goals": False,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
