@@ -30,7 +30,7 @@ if __name__ == "__main__":
         "eval_environment_kwargs": {
             "control_freq": 20,
             "controller": "OSC_POSE",
-            "env_name": "PickPlaceCan",
+            "env_name": "PickPlaceBread",
             "hard_reset": False,
             "ignore_done": True,
             "reward_scale": 1.0,
@@ -39,16 +39,16 @@ if __name__ == "__main__":
         "expl_environment_kwargs": {
             "control_freq": 20,
             "controller": "OSC_POSE",
-            "env_name": "PickPlaceCan",
+            "env_name": "PickPlaceBread",
             "hard_reset": False,
             "ignore_done": True,
             "reward_scale": 1.0,
             "robots": "Panda",
         },
         "mp_env_kwargs": {
-            "vertical_displacement": 0.05,
+            "vertical_displacement": 0.04,
             "teleport_position": True,
-            "planning_time": 10,
+            "planning_time": 5,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},

@@ -31,7 +31,7 @@ def set_robot_based_on_ee_pos(env, pos, quat, ctrl, qpos, qvel):
     rot_diff = desired_rot @ np.linalg.inv(cur_rot)
     joint_pos = ctrl.joint_positions_for_eef_command(pos - env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
-    # print(np.linalg.norm(env._eef_xpos - pos))
+    return np.linalg.norm(env._eef_xpos - pos)
 
 
 def check_robot_string(string):
@@ -47,8 +47,8 @@ def check_robot_collision(env, ignore_object_collision):
             if check_robot_string(con1) or check_robot_string(con2):
                 if env.name.endswith("Lift"):
                     obj_string = "cube"
-                elif env.name.endswith("PickPlaceCan"):
-                    obj_string = "Can"
+                elif env.name.endswith("PickPlaceBread"):
+                    obj_string = "Bread"
                 if (
                     con1.startswith(obj_string)
                     or con2.startswith(obj_string)
@@ -229,6 +229,8 @@ def mp_to_point(
     start_valid = isStateValid(start())
     goal_valid = isStateValid(goal())
     print(f"State validity checks: Start: {start_valid}, Goal: {goal_valid}")
+    print(f"Start Error {set_robot_based_on_ee_pos(env, og_eef_xpos, og_eef_xquat, ik_ctrl, qpos, qvel)}")
+    print(f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
     if not goal_valid:
         goal_pos = backtracking_search_from_goal(
             env,
@@ -371,7 +373,7 @@ class MPEnv(ProxyEnv):
     def get_init_target_pos(self):
         if self.name.endswith("Lift"):
             pos = self.sim.data.body_xpos[self.cube_body_id]
-        elif self.name.endswith("PickPlaceCan"):
+        elif self.name.endswith("PickPlaceBread"):
             pos = self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
         pos += np.array([0, 0, self.vertical_displacement])
         return pos
@@ -445,7 +447,7 @@ class MPEnv(ProxyEnv):
                 gripper=self.robots[0].gripper,
                 object_geoms=self.cube,
             )
-        elif self.name.endswith("PickPlaceCan"):
+        elif self.name.endswith("PickPlaceBread"):
             is_grasped = self._check_grasp(
                 gripper=self.robots[0].gripper,
                 object_geoms=self.objects[self.object_id],
@@ -457,11 +459,11 @@ class MPEnv(ProxyEnv):
     ):
         if self.name.endswith("Lift"):
             pose = np.array([0, 0, 0.05]) + self._eef_xpos
-        elif self.name.endswith("PickPlaceCan"):
+        elif self.name.endswith("PickPlaceBread"):
             pose = np.array(
                 [
                     0.175,
-                    0.4,
+                    0.1,
                     self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025,
                 ]
             )
