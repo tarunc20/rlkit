@@ -256,6 +256,7 @@ class MPEnv(ProxyEnv):
         teleport_position=True,
         planning_time=1,
         plan_to_learned_goals=False,
+        execute_hardcoded_policy_to_goal=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -281,6 +282,7 @@ class MPEnv(ProxyEnv):
         self.teleport_position = teleport_position
         self.planning_time = planning_time
         self.plan_to_learned_goals = plan_to_learned_goals
+        self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -431,16 +433,23 @@ class MPEnv(ProxyEnv):
                     )
                     self.num_steps += 1
             else:
-                o = mp_to_point(
-                    self,
-                    self.ik_controller_config,
-                    self.osc_controller_config,
-                    target_pos.astype(np.float64),
-                    grasp=True,
-                    ignore_object_collision=True,
-                    planning_time=self.planning_time,
-                    get_intermediate_frames=get_intermediate_frames,
-                )
+                if self.execute_hardcoded_policy_to_goal:
+                    for _ in range(50):
+                        self._wrapped_env.step(
+                            np.concatenate((target_pos - self._eef_xpos, [0, 0, 0, 1]))
+                        )
+                        self.num_steps += 1
+                else:
+                    mp_to_point(
+                        self,
+                        self.ik_controller_config,
+                        self.osc_controller_config,
+                        target_pos.astype(np.float64),
+                        grasp=True,
+                        ignore_object_collision=True,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=get_intermediate_frames,
+                    )
             new_r = self.reward(action)
             r = new_r
             i = {}
