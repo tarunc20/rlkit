@@ -417,8 +417,8 @@ class MPEnv(ProxyEnv):
                     pos,
                     self._eef_xquat,
                     ik_ctrl,
-                    env.sim.data.qpos,
-                    env.sim.data.qvel,
+                    self.sim.data.qpos,
+                    self.sim.data.qvel,
                 )
                 obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
                 self.num_steps += 100
@@ -461,9 +461,8 @@ class MPEnv(ProxyEnv):
             pose = np.array(
                 [
                     0.175,
-                    0.3,
-                    self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1]
-                    + 0.025,
+                    0.4,
+                    self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025,
                 ]
             )
         return pose

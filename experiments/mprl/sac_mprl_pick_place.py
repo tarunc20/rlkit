@@ -63,6 +63,16 @@ if __name__ == "__main__":
             "target_update_period": 5,
             "use_automatic_entropy_tuning": True,
         },
+        "planner_trainer_kwargs": {
+            "discount": 0.99,
+            "policy_lr": 0.001,
+            "qf_lr": 0.0005,
+            "reward_scale": 1.0,
+            "soft_target_tau": 0.005,
+            "target_update_period": 5,
+            "use_automatic_entropy_tuning": True,
+        },
         "version": "normal",
+        "plan_to_learned_goals": False,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
