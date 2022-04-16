@@ -131,7 +131,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
             for key in keys:
                 if key.startswith("planner"):
                     planner_path[key] = path[key]
-                    path.remove(key)
+                    del path[key]
             planner_paths.append(planner_path)
 
     def _train(self):
