@@ -59,6 +59,63 @@ def check_robot_collision(env, ignore_object_collision):
     return False
 
 
+def binary_search_to_goal(
+    env,
+    ik_ctrl,
+    ignore_object_collision,
+    start_pos,
+    goal_pos,
+    ori,
+    qpos,
+    qvel,
+    tol=1e-3,
+    max_iterations=10,
+):
+    # only search over the xyz position, orientation should be the same as commanded
+    curr_pos = start_pos
+    dist = 100
+    last_valid_pos = start_pos
+    iters = 0
+    while dist > tol and iters < max_iterations:
+        prev_curr_pos = curr_pos.copy()
+        set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
+        collision = check_robot_collision(env, ignore_object_collision)
+        if collision:
+            goal_pos = curr_pos
+            curr_pos = (curr_pos + start_pos) / 2
+        else:
+            last_valid_pos = curr_pos.copy()
+            start_pos = curr_pos
+            curr_pos = (curr_pos + goal_pos) / 2
+        dist = np.linalg.norm(curr_pos - prev_curr_pos)
+        iters += 1
+    return last_valid_pos
+
+
+def backtracking_search_from_goal(
+    env,
+    ik_ctrl,
+    ignore_object_collision,
+    start_pos,
+    goal_pos,
+    ori,
+    qpos,
+    qvel,
+    movement_fraction=0.01,
+):
+    # only search over the xyz position, orientation should be the same as commanded
+    curr_pos = goal_pos.copy()
+    set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
+    collision = check_robot_collision(env, ignore_object_collision)
+    iters = 0
+    while collision:
+        curr_pos = curr_pos - movement_fraction * (goal_pos - start_pos)
+        set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
+        collision = check_robot_collision(env, ignore_object_collision)
+        iters += 1
+    return curr_pos
+
+
 def update_controller_config(env, controller_config):
     controller_config["robot_name"] = env.robots[0].name
     controller_config["sim"] = env.robots[0].sim
@@ -137,17 +194,18 @@ def mp_to_point(
     ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
 
     og_eef_xpos = env._eef_xpos
+    og_eef_xquat = env._eef_xquat
     # create an SE3 state space
     space = ob.SE3StateSpace()
 
     # set lower and upper bounds
     bounds = ob.RealVectorBounds(3)
-    bounds.setLow(0, -1.1)
-    bounds.setLow(1, -1.1)
-    bounds.setLow(2, 0.75)
-    bounds.setHigh(0, 1.1)
-    bounds.setHigh(1, 1.1)
-    bounds.setHigh(2, 1.25)
+    bounds.setLow(0, -1.5)
+    bounds.setLow(1, -1.5)
+    bounds.setLow(2, 0.5)
+    bounds.setHigh(0, 1.5)
+    bounds.setHigh(1, 1.5)
+    bounds.setHigh(2, 1.5)
     space.setBounds(bounds)
 
     # construct an instance of space information from this state space
@@ -156,21 +214,42 @@ def mp_to_point(
     si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
     # create a random start state
     start = ob.State(space)
-    start().setXYZ(*env._eef_xpos)
-    start().rotation().x = env._eef_xquat[0]
-    start().rotation().y = env._eef_xquat[1]
-    start().rotation().z = env._eef_xquat[2]
-    start().rotation().w = env._eef_xquat[3]
+    start().setXYZ(*og_eef_xpos)
+    start().rotation().x = og_eef_xquat[0]
+    start().rotation().y = og_eef_xquat[1]
+    start().rotation().z = og_eef_xquat[2]
+    start().rotation().w = og_eef_xquat[3]
     # create a random goal state
     goal = ob.State(space)
     goal().setXYZ(*pos[:3])
-    goal().rotation().x = pos[3]
-    goal().rotation().y = pos[4]
-    goal().rotation().z = pos[5]
-    goal().rotation().w = pos[6]
-    print(
-        f"State validity checks: Start: {isStateValid(start())}, Goal: {isStateValid(goal())}"
-    )
+    goal().rotation().x = og_eef_xquat[0]
+    goal().rotation().y = og_eef_xquat[1]
+    goal().rotation().z = og_eef_xquat[2]
+    goal().rotation().w = og_eef_xquat[3]
+    start_valid = isStateValid(start())
+    goal_valid = isStateValid(goal())
+    print(f"State validity checks: Start: {start_valid}, Goal: {goal_valid}")
+    if not goal_valid:
+        goal_pos = backtracking_search_from_goal(
+            env,
+            ik_ctrl,
+            ignore_object_collision,
+            og_eef_xpos,
+            pos[:3],
+            og_eef_xquat,
+            qpos,
+            qvel,
+        )
+        goal = ob.State(space)
+        goal().setXYZ(*goal_pos)
+        goal().rotation().x = og_eef_xquat[0]
+        goal().rotation().y = og_eef_xquat[1]
+        goal().rotation().z = og_eef_xquat[2]
+        goal().rotation().w = og_eef_xquat[3]
+        print(f"Updated Goal Validity: {isStateValid(goal())}")
+        if not isStateValid(goal()):
+            exit()
+
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -428,19 +507,19 @@ class MPEnv(ProxyEnv):
             target_pos = action
             if self.teleport_position:
                 for _ in range(50):
-                    self._wrapped_env.step(
+                    o = self._wrapped_env.step(
                         np.concatenate((target_pos[:3] - self._eef_xpos, [0, 0, 0, 1]))
-                    )
+                    )[0]
                     self.num_steps += 1
             else:
                 if self.execute_hardcoded_policy_to_goal:
                     for _ in range(50):
-                        self._wrapped_env.step(
+                        o = self._wrapped_env.step(
                             np.concatenate((target_pos - self._eef_xpos, [0, 0, 0, 1]))
-                        )
+                        )[0]
                         self.num_steps += 1
                 else:
-                    mp_to_point(
+                    o = mp_to_point(
                         self,
                         self.ik_controller_config,
                         self.osc_controller_config,
