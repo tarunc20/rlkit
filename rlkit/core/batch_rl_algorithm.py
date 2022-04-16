@@ -130,9 +130,10 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
             keys = list(path.keys())
             for key in keys:
                 if key.startswith("planner"):
-                    planner_path[key] = path[key]
+                    planner_path[key[8:]] = path[key]
                     del path[key]
             planner_paths.append(planner_path)
+        return planner_paths
 
     def _train(self):
         if self.min_num_steps_before_training > 0:

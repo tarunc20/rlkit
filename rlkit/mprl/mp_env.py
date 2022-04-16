@@ -249,6 +249,7 @@ def mp_to_point(
         goal().rotation().z = og_eef_xquat[2]
         goal().rotation().w = og_eef_xquat[3]
         print(f"Updated Goal Validity: {isStateValid(goal())}")
+        print(f"Goal Error {set_robot_based_on_ee_pos(env, goal_pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
         if not isStateValid(goal()):
             exit()
 
@@ -530,6 +531,7 @@ class MPEnv(ProxyEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                     )
+            o = self._flatten_obs(o)
             new_r = self.reward(action)
             r = new_r
             i = {}
