@@ -231,6 +231,31 @@ def mp_to_point(
     print(f"State validity checks: Start: {start_valid}, Goal: {goal_valid}")
     print(f"Start Error {set_robot_based_on_ee_pos(env, og_eef_xpos, og_eef_xquat, ik_ctrl, qpos, qvel)}")
     print(f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
+    if not start_valid:
+        start_pos = backtracking_search_from_goal(
+            env,
+            ik_ctrl,
+            ignore_object_collision,
+            og_eef_xpos+np.array([0, 0, .25]), #this should be a sufficient maximum distance to lift to not be in collision anymore
+            pos[:3],
+            og_eef_xquat,
+            qpos,
+            qvel,
+        )
+        qpos = env.sim.data.qpos.copy() #update the qpos that will be set later #TODO: replace with real controller reaching this pose
+        qvel = env.sim.data.qvel.copy()
+        og_eef_xpos = env._eef_xpos
+        og_eef_xquat = env._eef_xquat
+        start = ob.State(space)
+        start().setXYZ(*start_pos)
+        start().rotation().x = og_eef_xquat[0]
+        start().rotation().y = og_eef_xquat[1]
+        start().rotation().z = og_eef_xquat[2]
+        start().rotation().w = og_eef_xquat[3]
+        print(f"Updated Start Validity: {isStateValid(start())}")
+        print(f"Start Error {set_robot_based_on_ee_pos(env, start_pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
+        if not isStateValid(start()):
+            exit()
     if not goal_valid:
         goal_pos = backtracking_search_from_goal(
             env,
