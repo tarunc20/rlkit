@@ -1,4 +1,7 @@
-from rlkit.samplers.rollout_functions import rollout_modular
+
+
+
+from rlkit.samplers.rollout_functions import vec_rollout
 
 
 def video_func(algorithm, epoch):
@@ -98,6 +101,8 @@ def load_policy(path):
 
 
 def experiment(variant):
+    from rlkit.envs.wrappers.mujoco_vec_wrappers import DummyVecEnv, StableBaselinesVecEnv
+    from rlkit.samplers.rollout_functions import rollout_modular
     import robosuite as suite
     from robosuite.controllers import load_controller_config
     from robosuite.wrappers import GymWrapper
@@ -119,48 +124,66 @@ def experiment(variant):
     controller = variant["expl_environment_kwargs"].pop("controller")
     controller_config = load_controller_config(default_controller=controller)
     # Create robosuite env and append to our list
-    expl_env = suite.make(
-        **variant["expl_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=True,
-        use_object_obs=True,
-        use_camera_obs=False,
-        reward_shaping=True,
-        controller_configs=controller_config,
-        camera_names="frontview",
-        camera_heights=256,
-        camera_widths=256,
-    )
+
     controller = variant["eval_environment_kwargs"].pop("controller")
     controller_config = load_controller_config(default_controller=controller)
-    eval_env = suite.make(
-        **variant["eval_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=True,
-        use_object_obs=True,
-        use_camera_obs=False,
-        reward_shaping=True,
-        controller_configs=controller_config,
-        camera_names="frontview",
-        camera_heights=256,
-        camera_widths=256,
-    )
     # Create gym-compatible envs
-
-    if variant.get("mprl", False):
-        expl_env = MPEnv(
-            NormalizedBoxEnv(GymWrapper(expl_env)),
-            **variant.get("mp_env_kwargs"),
+    def make_env_expl():
+        expl_env = suite.make(
+            **variant["expl_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=False,
+            use_object_obs=True,
+            use_camera_obs=False,
+            reward_shaping=True,
+            controller_configs=controller_config,
         )
-        eval_env = MPEnv(
-            NormalizedBoxEnv(GymWrapper(eval_env)),
-            **variant.get("mp_env_kwargs"),
+        if variant.get("mprl", False):
+            expl_env = MPEnv(
+                NormalizedBoxEnv(GymWrapper(expl_env)),
+                **variant.get("mp_env_kwargs"),
+            )
+        else:
+            expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)))
+        return expl_env
+
+    def make_env_eval():
+        eval_env = suite.make(
+            **variant["eval_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=True,
+            use_object_obs=True,
+            use_camera_obs=False,
+            reward_shaping=True,
+            controller_configs=controller_config,
+            camera_names="frontview",
+            camera_heights=256,
+            camera_widths=256,
+        )
+        if variant.get("mprl", False):
+            eval_env = MPEnv(
+                NormalizedBoxEnv(GymWrapper(eval_env)),
+                **variant.get("mp_env_kwargs"),
+            )
+        else:
+            eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)))
+        return eval_env
+
+    num_expl_envs = variant.get("num_expl_envs", 1)
+    if num_expl_envs > 1:
+        env_fns = [make_env_expl for _ in range(num_expl_envs)]
+        expl_env = StableBaselinesVecEnv(
+            env_fns=env_fns,
+            start_method="fork",
         )
     else:
-        expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)))
-        eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)))
+        expl_envs = [make_env_expl()]
+        expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
 
-    obs_dim = expl_env.observation_space.low.size
+    eval_env = [make_env_eval()]
+    eval_env = DummyVecEnv(eval_env, pass_render_kwargs=False)
+
+    obs_dim = eval_env.observation_space.low.size
     action_dim = eval_env.action_space.low.size
 
     qf1 = ConcatMlp(
@@ -263,10 +286,12 @@ def experiment(variant):
         eval_path_collector = MdpPathCollector(
             eval_env,
             eval_policy,
+            rollout_fn=vec_rollout,
         )
         expl_path_collector = MdpPathCollector(
             expl_env,
             expl_policy,
+            rollout_fn=vec_rollout,
         )
 
         # Define algorithm
@@ -280,7 +305,10 @@ def experiment(variant):
             **variant["algorithm_kwargs"],
         )
     algorithm.to(ptu.device)
-    if not variant['mp_env_kwargs']['teleport_position'] and not variant['plan_to_learned_goals']:
-        video_func(algorithm, -1)
-        algorithm.post_epoch_funcs.append(video_func)
+    # if (
+    #     not variant["mp_env_kwargs"]["teleport_position"]
+    #     and not variant["plan_to_learned_goals"]
+    # ):
+    #     video_func(algorithm, -1)
+    #     algorithm.post_epoch_funcs.append(video_func)
     algorithm.train()

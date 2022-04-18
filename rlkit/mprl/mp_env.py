@@ -236,7 +236,7 @@ def mp_to_point(
         if not isStateValid(start()):
             exit()
     if not goal_valid:
-        goal_pos = backtracking_search_from_goal(
+        goal_pos, success = backtracking_search_from_goal(
             env,
             ik_ctrl,
             ignore_object_collision,
@@ -467,7 +467,8 @@ class MPEnv(ProxyEnv):
                 [
                     0.175,
                     0.1,
-                    self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025,
+                    self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1]
+                    + 0.025,
                 ]
             )
         return pose
