@@ -59,39 +59,6 @@ def check_robot_collision(env, ignore_object_collision):
     return False
 
 
-def binary_search_to_goal(
-    env,
-    ik_ctrl,
-    ignore_object_collision,
-    start_pos,
-    goal_pos,
-    ori,
-    qpos,
-    qvel,
-    tol=1e-3,
-    max_iterations=10,
-):
-    # only search over the xyz position, orientation should be the same as commanded
-    curr_pos = start_pos
-    dist = 100
-    last_valid_pos = start_pos
-    iters = 0
-    while dist > tol and iters < max_iterations:
-        prev_curr_pos = curr_pos.copy()
-        set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
-        collision = check_robot_collision(env, ignore_object_collision)
-        if collision:
-            goal_pos = curr_pos
-            curr_pos = (curr_pos + start_pos) / 2
-        else:
-            last_valid_pos = curr_pos.copy()
-            start_pos = curr_pos
-            curr_pos = (curr_pos + goal_pos) / 2
-        dist = np.linalg.norm(curr_pos - prev_curr_pos)
-        iters += 1
-    return last_valid_pos
-
-
 def backtracking_search_from_goal(
     env,
     ik_ctrl,
@@ -102,18 +69,22 @@ def backtracking_search_from_goal(
     qpos,
     qvel,
     movement_fraction=0.01,
+    max_iters=1000,
 ):
     # only search over the xyz position, orientation should be the same as commanded
     curr_pos = goal_pos.copy()
     set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
     collision = check_robot_collision(env, ignore_object_collision)
     iters = 0
-    while collision:
+    while collision and iters < max_iters:
         curr_pos = curr_pos - movement_fraction * (goal_pos - start_pos)
         set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
         collision = check_robot_collision(env, ignore_object_collision)
         iters += 1
-    return curr_pos
+    if collision:
+        return curr_pos, False
+    else:
+        return curr_pos, True
 
 
 def update_controller_config(env, controller_config):
@@ -202,7 +173,7 @@ def mp_to_point(
     bounds = ob.RealVectorBounds(3)
     bounds.setLow(0, -1.5)
     bounds.setLow(1, -1.5)
-    bounds.setLow(2, 0.5)
+    bounds.setLow(2, 0)
     bounds.setHigh(0, 1.5)
     bounds.setHigh(1, 1.5)
     bounds.setHigh(2, 1.5)
@@ -232,20 +203,28 @@ def mp_to_point(
     print(f"Start Error {set_robot_based_on_ee_pos(env, og_eef_xpos, og_eef_xquat, ik_ctrl, qpos, qvel)}")
     print(f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
     if not start_valid:
-        start_pos = backtracking_search_from_goal(
+        start_pos, success = backtracking_search_from_goal(
             env,
             ik_ctrl,
             ignore_object_collision,
-            og_eef_xpos+np.array([0, 0, .25]), #this should be a sufficient maximum distance to lift to not be in collision anymore
-            pos[:3],
+            og_eef_xpos+np.array([0, 0, 1.0]), #this should be a sufficient maximum distance to lift to not be in collision anymore
+            og_eef_xpos,
             og_eef_xquat,
             qpos,
             qvel,
         )
+        if not success:
+            env.mp_init_mse = 0
+
+            #reset back to original state and just return
+            env._wrapped_env.reset()
+            env.sim.data.qpos[:] = qpos.copy()
+            env.sim.data.qvel[:] = qvel.copy()
+            env.sim.forward()
+            return env._get_observations()
         qpos = env.sim.data.qpos.copy() #update the qpos that will be set later #TODO: replace with real controller reaching this pose
         qvel = env.sim.data.qvel.copy()
-        og_eef_xpos = env._eef_xpos
-        og_eef_xquat = env._eef_xquat
+        og_eef_xpos = start_pos
         start = ob.State(space)
         start().setXYZ(*start_pos)
         start().rotation().x = og_eef_xquat[0]
@@ -298,9 +277,7 @@ def mp_to_point(
         env.sim.data.qpos[:] = qpos.copy()
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
-        assert (env._eef_xpos == og_eef_xpos).all(), np.linalg.norm(
-            env._eef_xpos, og_eef_xpos
-        )
+
 
         update_controller_config(env, osc_controller_config)
         osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
