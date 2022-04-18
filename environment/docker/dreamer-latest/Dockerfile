@@ -95,3 +95,4 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/lib/nvidia-000
 
 COPY . /ompl
 RUN /ompl/install-ompl-ubuntu.sh --python
+RUN mv ompl-1.5.2/ /ompl/
