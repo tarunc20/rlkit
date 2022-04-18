@@ -341,6 +341,7 @@ class MPEnv(ProxyEnv):
         planning_time=1,
         plan_to_learned_goals=False,
         execute_hardcoded_policy_to_goal=False,
+        learn_residual=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -367,6 +368,7 @@ class MPEnv(ProxyEnv):
         self.planning_time = planning_time
         self.plan_to_learned_goals = plan_to_learned_goals
         self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
+        self.learn_residual=learn_residual
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -486,7 +488,10 @@ class MPEnv(ProxyEnv):
                 obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
                 self.num_steps += 100
             else:
-                pos = action
+                if self.learn_residual:
+                    pos = action + self.get_init_target_pos()
+                else:
+                    pos = action
                 obs = mp_to_point(
                     self,
                     self.ik_controller_config,
@@ -509,7 +514,10 @@ class MPEnv(ProxyEnv):
             return obs, self.reward(action), False, info
 
         if self.plan_to_learned_goals and self.ep_step_ctr == self.horizon + 1:
-            target_pos = action
+            if self.learn_residual:
+                target_pos = action + self.get_target_pos()
+            else:
+                target_pos = action
             if self.teleport_position:
                 for _ in range(50):
                     o = self._wrapped_env.step(
