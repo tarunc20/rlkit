@@ -2,6 +2,7 @@ import copy
 from functools import partial
 
 import numpy as np
+import torch
 
 create_rollout_function = partial
 
@@ -147,6 +148,7 @@ def rollout(
         full_next_observations=raw_obs,
     )
 
+@torch.no_grad()
 def vec_rollout(
     env,
     agent,
@@ -233,7 +235,7 @@ def vec_rollout(
         ))
     return paths
 
-
+@torch.no_grad()
 def rollout_modular(
     env,
     agent,

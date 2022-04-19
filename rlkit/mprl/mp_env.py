@@ -68,7 +68,7 @@ def backtracking_search_from_goal(
     ori,
     qpos,
     qvel,
-    movement_fraction=0.01,
+    movement_fraction=0.001,
     max_iters=1000,
 ):
     # only search over the xyz position, orientation should be the same as commanded
@@ -82,9 +82,9 @@ def backtracking_search_from_goal(
         collision = check_robot_collision(env, ignore_object_collision)
         iters += 1
     if collision:
-        return curr_pos, False
+        return start_pos # assumption is this is always valid!
     else:
-        return curr_pos, True
+        return curr_pos
 
 
 def update_controller_config(env, controller_config):
@@ -143,6 +143,12 @@ def mp_to_point(
 ):
     qpos = env.sim.data.qpos.copy()
     qvel = env.sim.data.qvel.copy()
+    update_controller_config(env, ik_controller_config)
+    ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
+    ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
+
+    og_eef_xpos = env._eef_xpos.copy()
+    og_eef_xquat = env._eef_xquat.copy()
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -154,29 +160,27 @@ def mp_to_point(
                 state.rotation().w,
             ]
         )
-        set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl, qpos, qvel)
-        valid = not check_robot_collision(
-            env, ignore_object_collision=ignore_object_collision
-        )
-        return valid
+        if all(pos == og_eef_xpos) and all(quat == og_eef_xquat):
+            # start state is always valid.
+            return True
+        else:
+            set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl, qpos, qvel)
+            valid = not check_robot_collision(
+                env, ignore_object_collision=ignore_object_collision
+            )
+            return valid
 
-    update_controller_config(env, ik_controller_config)
-    ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
-    ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
-
-    og_eef_xpos = env._eef_xpos
-    og_eef_xquat = env._eef_xquat
     # create an SE3 state space
     space = ob.SE3StateSpace()
 
     # set lower and upper bounds
     bounds = ob.RealVectorBounds(3)
-    bounds.setLow(0, -1.5)
-    bounds.setLow(1, -1.5)
+    bounds.setLow(0, -2)
+    bounds.setLow(1, -2)
     bounds.setLow(2, 0)
-    bounds.setHigh(0, 1.5)
-    bounds.setHigh(1, 1.5)
-    bounds.setHigh(2, 1.5)
+    bounds.setHigh(0, 2)
+    bounds.setHigh(1, 2)
+    bounds.setHigh(2, 2)
     space.setBounds(bounds)
 
     # construct an instance of space information from this state space
@@ -197,46 +201,11 @@ def mp_to_point(
     goal().rotation().y = og_eef_xquat[1]
     goal().rotation().z = og_eef_xquat[2]
     goal().rotation().w = og_eef_xquat[3]
-    start_valid = isStateValid(start())
     goal_valid = isStateValid(goal())
-    print(f"State validity checks: Start: {start_valid}, Goal: {goal_valid}")
-    print(f"Start Error {set_robot_based_on_ee_pos(env, og_eef_xpos, og_eef_xquat, ik_ctrl, qpos, qvel)}")
+    print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
-    if not start_valid:
-        start_pos, success = backtracking_search_from_goal(
-            env,
-            ik_ctrl,
-            ignore_object_collision,
-            og_eef_xpos+np.array([0, 0, 1.0]), #this should be a sufficient maximum distance to lift to not be in collision anymore
-            og_eef_xpos,
-            og_eef_xquat,
-            qpos,
-            qvel,
-        )
-        if not success:
-            env.mp_init_mse = 0
-
-            #reset back to original state and just return
-            env._wrapped_env.reset()
-            env.sim.data.qpos[:] = qpos.copy()
-            env.sim.data.qvel[:] = qvel.copy()
-            env.sim.forward()
-            return env._get_observations()
-        qpos = env.sim.data.qpos.copy() #update the qpos that will be set later #TODO: replace with real controller reaching this pose
-        qvel = env.sim.data.qvel.copy()
-        og_eef_xpos = start_pos
-        start = ob.State(space)
-        start().setXYZ(*start_pos)
-        start().rotation().x = og_eef_xquat[0]
-        start().rotation().y = og_eef_xquat[1]
-        start().rotation().z = og_eef_xquat[2]
-        start().rotation().w = og_eef_xquat[3]
-        print(f"Updated Start Validity: {isStateValid(start())}")
-        print(f"Start Error {set_robot_based_on_ee_pos(env, start_pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
-        if not isStateValid(start()):
-            exit()
     if not goal_valid:
-        goal_pos, success = backtracking_search_from_goal(
+        goal_pos = backtracking_search_from_goal(
             env,
             ik_ctrl,
             ignore_object_collision,
@@ -489,7 +458,7 @@ class MPEnv(ProxyEnv):
                 self.num_steps += 100
             else:
                 if self.learn_residual:
-                    pos = action + self.get_init_target_pos()
+                    pos = action + np.concatenate((self.get_init_target_pos(), self._eef_xquat))
                 else:
                     pos = action
                 obs = mp_to_point(
@@ -515,7 +484,7 @@ class MPEnv(ProxyEnv):
 
         if self.plan_to_learned_goals and self.ep_step_ctr == self.horizon + 1:
             if self.learn_residual:
-                target_pos = action + self.get_target_pos()
+                target_pos = action + np.concatenate((self.get_target_pos(), self._eef_xquat))
             else:
                 target_pos = action
             if self.teleport_position:

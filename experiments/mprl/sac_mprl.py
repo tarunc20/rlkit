@@ -24,7 +24,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 250,
+            "num_epochs": 500,
             "num_eval_steps_per_epoch": 250,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         },
         "mp_env_kwargs": {
             "vertical_displacement": 0.03,
-            "teleport_position": True,
+            "teleport_position": False,
             "planning_time": 5,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},

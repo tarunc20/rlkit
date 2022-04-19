@@ -18,7 +18,7 @@ def video_func(algorithm, epoch):
     if epoch % 50 == 0 or epoch == -1:
         policy = algorithm.eval_data_collector._policy
         max_path_length = algorithm.max_path_length
-        env = algorithm.eval_env
+        env = algorithm.eval_env.envs[0]
         num_rollouts = 5
         frames = []
         for _ in range(num_rollouts):
@@ -304,11 +304,12 @@ def experiment(variant):
             replay_buffer=replay_buffer,
             **variant["algorithm_kwargs"],
         )
+    print(ptu.device)
     algorithm.to(ptu.device)
-    # if (
-    #     not variant["mp_env_kwargs"]["teleport_position"]
-    #     and not variant["plan_to_learned_goals"]
-    # ):
-    #     video_func(algorithm, -1)
-    #     algorithm.post_epoch_funcs.append(video_func)
+    if (
+        not variant["mp_env_kwargs"]["teleport_position"]
+        and not variant["plan_to_learned_goals"]
+    ):
+        video_func(algorithm, -1)
+        algorithm.post_epoch_funcs.append(video_func)
     algorithm.train()
