@@ -523,7 +523,7 @@ class MPEnv(ProxyEnv):
             self.ep_step_ctr += 1
             is_grasped = self.check_grasp()
             is_success = self._check_success()
-            if self.ep_step_ctr == self.horizon and is_grasped and not is_success:
+            if self.ep_step_ctr == self.horizon and is_grasped:
                 target_pos = self.get_target_pos()
                 if self.teleport_position:
                     for _ in range(50):
@@ -537,14 +537,12 @@ class MPEnv(ProxyEnv):
                         self.ik_controller_config,
                         self.osc_controller_config,
                         np.concatenate((target_pos, self._eef_xquat)),
-                        grasp=True,
-                        ignore_object_collision=True,
+                        grasp=is_grasped,
+                        ignore_object_collision=is_grasped,
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                     )
-                new_r = self.reward(action)
-                if self.check_grasp() and new_r > r:
-                    r = new_r
+                r += self.reward(action)
         is_grasped = self.check_grasp()
         is_success = self._check_success()
         i["success"] = float(is_grasped)
