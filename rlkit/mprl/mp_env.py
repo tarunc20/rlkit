@@ -501,19 +501,19 @@ class MPEnv(ProxyEnv):
                         )[0]
                         self.num_steps += 1
                 else:
+                    is_grasped = self.check_grasp()
                     o = mp_to_point(
                         self,
                         self.ik_controller_config,
                         self.osc_controller_config,
                         target_pos.astype(np.float64),
-                        grasp=True,
-                        ignore_object_collision=True,
+                        grasp=is_grasped,
+                        ignore_object_collision=is_grasped,
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                     )
             o = self._flatten_obs(o)
-            new_r = self.reward(action)
-            r = new_r
+            r = self.reward(action)
             i = {}
             self.ep_step_ctr += 1
             d = False
@@ -521,9 +521,8 @@ class MPEnv(ProxyEnv):
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
-            is_grasped = self.check_grasp()
-            is_success = self._check_success()
-            if self.ep_step_ctr == self.horizon and is_grasped:
+            if self.ep_step_ctr == self.horizon:
+                is_grasped = self.check_grasp()
                 target_pos = self.get_target_pos()
                 if self.teleport_position:
                     for _ in range(50):
@@ -542,7 +541,6 @@ class MPEnv(ProxyEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                     )
-                r += self.reward(action)
         is_grasped = self.check_grasp()
         is_success = self._check_success()
         i["success"] = float(is_grasped)
