@@ -1,4 +1,9 @@
-from rlkit.samplers.rollout_functions import vec_rollout
+def preprocess_variant(variant):
+    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
+    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
+    return variant
 
 
 def video_func(algorithm, epoch):
@@ -98,6 +103,8 @@ def load_policy(path):
 
 
 def experiment(variant):
+    from rlkit.samplers.rollout_functions import vec_rollout
+
     from rlkit.envs.wrappers.mujoco_vec_wrappers import (
         DummyVecEnv,
         StableBaselinesVecEnv,
@@ -120,15 +127,10 @@ def experiment(variant):
         TorchBatchRLAlgorithm,
     )
 
-    # Load controller
-    controller = variant["expl_environment_kwargs"].pop("controller")
-    controller_config = load_controller_config(default_controller=controller)
-    # Create robosuite env and append to our list
-
-    controller = variant["eval_environment_kwargs"].pop("controller")
-    controller_config = load_controller_config(default_controller=controller)
     # Create gym-compatible envs
     def make_env_expl():
+        controller = variant["expl_environment_kwargs"].pop("controller")
+        controller_config = load_controller_config(default_controller=controller)
         expl_env = suite.make(
             **variant["expl_environment_kwargs"],
             has_renderer=False,
@@ -148,6 +150,8 @@ def experiment(variant):
         return expl_env
 
     def make_env_eval():
+        controller = variant["eval_environment_kwargs"].pop("controller")
+        controller_config = load_controller_config(default_controller=controller)
         eval_env = suite.make(
             **variant["eval_environment_kwargs"],
             has_renderer=False,

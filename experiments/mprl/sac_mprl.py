@@ -1,17 +1,8 @@
-from rlkit.mprl.experiment import experiment
+from rlkit.mprl.experiment import experiment, preprocess_variant
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
     setup_sweep_and_launch_exp,
 )
-
-
-def preprocess_variant(variant):
-    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
-    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
-    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
-    return variant
 
 
 if __name__ == "__main__":

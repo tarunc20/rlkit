@@ -68,8 +68,8 @@ def backtracking_search_from_goal(
     ori,
     qpos,
     qvel,
-    movement_fraction=0.001,
-    max_iters=1000,
+    movement_fraction=0.01,
+    max_iters=100,
 ):
     # only search over the xyz position, orientation should be the same as commanded
     curr_pos = goal_pos.copy()
@@ -489,6 +489,7 @@ class MPEnv(ProxyEnv):
 
         if self.plan_to_learned_goals and self.ep_step_ctr == self.horizon + 1:
             if self.learn_residual:
+                # TODO: don't add quaternion, use quaternion multiplication rule
                 target_pos = action + np.concatenate(
                     (self.get_target_pos(), self._eef_xquat)
                 )

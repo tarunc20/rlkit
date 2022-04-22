@@ -1,15 +1,8 @@
-from rlkit.mprl.experiment import experiment
+from rlkit.mprl.experiment import experiment, preprocess_variant
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
     setup_sweep_and_launch_exp,
 )
-
-
-def preprocess_variant(variant):
-    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
-    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    return variant
 
 
 if __name__ == "__main__":
@@ -47,7 +40,7 @@ if __name__ == "__main__":
         },
         "mp_env_kwargs": {
             "vertical_displacement": 0.04,
-            "teleport_position": True,
+            "teleport_position": False,
             "planning_time": 5,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
@@ -64,7 +57,7 @@ if __name__ == "__main__":
             "use_automatic_entropy_tuning": True,
         },
         "planner_trainer_kwargs": {
-            "discount": 0.99,
+            "discount": 0.5,
             "policy_lr": 0.001,
             "qf_lr": 0.0005,
             "reward_scale": 1.0,
@@ -74,5 +67,6 @@ if __name__ == "__main__":
         },
         "version": "normal",
         "plan_to_learned_goals": False,
+        "num_expl_envs": 10,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
