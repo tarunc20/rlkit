@@ -24,7 +24,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 250,
+            "num_epochs": 500,
             "num_eval_steps_per_epoch": 250,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,
@@ -66,7 +66,7 @@ if __name__ == "__main__":
             "use_automatic_entropy_tuning": True,
         },
         "planner_trainer_kwargs": {
-            "discount": 0.99,
+            "discount": 0.5,
             "policy_lr": 0.001,
             "qf_lr": 0.0005,
             "reward_scale": 1.0,
