@@ -148,6 +148,7 @@ def rollout(
         full_next_observations=raw_obs,
     )
 
+
 @torch.no_grad()
 def vec_rollout(
     env,
@@ -221,19 +222,28 @@ def vec_rollout(
     actions = [actions[:, i] for i in range(env.n_envs)]
     rewards = [rewards[:, i] for i in range(env.n_envs)]
     terminals = [terminals[:, i] for i in range(env.n_envs)]
-    env_infos = [[{key: env_infos[j][key][i] for key in env_infos[j]} for j in range(max_path_length)] for i in range(env.n_envs)] #should be a list of list of dicts (length n_envs) (length of path)
+    env_infos = [
+        [
+            {key: env_infos[j][key][i] for key in env_infos[j]}
+            for j in range(max_path_length)
+        ]
+        for i in range(env.n_envs)
+    ]  # should be a list of list of dicts (length n_envs) (length of path)
     paths = []
     for i in range(env.n_envs):
-        paths.append(dict(
-            observations=observations[i],
-            actions=actions[i],
-            rewards=rewards[i],
-            next_observations=next_observations[i],
-            terminals=terminals[i],
-            agent_infos=agent_infos,
-            env_infos=env_infos[i],
-        ))
+        paths.append(
+            dict(
+                observations=observations[i],
+                actions=actions[i],
+                rewards=rewards[i],
+                next_observations=next_observations[i],
+                terminals=terminals[i],
+                agent_infos=agent_infos,
+                env_infos=env_infos[i],
+            )
+        )
     return paths
+
 
 @torch.no_grad()
 def rollout_modular(
@@ -350,33 +360,49 @@ def rollout_modular(
     actions = [actions[:, i] for i in range(env.n_envs)]
     rewards = [rewards[:, i] for i in range(env.n_envs)]
     terminals = [terminals[:, i] for i in range(env.n_envs)]
-    env_infos = [[{key: env_infos[j][key][i] for key in env_infos[j]} for j in range(max_path_length)] for i in range(env.n_envs)] #should be a list of list of dicts (length n_envs) (length of path)
+    env_infos = [
+        [
+            {key: env_infos[j][key][i] for key in env_infos[j]}
+            for j in range(max_path_length)
+        ]
+        for i in range(env.n_envs)
+    ]  # should be a list of list of dicts (length n_envs) (length of path)
 
     planner_terminals = np.array(planner_terminals)
     planner_observations = [planner_observations[:, i] for i in range(env.n_envs)]
-    planner_next_observations = [planner_next_observations[:, i] for i in range(env.n_envs)]
+    planner_next_observations = [
+        planner_next_observations[:, i] for i in range(env.n_envs)
+    ]
     planner_actions = [planner_actions[:, i] for i in range(env.n_envs)]
     planner_rewards = [planner_rewards[:, i] for i in range(env.n_envs)]
     planner_terminals = [planner_terminals[:, i] for i in range(env.n_envs)]
-    planner_env_infos = [[{key: planner_env_infos[j][key][i] for key in planner_env_infos[j]} for j in range(2)] for i in range(env.n_envs)] #should be a list of list of dicts (length n_envs) (length of path)
+    planner_env_infos = [
+        [
+            {key: planner_env_infos[j][key][i] for key in planner_env_infos[j]}
+            for j in range(2)
+        ]
+        for i in range(env.n_envs)
+    ]  # should be a list of list of dicts (length n_envs) (length of path)
     paths = []
     for i in range(env.n_envs):
-        paths.append(dict(
-            observations=observations[i],
-            actions=actions[i],
-            rewards=rewards[i],
-            next_observations=next_observations[i],
-            terminals=terminals[i],
-            agent_infos=agent_infos,
-            env_infos=env_infos[i],
-            planner_observations=planner_observations[i],
-            planner_next_observations=planner_next_observations[i],
-            planner_actions=planner_actions[i],
-            planner_rewards=planner_rewards[i],
-            planner_terminals=planner_terminals[i],
-            planner_agent_infos=planner_agent_infos,
-            planner_env_infos=planner_env_infos[i],
-        ))
+        paths.append(
+            dict(
+                observations=observations[i],
+                actions=actions[i],
+                rewards=rewards[i],
+                next_observations=next_observations[i],
+                terminals=terminals[i],
+                agent_infos=agent_infos,
+                env_infos=env_infos[i],
+                planner_observations=planner_observations[i],
+                planner_next_observations=planner_next_observations[i],
+                planner_actions=planner_actions[i],
+                planner_rewards=planner_rewards[i],
+                planner_terminals=planner_terminals[i],
+                planner_agent_infos=planner_agent_infos,
+                planner_env_infos=planner_env_infos[i],
+            )
+        )
     return paths
 
 

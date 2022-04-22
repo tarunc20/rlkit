@@ -82,7 +82,7 @@ def backtracking_search_from_goal(
         collision = check_robot_collision(env, ignore_object_collision)
         iters += 1
     if collision:
-        return start_pos # assumption is this is always valid!
+        return start_pos  # assumption is this is always valid!
     else:
         return curr_pos
 
@@ -203,7 +203,9 @@ def mp_to_point(
     goal().rotation().w = og_eef_xquat[3]
     goal_valid = isStateValid(goal())
     print(f"Goal Validity: {goal_valid}")
-    print(f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
+    print(
+        f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
+    )
     if not goal_valid:
         goal_pos = backtracking_search_from_goal(
             env,
@@ -222,7 +224,9 @@ def mp_to_point(
         goal().rotation().z = og_eef_xquat[2]
         goal().rotation().w = og_eef_xquat[3]
         print(f"Updated Goal Validity: {isStateValid(goal())}")
-        print(f"Goal Error {set_robot_based_on_ee_pos(env, goal_pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}")
+        print(
+            f"Goal Error {set_robot_based_on_ee_pos(env, goal_pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
+        )
         if not isStateValid(goal()):
             exit()
 
@@ -246,7 +250,6 @@ def mp_to_point(
         env.sim.data.qpos[:] = qpos.copy()
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
-
 
         update_controller_config(env, osc_controller_config)
         osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
@@ -337,7 +340,7 @@ class MPEnv(ProxyEnv):
         self.planning_time = planning_time
         self.plan_to_learned_goals = plan_to_learned_goals
         self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
-        self.learn_residual=learn_residual
+        self.learn_residual = learn_residual
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -458,7 +461,9 @@ class MPEnv(ProxyEnv):
                 self.num_steps += 100
             else:
                 if self.learn_residual:
-                    pos = action + np.concatenate((self.get_init_target_pos(), self._eef_xquat))
+                    pos = action + np.concatenate(
+                        (self.get_init_target_pos(), self._eef_xquat)
+                    )
                 else:
                     pos = action
                 obs = mp_to_point(
@@ -484,7 +489,9 @@ class MPEnv(ProxyEnv):
 
         if self.plan_to_learned_goals and self.ep_step_ctr == self.horizon + 1:
             if self.learn_residual:
-                target_pos = action + np.concatenate((self.get_target_pos(), self._eef_xquat))
+                target_pos = action + np.concatenate(
+                    (self.get_target_pos(), self._eef_xquat)
+                )
             else:
                 target_pos = action
             if self.teleport_position:

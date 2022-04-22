@@ -76,6 +76,6 @@ if __name__ == "__main__":
         },
         "version": "normal",
         "plan_to_learned_goals": False,
-        "num_expl_envs":10,
+        "num_expl_envs": 10,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

@@ -1,6 +1,3 @@
-
-
-
 from rlkit.samplers.rollout_functions import vec_rollout
 
 
@@ -101,7 +98,10 @@ def load_policy(path):
 
 
 def experiment(variant):
-    from rlkit.envs.wrappers.mujoco_vec_wrappers import DummyVecEnv, StableBaselinesVecEnv
+    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
+        DummyVecEnv,
+        StableBaselinesVecEnv,
+    )
     from rlkit.samplers.rollout_functions import rollout_modular
     import robosuite as suite
     from robosuite.controllers import load_controller_config
