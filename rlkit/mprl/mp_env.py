@@ -68,8 +68,8 @@ def backtracking_search_from_goal(
     ori,
     qpos,
     qvel,
-    movement_fraction=0.01,
-    max_iters=100,
+    movement_fraction=0.001,
+    max_iters=1000,
 ):
     # only search over the xyz position, orientation should be the same as commanded
     curr_pos = goal_pos.copy()
