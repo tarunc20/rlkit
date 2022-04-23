@@ -103,6 +103,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
         min_num_steps_before_training=0,
         planner_replay_buffer=None,
         planner_trainer=None,
+        planner_num_trains_per_train_loop=40,
     ):
         super().__init__(
             trainer,
@@ -122,6 +123,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
         )
         self.planner_replay_buffer = planner_replay_buffer
         self.planner_trainer = planner_trainer
+        self.planner_num_trains_per_train_loop =planner_num_trains_per_train_loop
 
     def get_planner_paths_from_paths(self, paths):
         planner_paths = []
@@ -177,7 +179,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
                 for _ in range(self.num_trains_per_train_loop):
                     train_data = self.replay_buffer.random_batch(self.batch_size)
                     self.trainer.train(train_data)
-                for _ in range(self.num_trains_per_train_loop):
+                for _ in range(self.planner_num_trains_per_train_loop):
                     train_data = self.planner_replay_buffer.random_batch(
                         self.batch_size
                     )
