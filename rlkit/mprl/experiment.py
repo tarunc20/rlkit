@@ -284,6 +284,7 @@ def experiment(variant):
             replay_buffer=replay_buffer,
             planner_replay_buffer=planner_replay_buffer,
             planner_trainer=planner_trainer,
+            planner_num_trains_per_train_loop=variant.get('planner_num_trains_per_train_loop', 0),
             **variant["algorithm_kwargs"],
         )
     else:
