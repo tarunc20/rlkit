@@ -175,12 +175,20 @@ def mp_to_point(
 
     # set lower and upper bounds
     bounds = ob.RealVectorBounds(3)
-    bounds.setLow(0, -2)
-    bounds.setLow(1, -2)
-    bounds.setLow(2, 0)
-    bounds.setHigh(0, 2)
-    bounds.setHigh(1, 2)
-    bounds.setHigh(2, 2)
+
+    # compare bounds to start state
+    bounds_low = env.mp_bounds_low
+    bounds_high = env.mp_bounds_high
+
+    bounds_low = np.minimum(env.mp_bounds_low, og_eef_xpos)
+    bounds_high = np.maximum(env.mp_bounds_high, og_eef_xpos)
+
+    bounds.setLow(0, bounds_low[0])
+    bounds.setLow(1, bounds_low[1])
+    bounds.setLow(2, bounds_low[2])
+    bounds.setHigh(0, bounds_high[0])
+    bounds.setHigh(1, bounds_high[1])
+    bounds.setHigh(2, bounds_high[2])
     space.setBounds(bounds)
 
     # construct an instance of space information from this state space
@@ -240,24 +248,14 @@ def mp_to_point(
     planner.setProblemDefinition(pdef)
     # perform setup steps for the planner
     planner.setup()
+
     # attempt to solve the problem within planning_time seconds of planning time
     solved = planner.solve(planning_time)
 
     intermediate_frames = []
     if solved:
-        # reset env to original qpos/qvel
-        env._wrapped_env.reset()
-        env.sim.data.qpos[:] = qpos.copy()
-        env.sim.data.qvel[:] = qvel.copy()
-        env.sim.forward()
-
-        update_controller_config(env, osc_controller_config)
-        osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
-        osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
-
-        path = pdef.getSolutionPath()
-
         converted_path = []
+        path = pdef.getSolutionPath()
         for state in path.getStates():
             new_state = [
                 state.getX(),
@@ -268,10 +266,26 @@ def mp_to_point(
                 state.rotation().z,
                 state.rotation().w,
             ]
+            if env.update_with_true_state:
+                # get actual state that we used for collision checking on
+                set_robot_based_on_ee_pos(
+                    env, new_state[:3], new_state[3:], ik_ctrl, qpos, qvel
+                )
+                new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
+            else:
+                new_state = np.array(new_state)
             converted_path.append(new_state)
+        # reset env to original qpos/qvel
+        env._wrapped_env.reset()
+        env.sim.data.qpos[:] = qpos.copy()
+        env.sim.data.qvel[:] = qvel.copy()
+        env.sim.forward()
+
+        update_controller_config(env, osc_controller_config)
+        osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
+        osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
         osc_ctrl.reset_goal()
         for state in converted_path:
-            state = np.array(state)
             desired_rot = quat2mat(state[3:])
             for _ in range(100):
                 current_rot = quat2mat(env._eef_xquat)
@@ -300,6 +314,7 @@ def mp_to_point(
         )
     else:
         env.mp_init_mse = 0
+        env.num_failed_solves += 1
     env.intermediate_frames = intermediate_frames
     return env._get_observations()
 
@@ -314,6 +329,9 @@ class MPEnv(ProxyEnv):
         plan_to_learned_goals=False,
         execute_hardcoded_policy_to_goal=False,
         learn_residual=False,
+        mp_bounds_low=None,
+        mp_bounds_high=None,
+        update_with_true_state=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -341,6 +359,9 @@ class MPEnv(ProxyEnv):
         self.plan_to_learned_goals = plan_to_learned_goals
         self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
         self.learn_residual = learn_residual
+        self.mp_bounds_low = mp_bounds_low
+        self.mp_bounds_high = mp_bounds_high
+        self.update_with_true_state = update_with_true_state
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -383,6 +404,7 @@ class MPEnv(ProxyEnv):
             "ramp_ratio": 0.2,
         }
         self.ep_step_ctr = 0
+        self.num_failed_solves = 0
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
@@ -447,6 +469,27 @@ class MPEnv(ProxyEnv):
             )
         return pose
 
+    def clamp_planner_action_mp_space_bounds(self, action):
+        # action[0] = (
+        #     action[0] * (self.mp_bounds_high[0] - self.mp_bounds_low[0]) / 2
+        #     + self.mp_bounds_low[0] / 2
+        #     + self.mp_bounds_high[0] / 2
+        # )
+        # action[1] = (
+        #     action[1] * (self.mp_bounds_high[1] - self.mp_bounds_low[1]) / 2
+        #     + self.mp_bounds_low[1] / 2
+        #     + self.mp_bounds_high[1] / 2
+        # )
+        # action[2] = (
+        #     action[2] * (self.mp_bounds_high[2] - self.mp_bounds_low[2]) / 2
+        #     + self.mp_bounds_low[2] / 2
+        #     + self.mp_bounds_high[2] / 2
+        # )
+        # assert (action[:3] >= self.mp_bounds_low).all() and (
+        #     action[:3] <= self.mp_bounds_high
+        # ).all(), action
+        return action
+
     def step(self, action, get_intermediate_frames=False):
         if self.ep_step_ctr == 0 and self.plan_to_learned_goals:
             if self.teleport_position:
@@ -465,6 +508,7 @@ class MPEnv(ProxyEnv):
                         (self.get_init_target_pos(), self._eef_xquat)
                     )
                 else:
+                    action = self.clamp_planner_action_mp_space_bounds(action)
                     pos = action
                 obs = mp_to_point(
                     self,
@@ -484,6 +528,7 @@ class MPEnv(ProxyEnv):
             info["num_steps"] = self.num_steps
             if not self.teleport_position:
                 info["mp_init_mse"] = self.mp_init_mse
+                info["num_failed_solves"] = self.num_failed_solves
             self.ep_step_ctr += 1
             return obs, self.reward(action), False, info
 
@@ -494,6 +539,7 @@ class MPEnv(ProxyEnv):
                     (self.get_target_pos(), self._eef_xquat)
                 )
             else:
+                action = self.clamp_planner_action_mp_space_bounds(action)
                 target_pos = action
             if self.teleport_position:
                 for _ in range(50):

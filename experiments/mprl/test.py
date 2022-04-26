@@ -41,7 +41,7 @@ if __name__ == "__main__":
     )
     env.reset()
     positions = []
-    env.ik_controller_config['converge_steps'] = 1
+    env.ik_controller_config["converge_steps"] = 1
     update_controller_config(env, env.ik_controller_config)
     ik_ctrl = controller_factory("IK_POSE", env.ik_controller_config)
     ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)

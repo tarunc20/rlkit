@@ -15,7 +15,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 500,
+            "num_epochs": 5000,
             "num_eval_steps_per_epoch": 250,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,
@@ -42,6 +42,8 @@ if __name__ == "__main__":
             "vertical_displacement": 0.03,
             "teleport_position": False,
             "planning_time": 5,
+            "mp_bounds_low": (-2, -2, 0),
+            "mp_bounds_high": (2, 2.0, 2.2),
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
@@ -67,7 +69,7 @@ if __name__ == "__main__":
         },
         "version": "normal",
         "plan_to_learned_goals": False,
-        "num_expl_envs": 10,
+        "num_expl_envs": 5,
         "planner_num_trains_per_train_loop": 1000,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

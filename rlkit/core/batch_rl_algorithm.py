@@ -123,7 +123,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
         )
         self.planner_replay_buffer = planner_replay_buffer
         self.planner_trainer = planner_trainer
-        self.planner_num_trains_per_train_loop =planner_num_trains_per_train_loop
+        self.planner_num_trains_per_train_loop = planner_num_trains_per_train_loop
 
     def get_planner_paths_from_paths(self, paths):
         planner_paths = []

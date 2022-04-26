@@ -3,6 +3,10 @@ def preprocess_variant(variant):
     variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
+    if variant["plan_to_learned_goals"]:
+        variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
+            "planner_num_trains_per_train_loop"
+        ]
     return variant
 
 
@@ -22,12 +26,20 @@ def video_func(algorithm, epoch):
         max_path_length = algorithm.max_path_length
         env = algorithm.eval_env.envs[0]
         num_rollouts = 5
+        intermediate_frames_length = 100
         frames = []
         for _ in range(num_rollouts):
             policy.reset()
             o = env.reset(get_intermediate_frames=True)
             im = env.get_image()
-            intermediate_frames = env.intermediate_frames
+            intermediate_frames = np.array(env.intermediate_frames)
+            idxs = np.linspace(
+                0, len(intermediate_frames), intermediate_frames_length, endpoint=False
+            )
+            if len(intermediate_frames) > 0:
+                intermediate_frames = intermediate_frames[idxs.astype(int)]
+            else:
+                intermediate_frames = [im] * intermediate_frames_length
             if len(frames) > 0:
                 for j, fr in enumerate(intermediate_frames):
                     frames[j] = np.concatenate([frames[j], fr], axis=1)
@@ -49,7 +61,17 @@ def video_func(algorithm, epoch):
                 )
                 im = env.get_image()
                 if get_intermediate_frames:
-                    intermediate_frames = env.intermediate_frames
+                    intermediate_frames = np.array(env.intermediate_frames)
+                    idxs = np.linspace(
+                        0,
+                        len(intermediate_frames),
+                        intermediate_frames_length,
+                        endpoint=False,
+                    )
+                    if len(intermediate_frames) > 0:
+                        intermediate_frames = intermediate_frames[idxs.astype(int)]
+                    else:
+                        intermediate_frames = [im] * intermediate_frames_length
                     if len(frames) > path_length + prev_intermediate_frames_len:
                         for j, fr in enumerate(intermediate_frames):
                             frames[
@@ -284,7 +306,6 @@ def experiment(variant):
             replay_buffer=replay_buffer,
             planner_replay_buffer=planner_replay_buffer,
             planner_trainer=planner_trainer,
-            planner_num_trains_per_train_loop=variant.get('planner_num_trains_per_train_loop', 0),
             **variant["algorithm_kwargs"],
         )
     else:
