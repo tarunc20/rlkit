@@ -21,8 +21,8 @@ if __name__ == "__main__":
         "vertical_displacement": 0.03,
         "teleport_position": False,
         "planning_time": 1,
-        "mp_bounds_low": (-1.5, -1, 0.3),
-        "mp_bounds_high": (0.3, 1.0, 2.2),
+        "mp_bounds_low": (-2, -2, 0),
+        "mp_bounds_high": (2, 2, 2),
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
@@ -41,13 +41,13 @@ if __name__ == "__main__":
     )
     env.reset()
     positions = []
-    env.ik_controller_config["converge_steps"] = 1
+    env.ik_controller_config["converge_steps"] = 5
     update_controller_config(env, env.ik_controller_config)
     ik_ctrl = controller_factory("IK_POSE", env.ik_controller_config)
     ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
     avg_error = 0
     for _ in range(1000):
-        pos = np.random.uniform([-1.5, -1, 0.3], [0.2, 1.0, 2.2])
+        pos = env._eef_xpos + np.random.normal(0, .01, (3,))
         error = set_robot_based_on_ee_pos(
             env, pos, env._eef_xquat, ik_ctrl, env.sim.data.qpos, env.sim.data.qvel
         )

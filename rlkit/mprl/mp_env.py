@@ -215,7 +215,7 @@ def mp_to_point(
         f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
     )
     if not goal_valid:
-        goal_pos = backtracking_search_from_goal(
+        pos = backtracking_search_from_goal(
             env,
             ik_ctrl,
             ignore_object_collision,
@@ -226,14 +226,14 @@ def mp_to_point(
             qvel,
         )
         goal = ob.State(space)
-        goal().setXYZ(*goal_pos)
+        goal().setXYZ(*pos)
         goal().rotation().x = og_eef_xquat[0]
         goal().rotation().y = og_eef_xquat[1]
         goal().rotation().z = og_eef_xquat[2]
         goal().rotation().w = og_eef_xquat[3]
         print(f"Updated Goal Validity: {isStateValid(goal())}")
         print(
-            f"Goal Error {set_robot_based_on_ee_pos(env, goal_pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
+            f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
         )
         if not isStateValid(goal()):
             exit()
@@ -243,19 +243,18 @@ def mp_to_point(
     # set the start and goal states
     pdef.setStartAndGoalStates(start, goal)
     # create a planner for the defined space
-    planner = og.RRTstar(si)
+    planner = og.RRTConnect(si)
     # set the problem we are trying to solve for the planner
     planner.setProblemDefinition(pdef)
     # perform setup steps for the planner
     planner.setup()
-
     # attempt to solve the problem within planning_time seconds of planning time
     solved = planner.solve(planning_time)
-
     intermediate_frames = []
     if solved:
-        converted_path = []
         path = pdef.getSolutionPath()
+        og.PathSimplifier(si).simplify(path, 1)
+        converted_path = []
         for state in path.getStates():
             new_state = [
                 state.getX(),
@@ -310,9 +309,14 @@ def mp_to_point(
                 if get_intermediate_frames:
                     intermediate_frames.append(env.get_image())
         env.mp_init_mse = (
-            np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
+            np.linalg.norm(np.concatenate((pos[:3], env._eef_xquat)) - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
+        print(env.mp_init_mse)
     else:
+        env._wrapped_env.reset()
+        env.sim.data.qpos[:] = qpos.copy()
+        env.sim.data.qvel[:] = qvel.copy()
+        env.sim.forward()
         env.mp_init_mse = 0
         env.num_failed_solves += 1
     env.intermediate_frames = intermediate_frames
