@@ -1,3 +1,7 @@
+import os
+import pickle
+
+
 def preprocess_variant(variant):
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
     variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
@@ -330,12 +334,24 @@ def experiment(variant):
             replay_buffer=replay_buffer,
             **variant["algorithm_kwargs"],
         )
-    print(ptu.device)
     algorithm.to(ptu.device)
-    if (
-        not variant["mp_env_kwargs"]["teleport_position"]
-        and not variant["plan_to_learned_goals"]
-    ):
-        video_func(algorithm, -1)
-        algorithm.post_epoch_funcs.append(video_func)
-    algorithm.train()
+    if variant.get('load_path', None):
+        policy = pickle.load(open(os.path.join(variant['load_path']), "rb"))
+        for _ in range(10):
+            o = eval_env.reset()
+            policy.reset()
+            for _ in range(eval_env.envs[0].horizon):
+                a = policy.get_action(o)[0]
+                o, r, d, i = eval_env.step(a)
+                print(f"r:{r}, is grasped:{eval_env.envs[0].check_grasp()},logged grasp: {i['grasped']}")
+            print(f"Success: {eval_env.envs[0]._check_success()}")
+            if eval_env.envs[0]._check_success():
+                exit()
+    else:
+        algorithm.train()
+        if (
+            not variant["mp_env_kwargs"]["teleport_position"]
+            and not variant["plan_to_learned_goals"]
+        ):
+            video_func(algorithm, -1)
+            algorithm.post_epoch_funcs.append(video_func)

@@ -71,5 +71,6 @@ if __name__ == "__main__":
         "plan_to_learned_goals": True,
         "num_expl_envs": 5,
         "planner_num_trains_per_train_loop": 1000,
+        "load_path":"/home/mdalal/research/mprl/rlkit/data/04-26-mprl-pick-place-latest-rrt-connect-1/04-26-mprl_pick_place_latest_rrt_connect_1_2022_04_26_02_03_56_0000--s-3818/policy_400.pkl",
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

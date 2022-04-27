@@ -547,10 +547,8 @@ class MPEnv(ProxyEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                     )
-        is_grasped = self.check_grasp()
-        is_success = self._check_success()
-        i["success"] = float(is_grasped)
-        i["grasped"] = float(is_success)
+        i["success"] = float(self._check_success())
+        i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_position:
             i["mp_init_mse"] = self.mp_init_mse
