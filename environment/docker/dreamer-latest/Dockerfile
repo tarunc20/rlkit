@@ -38,7 +38,6 @@ RUN mkdir -p /root/.mujoco \
     && wget https://www.roboti.us/download/mujoco200_linux.zip -O mujoco.zip \
     && unzip mujoco.zip -d /root/.mujoco \
     && rm mujoco.zip
-COPY ./mjkey.txt /root/.mujoco/
 RUN cp -R /root/.mujoco/mujoco200_linux /root/.mujoco/mujoco200/
 ENV LD_LIBRARY_PATH /root/.mujoco/mujoco200/bin:${LD_LIBRARY_PATH}
 ENV LD_LIBRARY_PATH /root/.mujoco/mujoco200_linux/bin:${LD_LIBRARY_PATH}
@@ -89,10 +88,11 @@ RUN pip install stable_baselines3
 RUN pip install h5py
 RUN pip install termcolor
 RUN pip install click
-RUN pip install git+git://github.com/deepmind/dm_control@master#egg=dm_control
-RUN pip install git+git://github.com/aravindr93/mjrl@master#egg=mjrl
 RUN pip install numba
 RUN pip install numpy-quaternion
 RUN mkdir /usr/lib/nvidia-000/
 ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/lib/nvidia-000
-RUN python -c "import mujoco_py"
+
+COPY . /ompl
+RUN /ompl/install-ompl-ubuntu.sh --python
+RUN mv ompl-1.5.2/ /ompl/

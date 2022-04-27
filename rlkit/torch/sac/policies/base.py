@@ -28,8 +28,8 @@ class TorchStochasticPolicy(
         self,
         obs_np,
     ):
-        actions = self.get_actions(obs_np[None])
-        return actions[0, :], {}
+        actions = self.get_actions(obs_np)
+        return actions, {}
 
     def get_actions(
         self,
