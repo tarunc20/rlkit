@@ -311,7 +311,6 @@ def mp_to_point(
         env.mp_init_mse = (
             np.linalg.norm(np.concatenate((pos[:3], env._eef_xquat)) - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
-        print(env.mp_init_mse)
     else:
         env._wrapped_env.reset()
         env.sim.data.qpos[:] = qpos.copy()
@@ -495,86 +494,35 @@ class MPEnv(ProxyEnv):
         return action
 
     def step(self, action, get_intermediate_frames=False):
-        if self.ep_step_ctr == 0 and self.plan_to_learned_goals:
-            if self.teleport_position:
-                update_controller_config(self, self.ik_controller_config)
-                ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
-                ik_ctrl.update_base_pose(
-                    self.robots[0].base_pos, self.robots[0].base_ori
-                )
-                pos = action
-                set_robot_based_on_ee_pos(self, pos[:3], self._eef_xquat, ik_ctrl)
-                obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
-                self.num_steps += 100
-            else:
+        if self.plan_to_learned_goals:
+            if self.ep_step_ctr == 0 or self.ep_step_ctr == self.horizon + 1:
                 if self.learn_residual:
+                    # TODO: don't add quaternion, use quaternion multiplication rule
                     pos = action + np.concatenate(
                         (self.get_init_target_pos(), self._eef_xquat)
                     )
                 else:
                     action = self.clamp_planner_action_mp_space_bounds(action)
                     pos = action
-                obs = mp_to_point(
+                is_grasped = self.check_grasp()
+                o = mp_to_point(
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
                     pos.astype(np.float64),
-                    grasp=False,
+                    grasp=is_grasped,
+                    ignore_object_collision=is_grasped,
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
                 )
-                obs = self._flatten_obs(obs)
-            info = {}
-            is_grasped = self.check_grasp()
-            is_success = self._check_success()
-            info["success"] = float(is_grasped)
-            info["grasped"] = float(is_success)
-            info["num_steps"] = self.num_steps
-            if not self.teleport_position:
-                info["mp_init_mse"] = self.mp_init_mse
-                info["num_failed_solves"] = self.num_failed_solves
-            self.ep_step_ctr += 1
-            return obs, self.reward(action), False, info
-
-        if self.plan_to_learned_goals and self.ep_step_ctr == self.horizon + 1:
-            if self.learn_residual:
-                # TODO: don't add quaternion, use quaternion multiplication rule
-                target_pos = action + np.concatenate(
-                    (self.get_target_pos(), self._eef_xquat)
-                )
+                o = self._flatten_obs(o)
+                r = self.reward(action)
+                i = {}
+                d = False
             else:
-                action = self.clamp_planner_action_mp_space_bounds(action)
-                target_pos = action
-            if self.teleport_position:
-                for _ in range(50):
-                    o = self._wrapped_env.step(
-                        np.concatenate((target_pos[:3] - self._eef_xpos, [0, 0, 0, 1]))
-                    )[0]
-                    self.num_steps += 1
-            else:
-                if self.execute_hardcoded_policy_to_goal:
-                    for _ in range(50):
-                        o = self._wrapped_env.step(
-                            np.concatenate((target_pos - self._eef_xpos, [0, 0, 0, 1]))
-                        )[0]
-                        self.num_steps += 1
-                else:
-                    is_grasped = self.check_grasp()
-                    o = mp_to_point(
-                        self,
-                        self.ik_controller_config,
-                        self.osc_controller_config,
-                        target_pos.astype(np.float64),
-                        grasp=is_grasped,
-                        ignore_object_collision=is_grasped,
-                        planning_time=self.planning_time,
-                        get_intermediate_frames=get_intermediate_frames,
-                    )
-            o = self._flatten_obs(o)
-            r = self.reward(action)
-            i = {}
+                o, r, d, i = self._wrapped_env.step(action)
+                self.num_steps += 1
             self.ep_step_ctr += 1
-            d = False
         else:
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
@@ -606,6 +554,7 @@ class MPEnv(ProxyEnv):
         i["num_steps"] = self.num_steps
         if not self.teleport_position:
             i["mp_init_mse"] = self.mp_init_mse
+            i["num_failed_solves"] = self.num_failed_solves
         return o, r, d, i
 
 
