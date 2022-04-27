@@ -16,22 +16,69 @@ def video_func(algorithm, epoch):
         frames = []
         for _ in range(num_rollouts):
             policy.reset()
-            o = env.reset()
+            o = env.reset(get_intermediate_frames=True)
             im = env.get_image()
+            intermediate_frames = env.intermediate_frames
             if len(frames) > 0:
-                frames[0] = np.concatenate((frames[0], im), axis=1)
+                for j, fr in enumerate(intermediate_frames):
+                    frames[j] = np.concatenate([frames[j], fr], axis=1)
+                frames[len(intermediate_frames)] = np.concatenate(
+                    (frames[len(intermediate_frames)], im), axis=1
+                )
             else:
+                frames.extend(intermediate_frames)
                 frames.append(im)
+            prev_intermediate_frames_len = len(intermediate_frames)
             for path_length in range(1, max_path_length + 1):
                 a, agent_info = policy.get_action(o)
-                o, r, d, i = env.step(copy.deepcopy(a))
-                im = env.get_image()
-                if len(frames) > path_length:
-                    frames[path_length] = np.concatenate(
-                        (frames[path_length], im), axis=1
-                    )
+                if path_length == max_path_length:
+                    get_intermediate_frames = True
                 else:
-                    frames.append(im)
+                    get_intermediate_frames = False
+                o, r, d, i = env.step(
+                    copy.deepcopy(a), get_intermediate_frames=get_intermediate_frames
+                )
+                im = env.get_image()
+                if get_intermediate_frames:
+                    intermediate_frames = env.intermediate_frames
+                    if len(frames) > path_length + prev_intermediate_frames_len:
+                        for j, fr in enumerate(intermediate_frames):
+                            frames[
+                                j + path_length + prev_intermediate_frames_len
+                            ] = np.concatenate(
+                                [
+                                    frames[
+                                        j + path_length + prev_intermediate_frames_len
+                                    ],
+                                    fr,
+                                ],
+                                axis=1,
+                            )
+                        frames[
+                            path_length
+                            + prev_intermediate_frames_len
+                            + len(intermediate_frames)
+                        ] = np.concatenate(
+                            (
+                                frames[
+                                    prev_intermediate_frames_len
+                                    + len(intermediate_frames)
+                                    + path_length
+                                ],
+                                im,
+                            ),
+                            axis=1,
+                        )
+                    else:
+                        frames.extend(intermediate_frames)
+                        frames.append(im)
+                else:
+                    if len(frames) > path_length + len(intermediate_frames):
+                        frames[path_length + len(intermediate_frames)] = np.concatenate(
+                            (frames[path_length + len(intermediate_frames)], im), axis=1
+                        )
+                    else:
+                        frames.append(im)
                 if d:
                     break
         logdir = logger.get_snapshot_dir()
@@ -77,15 +124,6 @@ def experiment(variant):
         camera_heights=256,
         camera_widths=256,
     )
-    expl_mp_env = suite.make(
-        **variant["expl_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=False,
-        use_object_obs=True,
-        use_camera_obs=False,
-        reward_shaping=True,
-        controller_configs=controller_config,
-    )
     controller = variant["eval_environment_kwargs"].pop("controller")
     controller_config = load_controller_config(default_controller=controller)
     eval_env = suite.make(
@@ -100,26 +138,15 @@ def experiment(variant):
         camera_heights=256,
         camera_widths=256,
     )
-    eval_mp_env = suite.make(
-        **variant["eval_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=False,
-        use_object_obs=True,
-        use_camera_obs=False,
-        reward_shaping=True,
-        controller_configs=controller_config,
-    )
     # Create gym-compatible envs
 
     if variant.get("mprl", False):
         expl_env = MPEnv(
             NormalizedBoxEnv(GymWrapper(expl_env)),
-            mp_env=expl_mp_env,
             **variant.get("mp_env_kwargs"),
         )
         eval_env = MPEnv(
             NormalizedBoxEnv(GymWrapper(eval_env)),
-            mp_env=eval_mp_env,
             **variant.get("mp_env_kwargs"),
         )
     else:

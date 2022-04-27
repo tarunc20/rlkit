@@ -22,7 +22,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 50,
+            "num_epochs": 500,
             "num_eval_steps_per_epoch": 250,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,
@@ -30,7 +30,7 @@ if __name__ == "__main__":
         "eval_environment_kwargs": {
             "control_freq": 20,
             "controller": "OSC_POSE",
-            "env_name": "Lift",
+            "env_name": "PickPlaceCan",
             "hard_reset": False,
             "ignore_done": True,
             "reward_scale": 1.0,
@@ -39,16 +39,16 @@ if __name__ == "__main__":
         "expl_environment_kwargs": {
             "control_freq": 20,
             "controller": "OSC_POSE",
-            "env_name": "Lift",
+            "env_name": "PickPlaceCan",
             "hard_reset": False,
             "ignore_done": True,
             "reward_scale": 1.0,
             "robots": "Panda",
         },
         "mp_env_kwargs": {
-            "vertical_displacement": 0.03,
+            "vertical_displacement": 0.05,
             "teleport_position": True,
-            "planning_time": 5,
+            "planning_time": 10,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
