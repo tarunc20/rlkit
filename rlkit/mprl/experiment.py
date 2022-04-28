@@ -50,6 +50,7 @@ def video_func(algorithm, epoch):
                 frames[len(intermediate_frames)] = np.concatenate(
                     (frames[len(intermediate_frames)], im), axis=1
                 )
+                # frames[0] = np.concatenate((frames[0], im), axis=1)
             else:
                 frames.extend(intermediate_frames)
                 frames.append(im)
@@ -63,6 +64,7 @@ def video_func(algorithm, epoch):
                 o, r, d, i = env.step(
                     copy.deepcopy(a), get_intermediate_frames=get_intermediate_frames
                 )
+
                 im = env.get_image()
                 if get_intermediate_frames:
                     intermediate_frames = np.array(env.intermediate_frames)
@@ -80,10 +82,14 @@ def video_func(algorithm, epoch):
                         for j, fr in enumerate(intermediate_frames):
                             frames[
                                 j + path_length + prev_intermediate_frames_len
+                                # j
+                                # + prev_intermediate_frames_len
                             ] = np.concatenate(
                                 [
                                     frames[
                                         j + path_length + prev_intermediate_frames_len
+                                        # j
+                                        # + prev_intermediate_frames_len
                                     ],
                                     fr,
                                 ],
@@ -104,6 +110,13 @@ def video_func(algorithm, epoch):
                             ),
                             axis=1,
                         )
+                        # frames[path_length] = np.concatenate(
+                        #     (
+                        #         frames[path_length],
+                        #         im,
+                        #     ),
+                        #     axis=1,
+                        # )
                     else:
                         frames.extend(intermediate_frames)
                         frames.append(im)
@@ -116,6 +129,8 @@ def video_func(algorithm, epoch):
                         frames.append(im)
                 if d:
                     break
+            print(f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}")
+            print(f"Success: {env._check_success()}")
         logdir = logger.get_snapshot_dir()
         make_video(frames, logdir, epoch)
         print("saved video for epoch {}".format(epoch))
@@ -335,18 +350,22 @@ def experiment(variant):
             **variant["algorithm_kwargs"],
         )
     algorithm.to(ptu.device)
-    if variant.get('load_path', None):
-        policy = pickle.load(open(os.path.join(variant['load_path']), "rb"))
+    if variant.get("load_path", None):
+        policy = pickle.load(open(os.path.join(variant["load_path"]), "rb"))
+        algorithm.eval_data_collector._policy = policy
+        video_func(algorithm, -1)
         for _ in range(10):
             o = eval_env.reset()
             policy.reset()
             for _ in range(eval_env.envs[0].horizon):
                 a = policy.get_action(o)[0]
                 o, r, d, i = eval_env.step(a)
-                print(f"r:{r}, is grasped:{eval_env.envs[0].check_grasp()},logged grasp: {i['grasped']}")
+                print(
+                    f"r:{r}, is grasped:{eval_env.envs[0].check_grasp()},logged grasp: {i['grasped']}"
+                )
             print(f"Success: {eval_env.envs[0]._check_success()}")
-            if eval_env.envs[0]._check_success():
-                exit()
+            # if eval_env.envs[0]._check_success():
+            #     exit()
     else:
         algorithm.train()
         if (

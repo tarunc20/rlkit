@@ -20,7 +20,9 @@ except ImportError:
     from ompl import geometric as og
 
 
-def set_robot_based_on_ee_pos(env, pos, quat, ctrl, qpos, qvel):
+def set_robot_based_on_ee_pos(
+    env, pos, quat, ctrl, qpos, qvel, ee_to_object_translation, is_grasped=False
+):
     env.sim.data.qpos[:] = qpos
     env.sim.data.qvel[:] = qvel
     env.sim.forward()
@@ -31,6 +33,13 @@ def set_robot_based_on_ee_pos(env, pos, quat, ctrl, qpos, qvel):
     rot_diff = desired_rot @ np.linalg.inv(cur_rot)
     joint_pos = ctrl.joint_positions_for_eef_command(pos - env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
+    if is_grasped:
+        #TODO: we should also match relative orientation of object wrt ee
+        if env.name.endswith("Lift"):
+            env.sim.data.qpos[9:12] = env._eef_xpos + ee_to_object_translation
+        elif env.name.endswith("PickPlaceBread"):
+            env.sim.data.qpos[16:19] = env._eef_xpos + ee_to_object_translation
+        env.sim.forward()
     return np.linalg.norm(env._eef_xpos - pos)
 
 
@@ -39,16 +48,16 @@ def check_robot_string(string):
 
 
 def check_robot_collision(env, ignore_object_collision):
+    if env.name.endswith("Lift"):
+        obj_string = "cube"
+    elif env.name.endswith("PickPlaceBread"):
+        obj_string = "Bread"
     d = env.sim.data
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
         con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
         if con1 is not None and con2 is not None:
-            if check_robot_string(con1) or check_robot_string(con2):
-                if env.name.endswith("Lift"):
-                    obj_string = "cube"
-                elif env.name.endswith("PickPlaceBread"):
-                    obj_string = "Bread"
+            if check_robot_string(con1) ^ check_robot_string(con2):
                 if (
                     con1.startswith(obj_string)
                     or con2.startswith(obj_string)
@@ -56,6 +65,13 @@ def check_robot_collision(env, ignore_object_collision):
                 ):
                     continue
                 return True
+            if ignore_object_collision:
+                if con1.startswith(obj_string) or con2.startswith(obj_string):
+                    # if the robot and the object collide, then we can ignore the collision
+                    # if we are supposed to be "ignoring object collisions" then we assume the
+                    # robot is "joined" to the object. so if the object collides with any non-robot
+                    # object, then we should call that a collision
+                    return True
     return False
 
 
@@ -70,15 +86,28 @@ def backtracking_search_from_goal(
     qvel,
     movement_fraction=0.001,
     max_iters=1000,
+    ee_to_object_translation=None,
+    is_grasped=False,
 ):
     # only search over the xyz position, orientation should be the same as commanded
     curr_pos = goal_pos.copy()
-    set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
+    set_robot_based_on_ee_pos(
+        env, curr_pos, ori, ik_ctrl, qpos, qvel, ee_to_object_translation, is_grasped
+    )
     collision = check_robot_collision(env, ignore_object_collision)
     iters = 0
     while collision and iters < max_iters:
         curr_pos = curr_pos - movement_fraction * (goal_pos - start_pos)
-        set_robot_based_on_ee_pos(env, curr_pos, ori, ik_ctrl, qpos, qvel)
+        set_robot_based_on_ee_pos(
+            env,
+            curr_pos,
+            ori,
+            ik_ctrl,
+            qpos,
+            qvel,
+            ee_to_object_translation,
+            is_grasped,
+        )
         collision = check_robot_collision(env, ignore_object_collision)
         iters += 1
     if collision:
@@ -141,6 +170,7 @@ def mp_to_point(
     planning_time=1,
     get_intermediate_frames=False,
 ):
+    og_goal_pos = pos.copy()
     qpos = env.sim.data.qpos.copy()
     qvel = env.sim.data.qvel.copy()
     update_controller_config(env, ik_controller_config)
@@ -149,6 +179,12 @@ def mp_to_point(
 
     og_eef_xpos = env._eef_xpos.copy()
     og_eef_xquat = env._eef_xquat.copy()
+    if env.name.endswith("Lift"):
+        ee_to_object_translation = env.sim.data.body_xpos[env.cube_body_id] - og_eef_xpos
+    else:
+        ee_to_object_translation = (
+            env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]] - og_eef_xpos
+        )
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -164,7 +200,10 @@ def mp_to_point(
             # start state is always valid.
             return True
         else:
-            set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl, qpos, qvel)
+            # TODO; if it was grasping before ik and not after automatically set to invalid
+            set_robot_based_on_ee_pos(
+                env, pos, quat, ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
+            )
             valid = not check_robot_collision(
                 env, ignore_object_collision=ignore_object_collision
             )
@@ -182,6 +221,7 @@ def mp_to_point(
 
     bounds_low = np.minimum(env.mp_bounds_low, og_eef_xpos)
     bounds_high = np.maximum(env.mp_bounds_high, og_eef_xpos)
+    pos[:3] = np.clip(pos[:3], bounds_low, bounds_high)
 
     bounds.setLow(0, bounds_low[0])
     bounds.setLow(1, bounds_low[1])
@@ -205,15 +245,17 @@ def mp_to_point(
     # create a random goal state
     goal = ob.State(space)
     goal().setXYZ(*pos[:3])
-    goal().rotation().x = og_eef_xquat[0]
-    goal().rotation().y = og_eef_xquat[1]
-    goal().rotation().z = og_eef_xquat[2]
-    goal().rotation().w = og_eef_xquat[3]
+    goal().rotation().x = pos[3]
+    goal().rotation().y = pos[4]
+    goal().rotation().z = pos[5]
+    goal().rotation().w = pos[6]
     goal_valid = isStateValid(goal())
-    print(f"Goal Validity: {goal_valid}")
-    print(
-        f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
+    goal_error = set_robot_based_on_ee_pos(
+        env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
     )
+    print(f"Goal Validity: {goal_valid}")
+    print(f"Goal Error {goal_error}")
+
     if not goal_valid:
         pos = backtracking_search_from_goal(
             env,
@@ -224,6 +266,8 @@ def mp_to_point(
             og_eef_xquat,
             qpos,
             qvel,
+            ee_to_object_translation=ee_to_object_translation,
+            is_grasped=grasp,
         )
         goal = ob.State(space)
         goal().setXYZ(*pos)
@@ -231,13 +275,27 @@ def mp_to_point(
         goal().rotation().y = og_eef_xquat[1]
         goal().rotation().z = og_eef_xquat[2]
         goal().rotation().w = og_eef_xquat[3]
-        print(f"Updated Goal Validity: {isStateValid(goal())}")
-        print(
-            f"Goal Error {set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel)}"
+        goal_error = set_robot_based_on_ee_pos(
+            env,
+            pos[:3],
+            og_eef_xquat,
+            ik_ctrl,
+            qpos,
+            qvel,
+            ee_to_object_translation,
+            grasp,
         )
-        if not isStateValid(goal()):
-            exit()
+        goal_valid = isStateValid(goal())
+        print(f"Updated Goal Validity: {goal_valid}")
+        print(f"Goal Error {goal_error}")
+        print(pos)
 
+    # if grasp:
+    #     cv2.imwrite("/home/mdalal/research/mprl/rlkit/test.png", env.get_image())
+    #     assert (
+    #         env.reward(None) == 1.0
+    #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
+    #     print("Goal state has reward 1.0")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -255,7 +313,7 @@ def mp_to_point(
         path = pdef.getSolutionPath()
         og.PathSimplifier(si).simplify(path, 1)
         converted_path = []
-        for state in path.getStates():
+        for s, state in enumerate(path.getStates()):
             new_state = [
                 state.getX(),
                 state.getY(),
@@ -268,7 +326,14 @@ def mp_to_point(
             if env.update_with_true_state:
                 # get actual state that we used for collision checking on
                 set_robot_based_on_ee_pos(
-                    env, new_state[:3], new_state[3:], ik_ctrl, qpos, qvel
+                    env,
+                    new_state[:3],
+                    new_state[3:],
+                    ik_ctrl,
+                    qpos,
+                    qvel,
+                    ee_to_object_translation,
+                    grasp,
                 )
                 new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
             else:
@@ -293,7 +358,7 @@ def mp_to_point(
                 if grasp:
                     grip_ctrl = 1
                 else:
-                    grip_ctrl = 0
+                    grip_ctrl = -1
                 action = np.concatenate((pos_delta, rot_delta, [grip_ctrl]))
                 if np.linalg.norm(action[:-1]) < 1e-5:
                     break
@@ -308,16 +373,21 @@ def mp_to_point(
                     env.num_steps += 1
                 if get_intermediate_frames:
                     intermediate_frames.append(env.get_image())
-        env.mp_init_mse = (
-            np.linalg.norm(np.concatenate((pos[:3], env._eef_xquat)) - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
+                # print(env.reward(None), env.check_grasp(), env._check_success())
+        env.mp_mse = (
+            np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
+        env.goal_error = goal_error
     else:
         env._wrapped_env.reset()
         env.sim.data.qpos[:] = qpos.copy()
         env.sim.data.qvel[:] = qvel.copy()
         env.sim.forward()
-        env.mp_init_mse = 0
+        env.mp_mse = 0
+        env.goal_error = 0
         env.num_failed_solves += 1
+        # print(og_goal_pos)
+        # exit()
     env.intermediate_frames = intermediate_frames
     return env._get_observations()
 
@@ -376,6 +446,9 @@ class MPEnv(ProxyEnv):
             pos = self.sim.data.body_xpos[self.cube_body_id]
         elif self.name.endswith("PickPlaceBread"):
             pos = self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
+            self.target_z_pos = (
+                self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025
+            )
         pos += np.array([0, 0, self.vertical_displacement])
         return pos
 
@@ -408,6 +481,7 @@ class MPEnv(ProxyEnv):
         }
         self.ep_step_ctr = 0
         self.num_failed_solves = 0
+        self.reset_ori = self._eef_xquat.copy()
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
@@ -428,7 +502,7 @@ class MPEnv(ProxyEnv):
                 self.num_steps += 100
             else:
                 pos = self.get_init_target_pos()
-                pos = np.concatenate((pos, self._eef_xquat))
+                pos = np.concatenate((pos, self.reset_ori))
                 obs = mp_to_point(
                     self,
                     self.ik_controller_config,
@@ -464,10 +538,9 @@ class MPEnv(ProxyEnv):
         elif self.name.endswith("PickPlaceBread"):
             pose = np.array(
                 [
-                    0.175,
+                    0.25,
                     0.1,
-                    self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1]
-                    + 0.025,
+                    self.target_z_pos,
                 ]
             )
         return pose
@@ -509,7 +582,7 @@ class MPEnv(ProxyEnv):
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
-                    pos.astype(np.float64),
+                    np.concatenate((pos[:3], self.reset_ori)).astype(np.float64),
                     grasp=is_grasped,
                     ignore_object_collision=is_grasped,
                     planning_time=self.planning_time,
@@ -541,7 +614,7 @@ class MPEnv(ProxyEnv):
                         self,
                         self.ik_controller_config,
                         self.osc_controller_config,
-                        np.concatenate((target_pos, self._eef_xquat)),
+                        np.concatenate((target_pos, self.reset_ori)),
                         grasp=is_grasped,
                         ignore_object_collision=is_grasped,
                         planning_time=self.planning_time,
@@ -551,8 +624,9 @@ class MPEnv(ProxyEnv):
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_position:
-            i["mp_init_mse"] = self.mp_init_mse
+            i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves
+            i["goal_error"] = self.goal_error
         return o, r, d, i
 
 

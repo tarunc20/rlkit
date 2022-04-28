@@ -42,8 +42,9 @@ if __name__ == "__main__":
             "vertical_displacement": 0.04,
             "teleport_position": False,
             "planning_time": 20,
-            "mp_bounds_low": (-2, -2, -2),
-            "mp_bounds_high": (2, 2, 2.2),
+            "mp_bounds_low": (-1.45, -1.25, 0.45),
+            "mp_bounds_high": (0.45, 0.85, 2.25),
+            "update_with_true_state": True,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
@@ -71,6 +72,6 @@ if __name__ == "__main__":
         "plan_to_learned_goals": True,
         "num_expl_envs": 5,
         "planner_num_trains_per_train_loop": 1000,
-        "load_path":"/home/mdalal/research/mprl/rlkit/data/04-26-mprl-pick-place-latest-rrt-connect-1/04-26-mprl_pick_place_latest_rrt_connect_1_2022_04_26_02_03_56_0000--s-3818/policy_400.pkl",
+        # "load_path": "/home/mdalal/research/mprl/rlkit/data/04-26-mprl-pick-place-latest-rrt-connect-1/04-26-mprl_pick_place_latest_rrt_connect_1_2022_04_26_02_03_56_0000--s-3818/policy_400.pkl",
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
