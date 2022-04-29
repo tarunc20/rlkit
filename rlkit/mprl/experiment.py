@@ -81,13 +81,17 @@ def video_func(algorithm, epoch):
                     if len(frames) > path_length + prev_intermediate_frames_len:
                         for j, fr in enumerate(intermediate_frames):
                             frames[
-                                j + path_length + prev_intermediate_frames_len
+                                j
+                                + path_length
+                                + prev_intermediate_frames_len
                                 # j
                                 # + prev_intermediate_frames_len
                             ] = np.concatenate(
                                 [
                                     frames[
-                                        j + path_length + prev_intermediate_frames_len
+                                        j
+                                        + path_length
+                                        + prev_intermediate_frames_len
                                         # j
                                         # + prev_intermediate_frames_len
                                     ],
@@ -129,7 +133,9 @@ def video_func(algorithm, epoch):
                         frames.append(im)
                 if d:
                     break
-            print(f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}")
+            print(
+                f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}"
+            )
             print(f"Success: {env._check_success()}")
         logdir = logger.get_snapshot_dir()
         make_video(frames, logdir, epoch)
@@ -354,6 +360,7 @@ def experiment(variant):
         policy = pickle.load(open(os.path.join(variant["load_path"]), "rb"))
         algorithm.eval_data_collector._policy = policy
         video_func(algorithm, -1)
+        exit()
         for _ in range(10):
             o = eval_env.reset()
             policy.reset()
