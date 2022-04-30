@@ -2,10 +2,11 @@ import cv2
 import numpy as np
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
-from robosuite.utils.transform_utils import quat2mat
+from robosuite.utils.transform_utils import quat2mat, quat_distance
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 import matplotlib
+
 try:
     # graph-tool and py-OMPL have some minor issues coexisting with each other.  Both modules
     # define conversions to C++ STL containers (i.e. std::vector), and the module that is imported
@@ -40,6 +41,8 @@ import matplotlib.pyplot as plt
 def set_robot_based_on_ee_pos(
     env, pos, quat, ctrl, qpos, qvel, ee_to_object_translation, is_grasped=False
 ):
+    gripper_qpos = env.sim.data.qpos[7:9]
+    gripper_qvel = env.sim.data.qvel[7:9]
     env.sim.data.qpos[:] = qpos
     env.sim.data.qvel[:] = qvel
     env.sim.forward()
@@ -52,6 +55,8 @@ def set_robot_based_on_ee_pos(
     env.robots[0].set_robot_joint_positions(joint_pos)
     if is_grasped:
         # TODO: we should also match relative orientation of object wrt ee
+        env.sim.data.qpos[7:9] = gripper_qpos
+        env.sim.data.qvel[7:9] = gripper_qvel
         if env.name.endswith("Lift"):
             env.sim.data.qpos[9:12] = env._eef_xpos + ee_to_object_translation
         elif env.name.endswith("PickPlaceBread"):
@@ -128,9 +133,9 @@ def backtracking_search_from_goal(
         collision = check_robot_collision(env, ignore_object_collision)
         iters += 1
     if collision:
-        return start_pos  # assumption is this is always valid!
+        return np.concatenate((start_pos, ori))  # assumption is this is always valid!
     else:
-        return curr_pos
+        return np.concatenate((curr_pos, ori))
 
 
 def update_controller_config(env, controller_config):
@@ -267,9 +272,9 @@ def useGraphTool(pd):
         vertex_fill_color=colorprops,
         edge_pen_width=edgesize,
         edge_color=edgecolor,
-        output="graph.png",
+        output=f"{logger.get_snapshot_dir()}/graph.png",
     )
-    print("\nGraph written to graph.png")
+    print(f"\nGraph written to {logger.get_snapshot_dir()}/graph.png")
 
 
 def mp_to_point(
@@ -282,7 +287,6 @@ def mp_to_point(
     planning_time=1,
     get_intermediate_frames=False,
 ):
-    og_goal_pos = pos.copy()
     qpos = env.sim.data.qpos.copy()
     qvel = env.sim.data.qvel.copy()
     update_controller_config(env, ik_controller_config)
@@ -379,7 +383,7 @@ def mp_to_point(
     goal().rotation().w = pos[6]
     goal_valid = isStateValid(goal())
     goal_error = set_robot_based_on_ee_pos(
-        env, pos[:3], og_eef_xquat, ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
+        env, pos[:3], pos[3:], ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
     )
     print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {goal_error}")
@@ -391,7 +395,7 @@ def mp_to_point(
             ignore_object_collision,
             og_eef_xpos,
             pos[:3],
-            og_eef_xquat,
+            pos[3:],
             qpos,
             qvel,
             ee_to_object_translation=ee_to_object_translation,
@@ -399,14 +403,14 @@ def mp_to_point(
         )
         goal = ob.State(space)
         goal().setXYZ(*pos)
-        goal().rotation().x = og_eef_xquat[0]
-        goal().rotation().y = og_eef_xquat[1]
-        goal().rotation().z = og_eef_xquat[2]
-        goal().rotation().w = og_eef_xquat[3]
+        goal().rotation().x = pos[3]
+        goal().rotation().y = pos[4]
+        goal().rotation().z = pos[5]
+        goal().rotation().w = pos[6]
         goal_error = set_robot_based_on_ee_pos(
             env,
             pos[:3],
-            og_eef_xquat,
+            pos[3:],
             ik_ctrl,
             qpos,
             qvel,
@@ -417,12 +421,14 @@ def mp_to_point(
         print(f"Updated Goal Validity: {goal_valid}")
         print(f"Goal Error {goal_error}")
         print(pos)
-    # if grasp:
-    #     cv2.imwrite("/home/mdalal/research/mprl/rlkit/test.png", env.get_image())
-    #     assert (
-    #         env.reward(None) == 1.0
-    #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
-    #     print("Goal state has reward 1.0")
+    if grasp:
+        cv2.imwrite(
+            f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
+        )
+        assert (
+            env.reward(None) == 1.0
+        ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
+        print("Goal state has reward 1.0")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -431,38 +437,61 @@ def mp_to_point(
     planner = og.RRTConnect(si)
     # set the problem we are trying to solve for the planner
     planner.setProblemDefinition(pdef)
+
+    # planner.setRange(0.05)
+    planner.setIntermediateStates(True)
     # perform setup steps for the planner
     planner.setup()
     # attempt to solve the problem within planning_time seconds of planning time
     solved = planner.solve(planning_time)
 
     if get_intermediate_frames:
-        ax.scatter3D(x, y, z, c="g",)
-        ax.scatter3D(col_x, col_y, col_z, c="r",)
-        ax.scatter3D(goal().getX(), goal().getY(), goal().getZ(), c="b",)
-        ax.scatter3D(start().getX(), start().getY(), start().getZ(), c="y",)
+        ax.scatter3D(
+            x,
+            y,
+            z,
+            c="g",
+        )
+        ax.scatter3D(
+            col_x,
+            col_y,
+            col_z,
+            c="r",
+        )
+        ax.scatter3D(
+            goal().getX(),
+            goal().getY(),
+            goal().getZ(),
+            c="b",
+        )
+        ax.scatter3D(
+            start().getX(),
+            start().getY(),
+            start().getZ(),
+            c="y",
+        )
         log_dir = logger.get_snapshot_dir()
         set_robot_based_on_ee_pos(
-                env,
-                og_eef_xpos,
-                og_eef_xquat,
-                ik_ctrl,
-                qpos,
-                qvel,
-                ee_to_object_translation,
-                grasp,
-            )
+            env,
+            og_eef_xpos,
+            og_eef_xquat,
+            ik_ctrl,
+            qpos,
+            qvel,
+            ee_to_object_translation,
+            grasp,
+        )
         cv2.imwrite(f"{log_dir}/start_{env.num_steps}.png", env.get_image())
         set_robot_based_on_ee_pos(
-                env,
-                pos[:3],
-                og_eef_xquat,
-                ik_ctrl,
-                qpos,
-                qvel,
-                ee_to_object_translation,
-                grasp,
-            )
+            env,
+            pos[:3],
+            pos[3:],
+            ik_ctrl,
+            qpos,
+            qvel,
+            ee_to_object_translation,
+            grasp,
+        )
         cv2.imwrite(f"{log_dir}/goal_{env.num_steps}.png", env.get_image())
         plt.savefig(f"{log_dir}/plot_{env.num_steps}.png")
     intermediate_frames = []
@@ -480,10 +509,30 @@ def mp_to_point(
         path = pdef.getSolutionPath()
         og.PathSimplifier(si).simplify(path, 1)
         if get_intermediate_frames:
-            ax.scatter3D(x, y, z, c="g",)
-            ax.scatter3D(col_x, col_y, col_z, c="r",)
-            ax.scatter3D(goal().getX(), goal().getY(), goal().getZ(), c="b",)
-            ax.scatter3D(start().getX(), start().getY(), start().getZ(), c="y",)
+            ax.scatter3D(
+                x,
+                y,
+                z,
+                c="g",
+            )
+            ax.scatter3D(
+                col_x,
+                col_y,
+                col_z,
+                c="r",
+            )
+            ax.scatter3D(
+                goal().getX(),
+                goal().getY(),
+                goal().getZ(),
+                c="b",
+            )
+            ax.scatter3D(
+                start().getX(),
+                start().getY(),
+                start().getZ(),
+                c="y",
+            )
             log_dir = logger.get_snapshot_dir()
             plt.savefig(f"{log_dir}/plot_post_shorten_{env.num_steps}.png")
         converted_path = []
