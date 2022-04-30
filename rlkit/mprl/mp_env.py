@@ -3,9 +3,9 @@ import numpy as np
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import quat2mat
-
+from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
-
+import matplotlib
 try:
     # graph-tool and py-OMPL have some minor issues coexisting with each other.  Both modules
     # define conversions to C++ STL containers (i.e. std::vector), and the module that is imported
@@ -177,46 +177,10 @@ def apply_controller(controller, action, robot, policy_step):
     robot.sim.data.ctrl[robot._ref_joint_actuator_indexes] = torques
 
 
-class MyValidStateSampler(ob.ValidStateSampler):
-     def __init__(self, si):
-         super(MyValidStateSampler, self).__init__(si)
-         self.name_ = "my sampler"
-         self.rng_ = ou.RNG()
-         self.space = si.space()
-
-     # Generate a sample in the valid part of the R^3 state space.
-     # Valid states satisfy the following constraints:
-     # -1<= x,y,z <=1
-     # if .25 <= z <= .5, then |x|>.8 and |y|>.8
-     def sample(self, state):
-         z = self.rng_.uniformReal(-1, 1)
-
-         if z > .25 and z < .5:
-             x = self.rng_.uniformReal(0, 1.8)
-             y = self.rng_.uniformReal(0, .2)
-             i = self.rng_.uniformInt(0, 3)
-             if i == 0:
-                 state[0] = x-1
-                 state[1] = y-1
-             elif i == 1:
-                 state[0] = x-.8
-                 state[1] = y+.8
-             elif i == 2:
-                 state[0] = y-1
-                 state[1] = x-1
-             elif i == 3:
-                 state[0] = y+.8
-                 state[1] = x-.8
-         else:
-             state[0] = self.rng_.uniformReal(-1, 1)
-             state[1] = self.rng_.uniformReal(-1, 1)
-         state[2] = z
-         return True
-
 def useGraphTool(pd):
     # Extract the graphml representation of the planner data
     graphml = pd.printGraphML()
-    f = open("graph.graphml", 'w')
+    f = open("graph.graphml", "w")
     f.write(graphml)
     f.close()
 
@@ -229,9 +193,16 @@ def useGraphTool(pd):
     avgwt, stddevwt = gt.edge_average(graph, edgeweights)
 
     print("---- PLANNER DATA STATISTICS ----")
-    print(str(graph.num_vertices()) + " vertices and " + str(graph.num_edges()) + " edges")
-    print("Average vertex degree (in+out) = " + str(avgdeg) + "  St. Dev = " + str(stddevdeg))
-    print("Average edge weight = " + str(avgwt)  + "  St. Dev = " + str(stddevwt))
+    print(
+        str(graph.num_vertices()) + " vertices and " + str(graph.num_edges()) + " edges"
+    )
+    print(
+        "Average vertex degree (in+out) = "
+        + str(avgdeg)
+        + "  St. Dev = "
+        + str(stddevdeg)
+    )
+    print("Average edge weight = " + str(avgwt) + "  St. Dev = " + str(stddevwt))
 
     _, hist = gt.label_components(graph)
     print("Strongly connected components: " + str(len(hist)))
@@ -242,7 +213,7 @@ def useGraphTool(pd):
     print("Weakly connected components: " + str(len(hist)))
 
     # Plotting the graph
-    gt.remove_parallel_edges(graph) # Removing any superfluous edges
+    gt.remove_parallel_edges(graph)  # Removing any superfluous edges
 
     edgeweights = graph.edge_properties["weight"]
     colorprops = graph.new_vertex_property("string")
@@ -290,10 +261,16 @@ def useGraphTool(pd):
     # Writing graph to file:
     # pos indicates the desired vertex positions, and pin=True says that we
     # really REALLY want the vertices at those positions
-    gt.graph_draw(graph, vertex_size=vertexsize, vertex_fill_color=colorprops,
-                edge_pen_width=edgesize, edge_color=edgecolor,
-                output="graph.png")
-    print('\nGraph written to graph.png')
+    gt.graph_draw(
+        graph,
+        vertex_size=vertexsize,
+        vertex_fill_color=colorprops,
+        edge_pen_width=edgesize,
+        edge_color=edgecolor,
+        output="graph.png",
+    )
+    print("\nGraph written to graph.png")
+
 
 def mp_to_point(
     env,
@@ -322,9 +299,11 @@ def mp_to_point(
         ee_to_object_translation = (
             env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]] - og_eef_xpos
         )
-    # fig = plt.figure()
-    # ax = plt.axes(projection='3d')
-    # x, y, z = [], [], []
+    fig = plt.figure()
+    ax = plt.axes(projection="3d")
+    x, y, z = [], [], []
+    col_x, col_y, col_z = [], [], []
+    log_dir = logger.get_snapshot_dir()
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -347,6 +326,15 @@ def mp_to_point(
             valid = not check_robot_collision(
                 env, ignore_object_collision=ignore_object_collision
             )
+
+            if valid:
+                x.append(state.getX())
+                y.append(state.getY())
+                z.append(state.getZ())
+            else:
+                col_x.append(state.getX())
+                col_y.append(state.getY())
+                col_z.append(state.getZ())
             return valid
 
     # create an SE3 state space
@@ -375,7 +363,6 @@ def mp_to_point(
     si = ob.SpaceInformation(space)
     # set state validity checking for this space
     si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
-    # import ipdb; ipdb.set_trace()
     # create a random start state
     start = ob.State(space)
     start().setXYZ(*og_eef_xpos)
@@ -430,7 +417,6 @@ def mp_to_point(
         print(f"Updated Goal Validity: {goal_valid}")
         print(f"Goal Error {goal_error}")
         print(pos)
-
     # if grasp:
     #     cv2.imwrite("/home/mdalal/research/mprl/rlkit/test.png", env.get_image())
     #     assert (
@@ -449,21 +435,57 @@ def mp_to_point(
     planner.setup()
     # attempt to solve the problem within planning_time seconds of planning time
     solved = planner.solve(planning_time)
+
+    if get_intermediate_frames:
+        ax.scatter3D(x, y, z, c="g",)
+        ax.scatter3D(col_x, col_y, col_z, c="r",)
+        ax.scatter3D(goal().getX(), goal().getY(), goal().getZ(), c="b",)
+        ax.scatter3D(start().getX(), start().getY(), start().getZ(), c="y",)
+        log_dir = logger.get_snapshot_dir()
+        set_robot_based_on_ee_pos(
+                env,
+                og_eef_xpos,
+                og_eef_xquat,
+                ik_ctrl,
+                qpos,
+                qvel,
+                ee_to_object_translation,
+                grasp,
+            )
+        cv2.imwrite(f"{log_dir}/start_{env.num_steps}.png", env.get_image())
+        set_robot_based_on_ee_pos(
+                env,
+                pos[:3],
+                og_eef_xquat,
+                ik_ctrl,
+                qpos,
+                qvel,
+                ee_to_object_translation,
+                grasp,
+            )
+        cv2.imwrite(f"{log_dir}/goal_{env.num_steps}.png", env.get_image())
+        plt.savefig(f"{log_dir}/plot_{env.num_steps}.png")
     intermediate_frames = []
     if solved:
         # Extracting planner data from most recent solve attempt
-        pd = ob.PlannerData(si.getSpaceInformation())
-        si.getPlannerData(pd)
+        pd = ob.PlannerData(si)
+        planner.getPlannerData(pd)
 
         # Computing weights of all edges based on state space distance
         pd.computeEdgeWeights()
-        import ipdb; ipdb.set_trace()
 
         if graphtool:
             useGraphTool(pd)
 
         path = pdef.getSolutionPath()
         og.PathSimplifier(si).simplify(path, 1)
+        if get_intermediate_frames:
+            ax.scatter3D(x, y, z, c="g",)
+            ax.scatter3D(col_x, col_y, col_z, c="r",)
+            ax.scatter3D(goal().getX(), goal().getY(), goal().getZ(), c="b",)
+            ax.scatter3D(start().getX(), start().getY(), start().getZ(), c="y",)
+            log_dir = logger.get_snapshot_dir()
+            plt.savefig(f"{log_dir}/plot_post_shorten_{env.num_steps}.png")
         converted_path = []
         for s, state in enumerate(path.getStates()):
             new_state = [
