@@ -56,6 +56,7 @@ def set_robot_based_on_ee_pos(
     assert (env.sim.data.qpos[:7] - joint_pos).sum() < 1e-10
     if is_grasped:
         # TODO: we should also match relative orientation of object wrt ee
+        # TODO: we should apply rotation diff of ee from before and after ik to object -> this will simulate the orientation change
         env.sim.data.qpos[7:9] = gripper_qpos
         env.sim.data.qvel[7:9] = gripper_qvel
         if env.name.endswith("Lift"):
@@ -68,7 +69,15 @@ def set_robot_based_on_ee_pos(
 
 
 def check_robot_string(string):
+    if string is None:
+        return False
     return string.startswith("robot") or string.startswith("gripper")
+
+
+def check_string(string, other_string):
+    if string is None:
+        return False
+    return string.startswith(other_string)
 
 
 def check_robot_collision(env, ignore_object_collision):
@@ -80,22 +89,21 @@ def check_robot_collision(env, ignore_object_collision):
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
         con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
-        if con1 is not None and con2 is not None:
-            if check_robot_string(con1) ^ check_robot_string(con2):
-                if (
-                    con1.startswith(obj_string)
-                    or con2.startswith(obj_string)
-                    and ignore_object_collision
-                ):
-                    continue
+        if check_robot_string(con1) ^ check_robot_string(con2):
+            if (
+                check_string(con1, obj_string)
+                or check_string(con2, obj_string)
+                and ignore_object_collision
+            ):
+                # if the robot and the object collide, then we can ignore the collision
+                continue
+            return True
+        elif ignore_object_collision:
+            if check_string(con1, obj_string) or check_string(con2, obj_string):
+                # if we are supposed to be "ignoring object collisions" then we assume the
+                # robot is "joined" to the object. so if the object collides with any non-robot
+                # object, then we should call that a collision
                 return True
-            if ignore_object_collision:
-                if con1.startswith(obj_string) or con2.startswith(obj_string):
-                    # if the robot and the object collide, then we can ignore the collision
-                    # if we are supposed to be "ignoring object collisions" then we assume the
-                    # robot is "joined" to the object. so if the object collides with any non-robot
-                    # object, then we should call that a collision
-                    return True
     return False
 
 
@@ -425,14 +433,14 @@ def mp_to_point(
         print(f"Updated Goal Validity: {goal_valid}")
         print(f"Goal Error {goal_error}")
         print(pos)
-    # if grasp:
-    #     cv2.imwrite(
-    #         f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
-    #     )
-    #     assert (
-    #         env.reward(None) == 1.0
-    #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
-    #     print("Goal state has reward 1.0")
+    if grasp and get_intermediate_frames:
+        cv2.imwrite(
+            f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
+        )
+        #     assert (
+        #         env.reward(None) == 1.0
+        #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
+        print(f"Goal state has reward {env.reward(None)}")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -441,9 +449,7 @@ def mp_to_point(
     planner = og.RRTConnect(si)
     # set the problem we are trying to solve for the planner
     planner.setProblemDefinition(pdef)
-
-    # planner.setRange(0.05)
-    # planner.setIntermediateStates(True)
+    planner.setRange(0.05)
     # perform setup steps for the planner
     planner.setup()
     # attempt to solve the problem within planning_time seconds of planning time
@@ -500,16 +506,6 @@ def mp_to_point(
         plt.savefig(f"{log_dir}/plot_{env.num_steps}.png")
     intermediate_frames = []
     if solved:
-        # Extracting planner data from most recent solve attempt
-        # pd = ob.PlannerData(si)
-        # planner.getPlannerData(pd)
-
-        # # Computing weights of all edges based on state space distance
-        # pd.computeEdgeWeights()
-
-        # if graphtool:
-        #     useGraphTool(pd)
-
         path = pdef.getSolutionPath()
         og.PathSimplifier(si).simplify(path, 1)
         if get_intermediate_frames:
@@ -563,6 +559,11 @@ def mp_to_point(
                     grasp,
                 )
                 new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
+                if get_intermediate_frames:
+                    cv2.imwrite(
+                        f"{log_dir}/solution_path_{env.num_steps}_{s}.png",
+                        env.get_image(),
+                    )
             else:
                 new_state = np.array(new_state)
             converted_path.append(new_state)
@@ -605,7 +606,8 @@ def mp_to_point(
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
         print(f"Controller reaching MSE: {env.mp_mse}")
-        cv2.imwrite(f"{log_dir}/goal_achieved_{env.num_steps}.png", env.get_image())
+        if get_intermediate_frames:
+            cv2.imwrite(f"{log_dir}/goal_achieved_{env.num_steps}.png", env.get_image())
         env.goal_error = goal_error
     else:
         env._wrapped_env.reset()
@@ -623,7 +625,7 @@ class MPEnv(ProxyEnv):
     def __init__(
         self,
         env,
-        vertical_displacement=.03,
+        vertical_displacement=0.03,
         teleport_position=True,
         planning_time=1,
         plan_to_learned_goals=False,
@@ -726,7 +728,8 @@ class MPEnv(ProxyEnv):
                     )
                 else:
                     ee_to_object_translation = (
-                        self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]] - self._eef_xpos
+                        self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
+                        - self._eef_xpos
                     )
                 set_robot_based_on_ee_pos(
                     self,
@@ -735,7 +738,7 @@ class MPEnv(ProxyEnv):
                     ik_ctrl,
                     self.sim.data.qpos,
                     self.sim.data.qvel,
-                    ee_to_object_translation=ee_to_object_translation
+                    ee_to_object_translation=ee_to_object_translation,
                 )
                 obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
                 self.num_steps += 100
