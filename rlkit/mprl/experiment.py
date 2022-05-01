@@ -374,10 +374,10 @@ def experiment(variant):
             # if eval_env.envs[0]._check_success():
             #     exit()
     else:
-        algorithm.train()
         if (
             not variant["mp_env_kwargs"]["teleport_position"]
             and not variant["plan_to_learned_goals"]
         ):
             video_func(algorithm, -1)
             algorithm.post_epoch_funcs.append(video_func)
+        algorithm.train()

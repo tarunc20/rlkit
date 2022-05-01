@@ -53,6 +53,7 @@ def set_robot_based_on_ee_pos(
     rot_diff = desired_rot @ np.linalg.inv(cur_rot)
     joint_pos = ctrl.joint_positions_for_eef_command(pos - env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
+    assert (env.sim.data.qpos[:7] - joint_pos).sum() < 1e-10
     if is_grasped:
         # TODO: we should also match relative orientation of object wrt ee
         env.sim.data.qpos[7:9] = gripper_qpos
@@ -62,7 +63,8 @@ def set_robot_based_on_ee_pos(
         elif env.name.endswith("PickPlaceBread"):
             env.sim.data.qpos[16:19] = env._eef_xpos + ee_to_object_translation
         env.sim.forward()
-    return np.linalg.norm(env._eef_xpos - pos)
+    error = np.linalg.norm(env._eef_xpos - pos)
+    return error
 
 
 def check_robot_string(string):
@@ -282,13 +284,15 @@ def mp_to_point(
     ik_controller_config,
     osc_controller_config,
     pos,
+    qpos,
+    qvel,
     grasp=False,
     ignore_object_collision=False,
     planning_time=1,
     get_intermediate_frames=False,
 ):
-    qpos = env.sim.data.qpos.copy()
-    qvel = env.sim.data.qvel.copy()
+    qpos_curr = env.sim.data.qpos.copy()
+    qvel_curr = env.sim.data.qvel.copy()
     update_controller_config(env, ik_controller_config)
     ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
     ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
@@ -402,7 +406,7 @@ def mp_to_point(
             is_grasped=grasp,
         )
         goal = ob.State(space)
-        goal().setXYZ(*pos)
+        goal().setXYZ(*pos[:3])
         goal().rotation().x = pos[3]
         goal().rotation().y = pos[4]
         goal().rotation().z = pos[5]
@@ -421,14 +425,14 @@ def mp_to_point(
         print(f"Updated Goal Validity: {goal_valid}")
         print(f"Goal Error {goal_error}")
         print(pos)
-    if grasp:
-        cv2.imwrite(
-            f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
-        )
-        assert (
-            env.reward(None) == 1.0
-        ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
-        print("Goal state has reward 1.0")
+    # if grasp:
+    #     cv2.imwrite(
+    #         f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
+    #     )
+    #     assert (
+    #         env.reward(None) == 1.0
+    #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
+    #     print("Goal state has reward 1.0")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -439,7 +443,7 @@ def mp_to_point(
     planner.setProblemDefinition(pdef)
 
     # planner.setRange(0.05)
-    planner.setIntermediateStates(True)
+    # planner.setIntermediateStates(True)
     # perform setup steps for the planner
     planner.setup()
     # attempt to solve the problem within planning_time seconds of planning time
@@ -497,14 +501,14 @@ def mp_to_point(
     intermediate_frames = []
     if solved:
         # Extracting planner data from most recent solve attempt
-        pd = ob.PlannerData(si)
-        planner.getPlannerData(pd)
+        # pd = ob.PlannerData(si)
+        # planner.getPlannerData(pd)
 
-        # Computing weights of all edges based on state space distance
-        pd.computeEdgeWeights()
+        # # Computing weights of all edges based on state space distance
+        # pd.computeEdgeWeights()
 
-        if graphtool:
-            useGraphTool(pd)
+        # if graphtool:
+        #     useGraphTool(pd)
 
         path = pdef.getSolutionPath()
         og.PathSimplifier(si).simplify(path, 1)
@@ -564,8 +568,8 @@ def mp_to_point(
             converted_path.append(new_state)
         # reset env to original qpos/qvel
         env._wrapped_env.reset()
-        env.sim.data.qpos[:] = qpos.copy()
-        env.sim.data.qvel[:] = qvel.copy()
+        env.sim.data.qpos[:] = qpos_curr.copy()
+        env.sim.data.qvel[:] = qvel_curr.copy()
         env.sim.forward()
 
         update_controller_config(env, osc_controller_config)
@@ -600,17 +604,17 @@ def mp_to_point(
         env.mp_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
+        print(f"Controller reaching MSE: {env.mp_mse}")
+        cv2.imwrite(f"{log_dir}/goal_achieved_{env.num_steps}.png", env.get_image())
         env.goal_error = goal_error
     else:
         env._wrapped_env.reset()
-        env.sim.data.qpos[:] = qpos.copy()
-        env.sim.data.qvel[:] = qvel.copy()
+        env.sim.data.qpos[:] = qpos_curr.copy()
+        env.sim.data.qvel[:] = qvel_curr.copy()
         env.sim.forward()
         env.mp_mse = 0
         env.goal_error = 0
         env.num_failed_solves += 1
-        # print(og_goal_pos)
-        # exit()
     env.intermediate_frames = intermediate_frames
     return env._get_observations()
 
@@ -619,7 +623,7 @@ class MPEnv(ProxyEnv):
     def __init__(
         self,
         env,
-        vertical_displacement,
+        vertical_displacement=.03,
         teleport_position=True,
         planning_time=1,
         plan_to_learned_goals=False,
@@ -683,6 +687,7 @@ class MPEnv(ProxyEnv):
             "ik_ori_limit": 0.05,
             "interpolation": None,
             "ramp_ratio": 0.2,
+            "converge_steps": 100,
         }
         self.osc_controller_config = {
             "type": "OSC_POSE",
@@ -705,6 +710,8 @@ class MPEnv(ProxyEnv):
         self.ep_step_ctr = 0
         self.num_failed_solves = 0
         self.reset_ori = self._eef_xquat.copy()
+        self.reset_qpos = self.sim.data.qpos.copy()
+        self.reset_qvel = self.sim.data.qvel.copy()
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
@@ -713,6 +720,14 @@ class MPEnv(ProxyEnv):
                     self.robots[0].base_pos, self.robots[0].base_ori
                 )
                 pos = self.get_init_target_pos()
+                if self.name.endswith("Lift"):
+                    ee_to_object_translation = (
+                        self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
+                    )
+                else:
+                    ee_to_object_translation = (
+                        self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]] - self._eef_xpos
+                    )
                 set_robot_based_on_ee_pos(
                     self,
                     pos,
@@ -720,6 +735,7 @@ class MPEnv(ProxyEnv):
                     ik_ctrl,
                     self.sim.data.qpos,
                     self.sim.data.qvel,
+                    ee_to_object_translation=ee_to_object_translation
                 )
                 obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
                 self.num_steps += 100
@@ -730,7 +746,9 @@ class MPEnv(ProxyEnv):
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
-                    pos,
+                    pos.astype(np.float64),
+                    qpos=self.reset_qpos,
+                    qvel=self.reset_qvel,
                     grasp=False,
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
@@ -761,8 +779,8 @@ class MPEnv(ProxyEnv):
         elif self.name.endswith("PickPlaceBread"):
             pose = np.array(
                 [
-                    0.25,
-                    0.1,
+                    0.2,
+                    0.15,
                     self.target_z_pos,
                 ]
             )
@@ -806,6 +824,8 @@ class MPEnv(ProxyEnv):
                     self.ik_controller_config,
                     self.osc_controller_config,
                     np.concatenate((pos[:3], self.reset_ori)).astype(np.float64),
+                    qpos=self.reset_qpos,
+                    qvel=self.reset_qvel,
                     grasp=is_grasped,
                     ignore_object_collision=is_grasped,
                     planning_time=self.planning_time,
@@ -837,7 +857,9 @@ class MPEnv(ProxyEnv):
                         self,
                         self.ik_controller_config,
                         self.osc_controller_config,
-                        np.concatenate((target_pos, self.reset_ori)),
+                        np.concatenate((target_pos, self.reset_ori)).astype(np.float64),
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
                         grasp=is_grasped,
                         ignore_object_collision=is_grasped,
                         planning_time=self.planning_time,
