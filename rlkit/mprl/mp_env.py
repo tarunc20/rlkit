@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
-from robosuite.utils.transform_utils import quat2mat, quat_distance
+from robosuite.utils.transform_utils import mat2quat, quat2mat, quat_distance
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 import matplotlib
@@ -63,6 +63,8 @@ def set_robot_based_on_ee_pos(
             env.sim.data.qpos[9:12] = env._eef_xpos + ee_to_object_translation
         elif env.name.endswith("PickPlaceBread"):
             env.sim.data.qpos[16:19] = env._eef_xpos + ee_to_object_translation
+            R_transition = quat2mat(env._eef_xquat) @ np.linalg.inv(cur_rot)
+            env.sim.data.qpos[19:23] = mat2quat(R_transition @ quat2mat(env.sim.data.qpos[19:23]))
         env.sim.forward()
     error = np.linalg.norm(env._eef_xpos - pos)
     return error
@@ -397,8 +399,8 @@ def mp_to_point(
     goal_error = set_robot_based_on_ee_pos(
         env, pos[:3], pos[3:], ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
     )
-    print(f"Goal Validity: {goal_valid}")
-    print(f"Goal Error {goal_error}")
+    # print(f"Goal Validity: {goal_valid}")
+    # print(f"Goal Error {goal_error}")
 
     if not goal_valid:
         pos = backtracking_search_from_goal(
@@ -430,9 +432,8 @@ def mp_to_point(
             grasp,
         )
         goal_valid = isStateValid(goal())
-        print(f"Updated Goal Validity: {goal_valid}")
-        print(f"Goal Error {goal_error}")
-        print(pos)
+        # print(f"Updated Goal Validity: {goal_valid}")
+        # print(f"Goal Error {goal_error}")
     if grasp and get_intermediate_frames:
         cv2.imwrite(
             f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
@@ -577,18 +578,26 @@ def mp_to_point(
         osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
         osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
         osc_ctrl.reset_goal()
+        # prev_grasp = env.sim.data.qpos[7]
         for state in converted_path:
             desired_rot = quat2mat(state[3:])
-            for _ in range(100):
+            for _ in range(50):
                 current_rot = quat2mat(env._eef_xquat)
                 rot_delta = orientation_error(desired_rot, current_rot)
                 pos_delta = state[:3] - env._eef_xpos
                 if grasp:
-                    grip_ctrl = 1
+                    grip_ctrl = env.grip_ctrl_scale
                 else:
                     grip_ctrl = -1
+
+                # grip_ctrl = (env.sim.data.qpos[7] - prev_grasp) * .1
+                # current_pos = env.sim.data.qpos[7:9]
+                # gripper_ctrl = [
+                #     -(prev_grasp - current_pos) * 1 / (0.07),
+                #     (prev_grasp - current_pos) * 1 / (0.07),
+                # ]
                 action = np.concatenate((pos_delta, rot_delta, [grip_ctrl]))
-                if np.linalg.norm(action[:-1]) < 1e-5:
+                if np.linalg.norm(action[:-4]) < 1e-3:
                     break
                 policy_step = True
                 for i in range(int(env.control_timestep / env.model_timestep)):
@@ -634,6 +643,7 @@ class MPEnv(ProxyEnv):
         mp_bounds_low=None,
         mp_bounds_high=None,
         update_with_true_state=False,
+        grip_ctrl_scale=1,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -664,6 +674,7 @@ class MPEnv(ProxyEnv):
         self.mp_bounds_low = mp_bounds_low
         self.mp_bounds_high = mp_bounds_high
         self.update_with_true_state = update_with_true_state
+        self.grip_ctrl_scale = grip_ctrl_scale
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -868,6 +879,7 @@ class MPEnv(ProxyEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                     )
+                r += self.reward(action) #this should ensure the manipulator prioritizes trajectories that lead to high level success over just naive grasping
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps

@@ -1,12 +1,11 @@
 import cv2
 import numpy as np
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.mprl.mp_env import MPEnv, set_robot_based_on_ee_pos, update_controller_config
-from robosuite.controllers import controller_factory
+from rlkit.mprl.mp_env import MPEnv, mp_to_point
 from robosuite.controllers.controller_factory import load_controller_config
-from robosuite.utils.transform_utils import mat2euler, quat2mat
 from robosuite.wrappers.gym_wrapper import GymWrapper
 import robosuite as suite
+from rlkit.core import logger
 
 if __name__ == "__main__":
     environment_kwargs = {
@@ -23,71 +22,43 @@ if __name__ == "__main__":
     env = suite.make(
         **environment_kwargs,
         has_renderer=False,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=True,
         use_object_obs=True,
         use_camera_obs=False,
         reward_shaping=True,
         controller_configs=controller_config,
+        camera_names="frontview",
+        camera_heights=256,
+        camera_widths=256,
     )
-    env = MPEnv(NormalizedBoxEnv(GymWrapper(env)))
-    # env.reset()
-    # ik_controller_config = {
-    #         "type": "IK_POSE",
-    #         "ik_pos_limit": 0.02,
-    #         "ik_ori_limit": 0.05,
-    #         "interpolation": None,
-    #         "ramp_ratio": 0.2,
-    #         "converge_steps": 100,
-    #     }
-    # update_controller_config(env, ik_controller_config)
-    # ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
-    # ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
-    # qpos, qvel = env.sim.data.qpos.copy(), env.sim.data.qvel.copy()
-    num_steps = 10
+    mp_env_kwargs = {
+        "vertical_displacement": 0.04,
+        "teleport_position": False,
+        "planning_time": 20,
+        "mp_bounds_low": (-1.45, -1.25, 0.45),
+        "mp_bounds_high": (0.45, 0.85, 2.25),
+        "update_with_true_state": True,
+    }
+    env = MPEnv(NormalizedBoxEnv(GymWrapper(env)), **mp_env_kwargs)
+    logger.set_snapshot_dir(
+        "/home/mdalal/research/mprl/rlkit/data/controller_debugging"
+    )
+    num_steps = 1
     total = 0
     for s in range(num_steps):
         env.reset()
-        ik_controller_config = {
-                "type": "IK_POSE",
-                "ik_pos_limit": 0.02,
-                "ik_ori_limit": 0.05,
-                "interpolation": None,
-                "ramp_ratio": 0.2,
-                "converge_steps": 100,
-            }
-        update_controller_config(env, ik_controller_config)
-        ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
-        ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
-        qpos, qvel = env.sim.data.qpos.copy(), env.sim.data.qvel.copy()
-        # env.sim.data.qpos[:] = qpos
-        # env.sim.data.qvel[:] = qvel
-        # env.sim.forward()
-        # curr_pos = env._eef_xpos.copy()
-        # action = np.random.uniform(-.25, .25, size=3)
-        # target_pos = curr_pos + action[:3]
-        target_z_pos = env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]][-1] + 0.03
-        pose = np.array(
-                [
-                    0.2,
-                    0.15,
-                    target_z_pos,
-                ]
-            )
-        target_pos = pose
-        ori = env._eef_xquat.copy()
-        for i in range(0):
+        for _ in range(50):
             env.step(env.action_space.sample())
-        # total += np.linalg.norm(env._eef_xpos - target_pos)
-        error = set_robot_based_on_ee_pos(
+        target_pos = env.get_target_pos()
+        mp_to_point(
             env,
-            target_pos,
-            ori,
-            ik_ctrl,
-            qpos,
-            qvel,
-            None,
-            is_grasped=False,
+            env.ik_controller_config,
+            env.osc_controller_config,
+            np.concatenate((target_pos, env.reset_ori)).astype(np.float64),
+            qpos=env.reset_qpos,
+            qvel=env.reset_qvel,
+            grasp=False,
+            ignore_object_collision=False,
+            planning_time=env.planning_time,
+            get_intermediate_frames=True,
         )
-        cv2.imwrite(f'test_{s}.png', env.get_image())
-        total += error
-    print(f"Avg Distance to target: {total/num_steps})")
