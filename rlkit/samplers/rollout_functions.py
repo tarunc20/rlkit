@@ -353,7 +353,6 @@ def rollout_modular(
     planner_rewards = np.array(planner_rewards)
     if len(planner_rewards.shape) == 1:
         planner_rewards = planner_rewards.reshape(-1, 1)
-
     terminals = np.array(terminals)
     observations = [observations[:, i] for i in range(env.n_envs)]
     next_observations = [next_observations[:, i] for i in range(env.n_envs)]
@@ -385,11 +384,12 @@ def rollout_modular(
     ]  # should be a list of list of dicts (length n_envs) (length of path)
     paths = []
     for i in range(env.n_envs):
+        updated_rewards = rewards[i][-1] + planner_rewards[i][-1]
         paths.append(
             dict(
                 observations=observations[i],
                 actions=actions[i],
-                rewards=rewards[i],
+                rewards=updated_rewards,
                 next_observations=next_observations[i],
                 terminals=terminals[i],
                 agent_infos=agent_infos,
