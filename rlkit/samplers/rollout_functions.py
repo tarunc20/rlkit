@@ -384,12 +384,12 @@ def rollout_modular(
     ]  # should be a list of list of dicts (length n_envs) (length of path)
     paths = []
     for i in range(env.n_envs):
-        updated_rewards = rewards[i][-1] + planner_rewards[i][-1]
+        rewards[i][-1] = rewards[i][-1] + planner_rewards[i][-1]
         paths.append(
             dict(
                 observations=observations[i],
                 actions=actions[i],
-                rewards=updated_rewards,
+                rewards=rewards[i],
                 next_observations=next_observations[i],
                 terminals=terminals[i],
                 agent_infos=agent_infos,
