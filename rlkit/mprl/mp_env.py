@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
-from robosuite.utils.transform_utils import mat2quat, quat2mat, quat_distance
+from robosuite.utils.transform_utils import euler2mat, mat2quat, quat2mat, quat_distance, quat_multiply
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 import matplotlib
@@ -434,10 +434,11 @@ def mp_to_point(
         goal_valid = isStateValid(goal())
         # print(f"Updated Goal Validity: {goal_valid}")
         # print(f"Goal Error {goal_error}")
+
     if grasp and get_intermediate_frames:
-        cv2.imwrite(
-            f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
-        )
+        # cv2.imwrite(
+        #     f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
+        # )
         #     assert (
         #         env.reward(None) == 1.0
         #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
@@ -492,7 +493,7 @@ def mp_to_point(
             ee_to_object_translation,
             grasp,
         )
-        cv2.imwrite(f"{log_dir}/start_{env.num_steps}.png", env.get_image())
+        # cv2.imwrite(f"{log_dir}/start_{env.num_steps}.png", env.get_image())
         set_robot_based_on_ee_pos(
             env,
             pos[:3],
@@ -503,8 +504,8 @@ def mp_to_point(
             ee_to_object_translation,
             grasp,
         )
-        cv2.imwrite(f"{log_dir}/goal_{env.num_steps}.png", env.get_image())
-        plt.savefig(f"{log_dir}/plot_{env.num_steps}.png")
+        # cv2.imwrite(f"{log_dir}/goal_{env.num_steps}.png", env.get_image())
+        # plt.savefig(f"{log_dir}/plot_{env.num_steps}.png")
     intermediate_frames = []
     if solved:
         path = pdef.getSolutionPath()
@@ -535,7 +536,7 @@ def mp_to_point(
                 c="y",
             )
             log_dir = logger.get_snapshot_dir()
-            plt.savefig(f"{log_dir}/plot_post_shorten_{env.num_steps}.png")
+            # plt.savefig(f"{log_dir}/plot_post_shorten_{env.num_steps}.png")
         converted_path = []
         for s, state in enumerate(path.getStates()):
             new_state = [
@@ -560,11 +561,11 @@ def mp_to_point(
                     grasp,
                 )
                 new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
-                if get_intermediate_frames:
-                    cv2.imwrite(
-                        f"{log_dir}/solution_path_{env.num_steps}_{s}.png",
-                        env.get_image(),
-                    )
+                # if get_intermediate_frames:
+                #     cv2.imwrite(
+                #         f"{log_dir}/solution_path_{env.num_steps}_{s}.png",
+                #         env.get_image(),
+                #     )
             else:
                 new_state = np.array(new_state)
             converted_path.append(new_state)
@@ -615,8 +616,8 @@ def mp_to_point(
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
         print(f"Controller reaching MSE: {env.mp_mse}")
-        if get_intermediate_frames:
-            cv2.imwrite(f"{log_dir}/goal_achieved_{env.num_steps}.png", env.get_image())
+        # if get_intermediate_frames:
+        #     cv2.imwrite(f"{log_dir}/goal_achieved_{env.num_steps}.png", env.get_image())
         env.goal_error = goal_error
     else:
         env._wrapped_env.reset()
@@ -644,6 +645,7 @@ class MPEnv(ProxyEnv):
         mp_bounds_high=None,
         update_with_true_state=False,
         grip_ctrl_scale=1,
+        clamp_actions=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -675,6 +677,7 @@ class MPEnv(ProxyEnv):
         self.mp_bounds_high = mp_bounds_high
         self.update_with_true_state = update_with_true_state
         self.grip_ctrl_scale = grip_ctrl_scale
+        self.clamp_actions = clamp_actions
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -819,25 +822,28 @@ class MPEnv(ProxyEnv):
         # assert (action[:3] >= self.mp_bounds_low).all() and (
         #     action[:3] <= self.mp_bounds_high
         # ).all(), action
+        action[:3] = np.clip(action[:3], self.mp_bounds_low, self.mp_bounds_high)
         return action
 
     def step(self, action, get_intermediate_frames=False):
         if self.plan_to_learned_goals:
             if self.ep_step_ctr == 0 or self.ep_step_ctr == self.horizon + 1:
                 if self.learn_residual:
-                    # TODO: don't add quaternion, use quaternion multiplication rule
-                    pos = action + np.concatenate(
-                        (self.get_init_target_pos(), self._eef_xquat)
-                    )
+                    pos = action[:3] + self.get_init_target_pos()
+                    quat_delta = quat2mat(euler2mat(pos[3:6]))
+                    quat = quat_multiply(quat_delta, self._eef_xquat) #compute target orientation as q' = q_delta * q0
                 else:
-                    action = self.clamp_planner_action_mp_space_bounds(action)
+                    if self.clamp_actions:
+                        action = self.clamp_planner_action_mp_space_bounds(action)
                     pos = action
+                    quat = quat2mat(euler2mat(pos[3:6]))
                 is_grasped = self.check_grasp()
                 o = mp_to_point(
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
                     np.concatenate((pos[:3], self.reset_ori)).astype(np.float64),
+                    # np.concatenate((pos[:3], quat)).astype(np.float64),
                     qpos=self.reset_qpos,
                     qvel=self.reset_qvel,
                     grasp=is_grasped,
