@@ -729,6 +729,8 @@ class MPEnv(ProxyEnv):
                     if self.clamp_actions:
                         action = self.clamp_planner_action_mp_space_bounds(action)
                     pos = action
+                    # interpret pos[3:6] as unit vector (2 vals) + angle (axis-angle-repr)
+                    # convert axis angle to mat then mat2quat
                     quat = mat2quat(euler2mat(pos[3:6]))
                 is_grasped = self.check_grasp()
                 o = mp_to_point(
