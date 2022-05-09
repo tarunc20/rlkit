@@ -44,6 +44,8 @@ if __name__ == "__main__":
             "planning_time": 10,
             "mp_bounds_low": (-1.45, -1.25, 0.45),
             "mp_bounds_high": (0.45, 0.85, 2.25),
+            "clamp_actions": True,
+            "backtrack_movement_fraction": 0.001,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},

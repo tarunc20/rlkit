@@ -15,7 +15,7 @@ if __name__ == "__main__":
         "algorithm_kwargs": {
             "batch_size": 128,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 5000,
+            "num_epochs": 1000,
             "num_eval_steps_per_epoch": 250,
             "num_expl_steps_per_train_loop": 1000,
             "num_trains_per_train_loop": 1000,
@@ -39,13 +39,14 @@ if __name__ == "__main__":
             "robots": "Panda",
         },
         "mp_env_kwargs": {
-            "vertical_displacement": 0.04,
+            "vertical_displacement": 0.03,
             "teleport_position": False,
             "planning_time": 20,
             "mp_bounds_low": (-1.45, -1.25, 0.45),
             "mp_bounds_high": (0.45, 0.85, 2.25),
-            "update_with_true_state": True,
-            "grip_ctrl_scale":1,
+            # "update_with_true_state": True,
+            "clamp_actions": True,
+            "grip_ctrl_scale": 0.0025,
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
@@ -73,6 +74,5 @@ if __name__ == "__main__":
         "plan_to_learned_goals": False,
         "num_expl_envs": 5,
         "planner_num_trains_per_train_loop": 1000,
-        # "load_path": "/home/mdalal/research/mprl/rlkit/data/04-26-mprl-pick-place-latest-rrt-connect-1/04-26-mprl_pick_place_latest_rrt_connect_1_2022_04_26_02_03_56_0000--s-3818/policy_400.pkl",
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

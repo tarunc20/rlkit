@@ -15,6 +15,7 @@ def preprocess_variant(variant):
 
 
 def video_func(algorithm, epoch):
+    from rlkit.torch.model_based.dreamer.visualization import add_text
 
     import copy
     import os
@@ -25,11 +26,11 @@ def video_func(algorithm, epoch):
     from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.visualization import make_video
 
-    if epoch % 50 == 0 or epoch == -1:
+    if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         policy = algorithm.eval_data_collector._policy
         max_path_length = algorithm.max_path_length
         env = algorithm.eval_env.envs[0]
-        num_rollouts = 5
+        num_rollouts = 1
         intermediate_frames_length = 100
         frames = []
         for _ in range(num_rollouts):
@@ -125,6 +126,120 @@ def video_func(algorithm, epoch):
                         frames.extend(intermediate_frames)
                         frames.append(im)
                 else:
+                    add_text(im, "Manipulator", (1, 10), 0.5, (0, 255, 0))
+                    if len(frames) > path_length + len(intermediate_frames):
+                        frames[path_length + len(intermediate_frames)] = np.concatenate(
+                            (frames[path_length + len(intermediate_frames)], im), axis=1
+                        )
+                    else:
+                        frames.append(im)
+                if d:
+                    break
+            print(
+                f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}"
+            )
+            print(f"Success: {env._check_success()}")
+        logdir = logger.get_snapshot_dir()
+        make_video(frames, logdir, epoch)
+        print("saved video for epoch {}".format(epoch))
+        pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
+
+
+def video_func_v4(algorithm, epoch):
+    from rlkit.torch.model_based.dreamer.visualization import add_text
+    import copy
+    import os
+    import pickle
+
+    import numpy as np
+
+    from rlkit.core import logger
+    from rlkit.torch.model_based.dreamer.visualization import make_video
+
+    if epoch % 50 == 0 or epoch == -1 and epoch != 0:
+        planner, policy = algorithm.eval_data_collector._policy
+        max_path_length = algorithm.max_path_length
+        env = algorithm.eval_env.envs[0]
+        num_rollouts = 5
+        intermediate_frames_length = 100
+        frames = []
+        for _ in range(num_rollouts):
+            policy.reset()
+            planner.reset()
+            o = env.reset()
+            im = env.get_image()
+            if len(frames) > 0:
+                frames[0] = np.concatenate((frames[0], im), axis=1)
+            else:
+                frames.append(im)
+            for path_length in range(1, max_path_length + 3):
+                if path_length == 1 or path_length == max_path_length + 2:
+                    get_intermediate_frames = True
+                    a, agent_info = planner.get_action(o)
+                    if path_length == 1:
+                        num_hl_steps = 0
+                    else:
+                        num_hl_steps = 1
+                else:
+                    get_intermediate_frames = False
+                    a, agent_info = policy.get_action(o)
+                o, r, d, i = env.step(
+                    copy.deepcopy(a), get_intermediate_frames=get_intermediate_frames
+                )
+                im = env.get_image()
+                add_text(im, "Manipulator", (1, 10), 0.5, (0, 255, 0))
+                if get_intermediate_frames:
+                    intermediate_frames = np.array(env.intermediate_frames)
+                    idxs = np.linspace(
+                        0,
+                        len(intermediate_frames),
+                        intermediate_frames_length,
+                        endpoint=False,
+                    )
+                    if len(intermediate_frames) > 0:
+                        intermediate_frames = intermediate_frames[idxs.astype(int)]
+                    else:
+                        intermediate_frames = [im] * intermediate_frames_length
+                    if (
+                        len(frames)
+                        > path_length + num_hl_steps * intermediate_frames_length
+                    ):
+                        for j, fr in enumerate(intermediate_frames):
+                            frames[
+                                j
+                                + path_length
+                                + num_hl_steps * intermediate_frames_length
+                            ] = np.concatenate(
+                                [
+                                    frames[
+                                        j
+                                        + path_length
+                                        + num_hl_steps * intermediate_frames_length
+                                    ],
+                                    fr,
+                                ],
+                                axis=1,
+                            )
+                        frames[
+                            path_length
+                            + num_hl_steps * intermediate_frames_length
+                            + len(intermediate_frames)
+                        ] = np.concatenate(
+                            (
+                                frames[
+                                    num_hl_steps * intermediate_frames_length
+                                    + len(intermediate_frames)
+                                    + path_length
+                                ],
+                                im,
+                            ),
+                            axis=1,
+                        )
+                    else:
+                        frames.extend(intermediate_frames)
+                        frames.append(im)
+                else:
+                    add_text(im, "Manipulator", (1, 10), 0.5, (0, 255, 0))
                     if len(frames) > path_length + len(intermediate_frames):
                         frames[path_length + len(intermediate_frames)] = np.concatenate(
                             (frames[path_length + len(intermediate_frames)], im), axis=1
@@ -374,10 +489,11 @@ def experiment(variant):
             # if eval_env.envs[0]._check_success():
             #     exit()
     else:
-        if (
-            not variant["mp_env_kwargs"]["teleport_position"]
-            and not variant["plan_to_learned_goals"]
-        ):
-            video_func(algorithm, -1)
-            algorithm.post_epoch_funcs.append(video_func)
+        if not variant["mp_env_kwargs"]["teleport_position"]:
+            if variant["plan_to_learned_goals"]:
+                func = video_func_v4
+            else:
+                func = video_func
+            func(algorithm, -1)
+            algorithm.post_epoch_funcs.append(func)
         algorithm.train()

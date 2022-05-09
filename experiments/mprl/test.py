@@ -22,7 +22,7 @@ if __name__ == "__main__":
         "ignore_done": True,
         "reward_scale": 1.0,
         "robots": "Panda",
-        "horizon":50
+        "horizon": 50,
     }
     mp_env_kwargs = {
         "vertical_displacement": 0.04,
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         "mp_bounds_low": (-1.45, -1.25, 0.45),
         "mp_bounds_high": (0.45, 0.85, 2.25),
         "update_with_true_state": True,
-        "grip_ctrl_scale":1,
+        "grip_ctrl_scale": 1,
         "plan_to_learned_goals": True,
     }
     controller = environment_kwargs.pop("controller")

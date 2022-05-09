@@ -384,6 +384,7 @@ def rollout_modular(
     ]  # should be a list of list of dicts (length n_envs) (length of path)
     paths = []
     for i in range(env.n_envs):
+        planner_rewards[i][0] = planner_rewards[i][0] + rewards[i].sum()
         rewards[i][-1] = rewards[i][-1] + planner_rewards[i][-1]
         paths.append(
             dict(
