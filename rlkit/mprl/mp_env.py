@@ -129,7 +129,7 @@ def backtracking_search_from_goal(
     )
     collision = check_robot_collision(env, ignore_object_collision)
     iters = 0
-    max_iters = 1 / movement_fraction
+    max_iters = int(1 / movement_fraction)
     while collision and iters < max_iters:
         curr_pos = curr_pos - movement_fraction * (goal_pos - start_pos)
         set_robot_based_on_ee_pos(
@@ -625,7 +625,7 @@ class MPEnv(ProxyEnv):
             "ik_ori_limit": 0.05,
             "interpolation": None,
             "ramp_ratio": 0.2,
-            "converge_steps": 100,
+            "converge_steps": 50,
         }
         self.osc_controller_config = {
             "type": "OSC_POSE",
@@ -691,6 +691,7 @@ class MPEnv(ProxyEnv):
                     grasp=False,
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
+                    backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
                 obs = self._flatten_obs(obs)
         return obs
@@ -773,6 +774,7 @@ class MPEnv(ProxyEnv):
                     ignore_object_collision=is_grasped,
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
+                    backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
                 o = self._flatten_obs(o)
                 r = self.reward(action) + r_mp
@@ -807,6 +809,7 @@ class MPEnv(ProxyEnv):
                         ignore_object_collision=is_grasped,
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
                 r += r_mp + self.reward(
                     action

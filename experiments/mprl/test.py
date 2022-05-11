@@ -27,12 +27,14 @@ if __name__ == "__main__":
     mp_env_kwargs = {
         "vertical_displacement": 0.04,
         "teleport_position": False,
-        "planning_time": 20,
+        "planning_time": .3,
         "mp_bounds_low": (-1.45, -1.25, 0.45),
         "mp_bounds_high": (0.45, 0.85, 2.25),
         "update_with_true_state": True,
-        "grip_ctrl_scale": 1,
+        "grip_ctrl_scale": .0025,
         "plan_to_learned_goals": True,
+        "clamp_actions": True,
+        "backtrack_movement_fraction": 0.1,
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
@@ -49,7 +51,7 @@ if __name__ == "__main__":
         NormalizedBoxEnv(GymWrapper(env)),
         **mp_env_kwargs,
     )
-    for i in range(10):
+    for i in range(1):
         env.reset()
         for _ in range(52):
             env.step(env.action_space.sample())
