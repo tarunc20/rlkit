@@ -872,8 +872,6 @@ class RobosuiteEnv(ProxyEnv):
         o, r, d, i = super().step(action)
         self.num_steps += 1
         i["success"] = float(self._check_success())
-        i["grasped"] = float(
-            self.check_grasp()
-        )
+        i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         return o, r, d, i

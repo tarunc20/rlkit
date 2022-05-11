@@ -56,7 +56,7 @@ if __name__ == "__main__":
             "target_update_period": 5,
             "use_automatic_entropy_tuning": True,
         },
-        "num_expl_envs":5,
+        "num_expl_envs": 5,
         "version": "normal",
         "plan_to_learned_goals": False,
     }
