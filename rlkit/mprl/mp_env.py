@@ -853,15 +853,27 @@ class RobosuiteEnv(ProxyEnv):
     def reset(self, **kwargs):
         return super().reset(**kwargs)
 
+    def check_grasp(
+        self,
+    ):
+        if self.name.endswith("Lift"):
+            is_grasped = self._check_grasp(
+                gripper=self.robots[0].gripper,
+                object_geoms=self.cube,
+            )
+        elif self.name.endswith("PickPlaceBread"):
+            is_grasped = self._check_grasp(
+                gripper=self.robots[0].gripper,
+                object_geoms=self.objects[self.object_id],
+            )
+        return is_grasped
+
     def step(self, action):
         o, r, d, i = super().step(action)
         self.num_steps += 1
         i["success"] = float(self._check_success())
         i["grasped"] = float(
-            self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.cube,
-            )
+            self.check_grasp()
         )
         i["num_steps"] = self.num_steps
         return o, r, d, i

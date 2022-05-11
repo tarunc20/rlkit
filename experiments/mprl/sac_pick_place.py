@@ -18,7 +18,7 @@ if __name__ == "__main__":
             "batch_size": 128,
             "max_path_length": 500,
             "min_num_steps_before_training": 3300,
-            "num_epochs": 500,
+            "num_epochs": 1000,
             "num_eval_steps_per_epoch": 2500,
             "num_expl_steps_per_train_loop": 2500,
             "num_trains_per_train_loop": 1000,
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         "eval_environment_kwargs": {
             "control_freq": 20,
             "controller": "OSC_POSE",
-            "env_name": "Lift",
+            "env_name": "PickPlaceBread",
             "hard_reset": False,
             "horizon": 500,
             "ignore_done": True,
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         "expl_environment_kwargs": {
             "control_freq": 20,
             "controller": "OSC_POSE",
-            "env_name": "Lift",
+            "env_name": "PickPlaceBread",
             "hard_reset": False,
             "horizon": 500,
             "ignore_done": True,

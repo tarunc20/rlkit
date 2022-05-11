@@ -489,11 +489,12 @@ def experiment(variant):
             # if eval_env.envs[0]._check_success():
             #     exit()
     else:
-        if not variant["mp_env_kwargs"]["teleport_position"]:
-            if variant["plan_to_learned_goals"]:
-                func = video_func_v4
-            else:
-                func = video_func
-            func(algorithm, -1)
-            algorithm.post_epoch_funcs.append(func)
+        if variant.get('mp_kwargs_kwagrs', None):
+            if not variant["mp_env_kwargs"]["teleport_position"]:
+                if variant["plan_to_learned_goals"]:
+                    func = video_func_v4
+                else:
+                    func = video_func
+                func(algorithm, -1)
+                algorithm.post_epoch_funcs.append(func)
         algorithm.train()
