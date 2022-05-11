@@ -824,12 +824,11 @@ class MPEnv(ProxyEnv):
 class RobosuiteEnv(ProxyEnv):
     def __init__(self, env):
         super().__init__(env)
-        for (cam_name, cam_w, cam_h, cam_d, cam_segs) in zip(
+        for (cam_name, cam_w, cam_h, cam_d) in zip(
             self.camera_names,
             self.camera_widths,
             self.camera_heights,
             self.camera_depths,
-            self.camera_segmentations,
         ):
 
             # Add cameras associated to our arrays
@@ -838,7 +837,6 @@ class RobosuiteEnv(ProxyEnv):
                 cam_w=cam_w,
                 cam_h=cam_h,
                 cam_d=cam_d,
-                cam_segs=cam_segs,
                 modality="image",
             )
             self.cam_sensor = cam_sensors
