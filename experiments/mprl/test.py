@@ -17,7 +17,7 @@ if __name__ == "__main__":
     environment_kwargs = {
         "control_freq": 20,
         "controller": "OSC_POSE",
-        "env_name": "PickPlaceBread",
+        "env_name": "Lift",
         "hard_reset": False,
         "ignore_done": True,
         "reward_scale": 1.0,
@@ -25,16 +25,16 @@ if __name__ == "__main__":
         "horizon": 50,
     }
     mp_env_kwargs = {
-        "vertical_displacement": 0.04,
+        "vertical_displacement": 0.03,
         "teleport_position": False,
-        "planning_time": 0.3,
-        "mp_bounds_low": (-1.45, -1.25, 0.45),
+        "planning_time": 1,
+        "mp_bounds_low": (-1.45, -1.25, 0.8),
         "mp_bounds_high": (0.45, 0.85, 2.25),
         "update_with_true_state": True,
         "grip_ctrl_scale": 0.0025,
         "plan_to_learned_goals": True,
         "clamp_actions": True,
-        "backtrack_movement_fraction": 0.1,
+        "backtrack_movement_fraction": 0.001,
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
