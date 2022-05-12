@@ -30,7 +30,7 @@ def video_func(algorithm, epoch):
         policy = algorithm.eval_data_collector._policy
         max_path_length = algorithm.max_path_length
         env = algorithm.eval_env.envs[0]
-        num_rollouts = 1
+        num_rollouts = 5
         intermediate_frames_length = 100
         frames = []
         for _ in range(num_rollouts):
