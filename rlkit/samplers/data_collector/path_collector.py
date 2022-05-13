@@ -42,6 +42,7 @@ class MdpPathCollector(PathCollector):
     ):
         paths = []
         num_steps_collected = 0
+        num_steps_logged = 0
         while num_steps_collected < num_steps:
             max_path_length_this_loop = min(  # Do not go over num_steps
                 max_path_length,
@@ -62,10 +63,11 @@ class MdpPathCollector(PathCollector):
                     and discard_incomplete_paths
                 ):
                     break
+                num_steps_logged += path["env_infos"][-1]["num_steps"].item()
                 num_steps_collected += path_len
                 paths.append(path)
         self._num_paths_total += len(paths)
-        self._num_steps_total += num_steps_collected
+        self._num_steps_total += num_steps_logged
         self._epoch_paths.extend(paths)
         return paths
 
