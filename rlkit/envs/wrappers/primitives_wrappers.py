@@ -757,7 +757,7 @@ class RobosuiteWrapper(GymWrapper):
     ):
         self.env.set_render_every_step(render_every_step, render_mode, render_im_shape)
         obs, reward, done, info = super().step(action)
-        o = self.env.render(
+        obs = self.env.render(
             render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
         )
         self.env.unset_render_every_step()
@@ -765,8 +765,8 @@ class RobosuiteWrapper(GymWrapper):
         for key, value in info.items():
             if value is not None:
                 new_info[key] = value
-        o = (
-            o.reshape(self.imwidth, self.imheight, 3)[:, :, ::-1]
+        obs = (
+            obs.reshape(self.imwidth, self.imheight, 3)[:, :, ::-1]
             .transpose(2, 0, 1)
             .flatten()
         )
@@ -1081,7 +1081,7 @@ class RobosuitePrimitives(DMControlBackendRobosuiteEnv):
     def break_apart_action(self, action):
         broken_a = {}
         for key, value in self.primitive_name_to_action_idx.items():
-            broken_a[key] = a[value]
+            broken_a[key] = action[value]
         return broken_a
 
     def act(self, action):
