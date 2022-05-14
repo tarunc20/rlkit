@@ -1,5 +1,6 @@
-import abc
 import io
+import abc
+import copy
 import xml.etree.ElementTree as ET
 from os import path
 
@@ -191,7 +192,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def site_jacp():
         jacps = np.zeros((model.nsite, 3 * model.nv))
         for i, jacp in enumerate(jacps):
-            jacp_view = jacp
+            jacp_view = jacp.reshape(3, -1)
             mjlib.mj_jacSite(model.ptr, data.ptr, jacp_view, None, i)
         return jacps
 
@@ -203,7 +204,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def site_jacr():
         jacrs = np.zeros((model.nsite, 3 * model.nv))
         for i, jacr in enumerate(jacrs):
-            jacr_view = jacr
+            jacr_view = jacr.reshape(3, -1)
             mjlib.mj_jacSite(model.ptr, data.ptr, None, jacr_view, i)
         return jacrs
 
@@ -231,7 +232,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def body_jacp():
         jacps = np.zeros((model.nbody, 3 * model.nv))
         for i, jacp in enumerate(jacps):
-            jacp_view = jacp
+            jacp_view = jacp.reshape(3, -1)
             mjlib.mj_jacBody(model.ptr, data.ptr, jacp_view, None, i)
         return jacps
 
@@ -243,7 +244,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def body_jacr():
         jacrs = np.zeros((model.nbody, 3 * model.nv))
         for i, jacr in enumerate(jacrs):
-            jacr_view = jacr
+            jacr_view = jacr.reshape(3, -1)
             mjlib.mj_jacBody(model.ptr, data.ptr, None, jacr_view, i)
         return jacrs
 

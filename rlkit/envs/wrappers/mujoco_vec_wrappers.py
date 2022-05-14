@@ -66,6 +66,7 @@ class DummyVecEnv(Env):
         promises = [self.envs[env_idx].reset() for env_idx in range(self.n_envs)]
         for index, promise in zip(range(self.n_envs), promises):
             obs[index] = promise
+        
         return np.array(obs)
 
     def render(self, **kwargs):
