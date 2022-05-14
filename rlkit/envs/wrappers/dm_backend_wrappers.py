@@ -1,5 +1,6 @@
-import abc
 import io
+import abc
+import copy
 import xml.etree.ElementTree as ET
 from os import path
 
@@ -191,7 +192,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def site_jacp():
         jacps = np.zeros((model.nsite, 3 * model.nv))
         for i, jacp in enumerate(jacps):
-            jacp_view = jacp
+            jacp_view = jacp.reshape(3, -1)
             mjlib.mj_jacSite(model.ptr, data.ptr, jacp_view, None, i)
         return jacps
 
@@ -203,7 +204,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def site_jacr():
         jacrs = np.zeros((model.nsite, 3 * model.nv))
         for i, jacr in enumerate(jacrs):
-            jacr_view = jacr
+            jacr_view = jacr.reshape(3, -1)
             mjlib.mj_jacSite(model.ptr, data.ptr, None, jacr_view, i)
         return jacrs
 
@@ -231,7 +232,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def body_jacp():
         jacps = np.zeros((model.nbody, 3 * model.nv))
         for i, jacp in enumerate(jacps):
-            jacp_view = jacp
+            jacp_view = jacp.reshape(3, -1)
             mjlib.mj_jacBody(model.ptr, data.ptr, jacp_view, None, i)
         return jacps
 
@@ -243,7 +244,7 @@ def patch_mjlib_accessors(mjlib, model, data):
     def body_jacr():
         jacrs = np.zeros((model.nbody, 3 * model.nv))
         for i, jacr in enumerate(jacrs):
-            jacr_view = jacr
+            jacr_view = jacr.reshape(3, -1)
             mjlib.mj_jacBody(model.ptr, data.ptr, None, jacr_view, i)
         return jacrs
 
@@ -496,19 +497,23 @@ class DMControlBackendMetaworldMujocoEnv(MujocoEnv):
             self.sim.set_state(new_state)
         self.sim.forward()
 
-    def render(
-        self,
-        mode="human",
-        imwidth=64,
-        imheight=64,
-    ):
+    def render(self, mode="human", imwidth=64, imheight=64, use_wrist_cam=False):
         if mode == "human":
             self.renderer.render_to_window()
         elif mode == "rgb_array":
-            return self.renderer.render_offscreen(
+            fixed_view_img = self.renderer.render_offscreen(
                 imwidth,
                 imheight,
             )[:, :, ::-1]
+
+            if use_wrist_cam:
+                gripper_img = self.renderer.render_offscreen(
+                    imwidth, imheight, camera_id=self.model.camera_name2id("gripperPOV")
+                )[:, :, ::-1]
+                return np.concatenate([fixed_view_img, gripper_img], axis=2)
+            else:
+                return fixed_view_img
+
         else:
             raise ValueError("mode can only be either 'human' or 'rgb_array'")
 
@@ -528,7 +533,7 @@ class SawyerMocapBaseDMBackendMetaworld(
         DMControlBackendMetaworldMujocoEnv.__init__(
             self, model_name, frame_skip=frame_skip
         )
-        self.reset_mocap_welds()
+        self.reset_mocap_welds(self.sim)
 
     def get_endeff_pos(self):
         return self.data.get_body_xpos("hand").copy()
@@ -574,9 +579,8 @@ class SawyerMocapBaseDMBackendMetaworld(
         self.data = self.sim.data
         self.set_env_state(state["env_state"])
 
-    def reset_mocap_welds(self):
+    def reset_mocap_welds(self, sim):
         """Resets the mocap welds that we use for actuation."""
-        sim = self.sim
         if sim.model.nmocap > 0 and sim.model.eq_data is not None:
             for i in range(sim.model.eq_data.shape[0]):
                 if sim.model.eq_type[i] == mujoco_py.const.EQ_WELD:

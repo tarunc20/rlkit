@@ -169,15 +169,12 @@ def collect_world_model_data_low_level_primitives(
                 num_low_level_actions_per_primitive,
                 axis=1,
             )
-            phases = (
-                np.linspace(
-                    0,
-                    1,
-                    num_low_level_actions_per_primitive,
-                    endpoint=False,
-                )
-                + 1 / (num_low_level_actions_per_primitive)
-            )
+            phases = np.linspace(
+                0,
+                1,
+                num_low_level_actions_per_primitive,
+                endpoint=False,
+            ) + 1 / (num_low_level_actions_per_primitive)
             phases = np.repeat(phases.reshape(1, -1), num_envs, axis=0)
             high_level_actions = np.concatenate(
                 (high_level_actions, np.expand_dims(phases, -1)), axis=2

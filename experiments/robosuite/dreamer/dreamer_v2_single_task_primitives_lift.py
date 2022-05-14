@@ -2,11 +2,11 @@ import random
 import subprocess
 
 import numpy as np
-
+import argparse
 import rlkit.util.hyperparameter as hyp
 from rlkit.launchers.launcher_util import run_experiment
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
-    preprocess_variant,
+    preprocess_variant_raps,
 )
 from rlkit.torch.model_based.dreamer.experiments.raps_experiment import experiment
 
@@ -62,7 +62,9 @@ if __name__ == "__main__":
         )
         exp_prefix = args.exp_prefix
     variant = dict(
+        replay_buffer_kwargs = {"max_replay_buffer_size": int(5e5)},
         algorithm="DreamerV2",
+        max_path_length=5,
         version="normal",
         replay_buffer_size=int(5e5),
         algorithm_kwargs=algorithm_kwargs,
@@ -101,7 +103,6 @@ if __name__ == "__main__":
                 use_dm_backend=True,
                 max_path_length=5,
             ),
-            image_kwargs=dict(),
         ),
         actor_kwargs=dict(
             discrete_continuous_dist=True,
@@ -117,7 +118,6 @@ if __name__ == "__main__":
             model_hidden_size=400,
             stochastic_state_size=50,
             deterministic_state_size=200,
-            embedding_size=1024,
             rssm_hidden_size=200,
             reward_num_layers=2,
             pred_discount_num_layers=3,
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         default_parameters=variant,
     )
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        variant = preprocess_variant(variant, args.debug)
+        variant = preprocess_variant_raps(variant)
         for _ in range(args.num_seeds):
             seed = random.randint(0, 100000)
             variant["seed"] = seed

@@ -69,6 +69,7 @@ def make_base_metaworld_env(env_name, env_kwargs=None, use_dm_backend=True):
             parent.__bases__ = (SawyerXYZEnvMetaworldPrimitives,)
         if use_dm_backend:
             SawyerXYZEnv.__bases__ = (SawyerMocapBaseDMBackendMetaworld,)
+
     SawyerXYZEnvMetaworldPrimitives.control_mode = action_space_kwargs["control_mode"]
     SawyerMocapBaseDMBackendMetaworld.control_mode = action_space_kwargs["control_mode"]
     if env_name in ALL_V1_ENVIRONMENTS:
@@ -90,6 +91,7 @@ def make_base_metaworld_env(env_name, env_kwargs=None, use_dm_backend=True):
     else:
         env = env_cls(seed=42)
     env.reset_action_space(**action_space_kwargs)
+
     env.reset()
     env = MetaworldWrapper(env, **env_kwargs_new)
     return env

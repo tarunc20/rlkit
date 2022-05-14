@@ -21,7 +21,10 @@ class TimeLimit(gym.Wrapper):
         self._step = None
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
     def step(
         self,
@@ -56,7 +59,10 @@ class ActionRepeat(gym.Wrapper):
         self._amount = amount
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
     def step(
         self,
@@ -94,7 +100,10 @@ class NormalizeActions(gym.Wrapper):
         self.action_space = gym.spaces.Box(low, high, dtype=np.float32)
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
     def step(
         self,
@@ -125,7 +134,10 @@ class ImageUnFlattenWrapper(gym.Wrapper):
         )
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
     def reset(self):
         obs = self.env.reset()
@@ -168,17 +180,26 @@ class MetaworldWrapper(gym.Wrapper):
         self.env.imheight = imheight
         self.imwidth = imwidth
         self.imheight = imheight
+        self.use_wrist_cam = self.env.use_wrist_cam
+        channels = 3
+        if self.use_wrist_cam:
+            channels = 6
+
         self.observation_space = Box(
-            0, 255, (3 * self.imwidth * self.imheight,), dtype=np.uint8
+            0, 255, (channels * self.imwidth * self.imheight,), dtype=np.uint8
         )
-        self.image_shape = (3, self.imwidth, self.imheight)
+        self.image_shape = (channels, self.imwidth, self.imheight)
+
         self.reward_scale = reward_scale
         self.use_image_obs = use_image_obs
 
     def _get_image(self):
         if hasattr(self.env, "_use_dm_backend"):
             img = self.env.render(
-                mode="rgb_array", imwidth=self.imwidth, imheight=self.imheight
+                mode="rgb_array",
+                imwidth=self.imwidth,
+                imheight=self.imheight,
+                use_wrist_cam=self.use_wrist_cam,
             )
         else:
             img = self.env.sim.render(
@@ -190,7 +211,10 @@ class MetaworldWrapper(gym.Wrapper):
         return img
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
     def reset(self):
         obs = super().reset()
@@ -241,6 +265,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         open_gripper_iterations=200,
         close_gripper_iterations=300,
         pos_ctrl_action_scale=0.05,
+        use_wrist_cam=False,
     ):
         self.goto_pose_iterations = goto_pose_iterations
         self.open_gripper_iterations = open_gripper_iterations
@@ -250,6 +275,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         self.action_scale = action_scale
         self.render_intermediate_obs_to_info = render_intermediate_obs_to_info
         self.num_low_level_actions_per_primitive = num_low_level_actions_per_primitive
+        self.use_wrist_cam = use_wrist_cam
 
         # primitives
         self.primitive_idx_to_name = {
@@ -529,6 +555,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                         "rgb_array",
                         self.render_im_shape[0],
                         self.render_im_shape[1],
+                        use_wrist_cam=self.use_wrist_cam,
                     )
                     .transpose(2, 0, 1)
                     .flatten()
@@ -541,6 +568,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
                         self.render_mode,
                         self.render_im_shape[0],
                         self.render_im_shape[1],
+                        use_wrist_cam=self.use_wrist_cam,
                     )
                 )
             else:
@@ -703,7 +731,10 @@ class RobosuiteWrapper(GymWrapper):
         self.observation_space = spaces.Box(0, 255, (self.imlength,), dtype=np.uint8)
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
     def reset(self):
         o = super().reset()
@@ -726,7 +757,7 @@ class RobosuiteWrapper(GymWrapper):
     ):
         self.env.set_render_every_step(render_every_step, render_mode, render_im_shape)
         obs, reward, done, info = super().step(action)
-        o = self.env.render(
+        obs = self.env.render(
             render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
         )
         self.env.unset_render_every_step()
@@ -734,15 +765,18 @@ class RobosuiteWrapper(GymWrapper):
         for key, value in info.items():
             if value is not None:
                 new_info[key] = value
-        o = (
-            o.reshape(self.imwidth, self.imheight, 3)[:, :, ::-1]
+        obs = (
+            obs.reshape(self.imwidth, self.imheight, 3)[:, :, ::-1]
             .transpose(2, 0, 1)
             .flatten()
         )
         return obs, reward, done, new_info
 
     def __getattr__(self, name):
-        return getattr(self.env, name)
+        if name != "env":
+            return getattr(self.env, name)
+        else:
+            raise AttributeError("")
 
 
 class NormalizeBoxEnvFixed(NormalizedBoxEnv):
@@ -1047,7 +1081,7 @@ class RobosuitePrimitives(DMControlBackendRobosuiteEnv):
     def break_apart_action(self, action):
         broken_a = {}
         for key, value in self.primitive_name_to_action_idx.items():
-            broken_a[key] = a[value]
+            broken_a[key] = action[value]
         return broken_a
 
     def act(self, action):

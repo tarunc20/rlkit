@@ -1,4 +1,6 @@
 import multiprocessing as mp
+import os
+import pickle
 
 import numpy as np
 from gym import Env
@@ -64,10 +66,17 @@ class DummyVecEnv(Env):
         promises = [self.envs[env_idx].reset() for env_idx in range(self.n_envs)]
         for index, promise in zip(range(self.n_envs), promises):
             obs[index] = promise
-        return obs
+        
+        return np.array(obs)
 
     def render(self, **kwargs):
         return self.envs[0].render(**kwargs)
+
+    def save(self, path, suffix):
+        pickle.dump(self, open(os.path.join(path, suffix), "wb"))
+
+    def load(self, path, suffix):
+        return pickle.load(open(os.path.join(path, suffix), "rb"))
 
 
 def _worker(
@@ -110,9 +119,10 @@ def _worker(
 
 
 class StableBaselinesVecEnv(SubprocVecEnv):
-    def __init__(self, env_fns, start_method=None):
+    def __init__(self, env_fns, start_method=None, reload_state_args=None):
         self.waiting = False
         self.closed = False
+        self.reload_state_args = reload_state_args
         n_envs = len(env_fns)
         self.n_envs = n_envs
 
@@ -162,3 +172,27 @@ class StableBaselinesVecEnv(SubprocVecEnv):
             else:
                 new_info[key] = value
         return obs, rewards, dones, new_info
+
+    def save(self, path, suffix):
+        n_envs, make_env, make_env_args = self.reload_state_args
+        reload_state_dict = dict()
+        reload_state_dict["n_envs"] = n_envs
+        reload_state_dict["make_env"] = make_env
+        reload_state_dict["make_env_args"] = make_env_args
+        pickle.dump(reload_state_dict, open(os.path.join(path, suffix), "wb"))
+
+    def load(self, path, suffix):
+        """
+        Since we cannot pickle a vec env directly, we have to rebuild it from the env_kwargs.
+        NOTE: This will lose saved elements of the vec env / reset them.
+        """
+        reload_state_dict = pickle.load(open(os.path.join(path, suffix), "rb"))
+        make_env = reload_state_dict["make_env"]
+        n_envs = reload_state_dict["n_envs"]
+        make_env_args = reload_state_dict["make_env_args"]
+        del reload_state_dict["make_env"]
+        del reload_state_dict["n_envs"]
+        del reload_state_dict["make_env_args"]
+
+        env_fns = [lambda: make_env(*make_env_args) for _ in range(n_envs)]
+        return StableBaselinesVecEnv(env_fns=env_fns, start_method="fork")
