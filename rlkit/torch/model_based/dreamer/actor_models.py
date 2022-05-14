@@ -1,6 +1,5 @@
 from rlkit.torch.model_based.dreamer.ou_strategy import OUStrategy
 import torch
-import pdb
 import torch.nn.functional as F
 from torch import jit
 from torch.distributions import Normal, Transform, TransformedDistribution
@@ -125,7 +124,6 @@ class ActorModel(Mlp):
         if expl_amount == 0:
             return action
         else:
-            # pdb.set_trace()
             if self.discrete_continuous_dist:
                 discrete, continuous = (
                     action[:, : self.discrete_action_dim],
