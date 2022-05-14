@@ -103,7 +103,6 @@ if __name__ == "__main__":
                 use_dm_backend=True,
                 max_path_length=5,
             ),
-            # image_kwargs=dict(),
         ),
         actor_kwargs=dict(
             discrete_continuous_dist=True,
@@ -119,7 +118,6 @@ if __name__ == "__main__":
             model_hidden_size=400,
             stochastic_state_size=50,
             deterministic_state_size=200,
-            # embedding_size=1024,
             rssm_hidden_size=200,
             reward_num_layers=2,
             pred_discount_num_layers=3,
