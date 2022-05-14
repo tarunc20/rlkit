@@ -746,7 +746,6 @@ class RobosuiteWrapper(GymWrapper):
             .transpose(2, 0, 1)
             .flatten()
         )
-        
         return o
 
     def step(
