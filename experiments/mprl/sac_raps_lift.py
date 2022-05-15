@@ -63,7 +63,7 @@ if __name__ == "__main__":
         },
         "policy_kwargs": {"hidden_sizes": (256, 256)},
         "qf_kwargs": {"hidden_sizes": (256, 256)},
-        "replay_buffer_size": int(1e6),
+        "replay_buffer_size": int(1e4),
         "seed": 129,
         "trainer_kwargs": {
             "discount": 0.99,
