@@ -196,7 +196,7 @@ def experiment(variant):
         eval_env = suite.make(
             **variant["eval_environment_kwargs"],
             has_renderer=False,
-            has_offscreen_renderer=True,
+            has_offscreen_renderer=False,
             use_object_obs=True,
             use_camera_obs=False,
             reward_shaping=True,
@@ -223,7 +223,7 @@ def experiment(variant):
 
         extra_eval = dict(
             has_renderer=False,
-            has_offscreen_renderer=True,
+            has_offscreen_renderer=False,
             use_object_obs=True,
             use_camera_obs=False,
             reward_shaping=True,
@@ -288,7 +288,6 @@ def experiment(variant):
 
         make_env_kwargs()
 
-    pdb.set_trace()
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:
         env_fns = [expl_env_fn for _ in range(num_expl_envs)]
