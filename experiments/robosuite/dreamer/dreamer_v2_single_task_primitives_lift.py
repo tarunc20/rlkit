@@ -148,7 +148,7 @@ if __name__ == "__main__":
         num_eval_envs=1,
         expl_amount=0.3,
         pass_render_kwargs=True,
-        save_video=True,
+        save_video=False,
     )
 
     search_space = {
