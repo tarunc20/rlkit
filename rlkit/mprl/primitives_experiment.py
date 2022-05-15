@@ -142,7 +142,7 @@ def load_policy(path):
 def experiment(variant):
     from rlkit.samplers.rollout_functions import vec_rollout
     from rlkit.envs.primitives_make_env import make_env
-
+    import copy
 
     from rlkit.envs.wrappers.mujoco_vec_wrappers import (
         DummyVecEnv,
@@ -242,8 +242,31 @@ def experiment(variant):
             controller_configs=expl_controller_config,
         )
 
+        # Taken from dreamer_v2_single_task_primitives_lift.py
+        reset_action_space_kwargs = dict(
+            control_mode="primitives",
+            action_scale=1,
+            max_path_length=5,
+            workspace_low=(0.0, -0.2, 0.6),
+            workspace_high=(0.3, -.2, 1),
+            camera_settings={
+                "distance": 0.2613113661860936,
+                "lookat": [
+                    -0.13466918548055004,
+                    -0.0808556895915784,
+                    0.898754837869992,
+                ],
+                "azimuth": 30.234375,
+                "elevation": -34.21874942723662,
+            },
+        )
+
         variant["eval_environment_kwargs"].update(extra_eval)
         variant["expl_environment_kwargs"].update(extra_expl)
+
+        variant["eval_environment_kwargs"]["reset_action_space_kwargs"] = copy.deepcopy(reset_action_space_kwargs)
+        variant["expl_environment_kwargs"]["reset_action_space_kwargs"] = copy.deepcopy(reset_action_space_kwargs)
+
 
     expl_env_fn = make_env_expl
     eval_env_fn = make_env_eval
@@ -259,7 +282,7 @@ def experiment(variant):
 
         eval_env_fn = lambda: make_env(
             env_suite=SUITE,
-            env_name=variant["cceval_environment_kwargs"].pop("env_name"),
+            env_name=variant["eval_environment_kwargs"].pop("env_name"),
             env_kwargs=variant["eval_environment_kwargs"]
         )
 
