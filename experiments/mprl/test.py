@@ -26,15 +26,16 @@ if __name__ == "__main__":
     }
     mp_env_kwargs = {
         "vertical_displacement": 0.03,
-        "teleport_position": False,
+        "teleport_position": True,
         "planning_time": 1,
         "mp_bounds_low": (-1.45, -1.25, 0.8),
         "mp_bounds_high": (0.45, 0.85, 2.25),
         "update_with_true_state": True,
         "grip_ctrl_scale": 0.0025,
-        "plan_to_learned_goals": True,
+        "plan_to_learned_goals": False,
         "clamp_actions": True,
         "backtrack_movement_fraction": 0.001,
+        "randomize_init_target_pos": True,
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
@@ -53,5 +54,7 @@ if __name__ == "__main__":
     )
     for i in range(1):
         env.reset()
-        for _ in range(52):
-            env.step(env.action_space.sample())
+        o = env.render(mode="rgb_array")
+        cv2.imwrite(f"test_{i}.png", o)
+        # for _ in range(52):
+        #     env.step(env.action_space.sample())

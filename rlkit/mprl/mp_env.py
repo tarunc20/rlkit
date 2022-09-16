@@ -563,6 +563,7 @@ class MPEnv(ProxyEnv):
         grip_ctrl_scale=1,
         clamp_actions=False,
         backtrack_movement_fraction=0.001,
+        randomize_init_target_pos=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -596,6 +597,7 @@ class MPEnv(ProxyEnv):
         self.grip_ctrl_scale = grip_ctrl_scale
         self.clamp_actions = clamp_actions
         self.backtrack_movement_fraction = backtrack_movement_fraction
+        self.randomize_init_target_pos = randomize_init_target_pos
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -610,7 +612,30 @@ class MPEnv(ProxyEnv):
             self.target_z_pos = (
                 self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025
             )
-        pos += np.array([0, 0, self.vertical_displacement])
+        if self.randomize_init_target_pos:
+            # sample a random position in a sphere around the target (not in collision)
+            # the orientation of the arm should not be changed
+            random_perturbation = np.random.normal(0, 1, 3)
+            random_perturbation /= np.linalg.norm(random_perturbation)
+            scale = np.random.uniform(0.02, 0.06)
+            pos += random_perturbation * scale
+            # backtrack from the position just in case we sampled a point in collision
+            backtracking_search_from_goal(
+                self,
+                self.ik_ctrl,
+                False,
+                self._eef_xpos,
+                self._eef_xquat,
+                pos[:3],
+                self._eef_xquat,
+                self.sim.data.qpos,
+                self.sim.data.qvel,
+                ee_to_object_translation=self.ee_to_object_translation,
+                is_grasped=False,
+                movement_fraction=self.backtrack_movement_fraction,
+            )
+        else:
+            pos += np.array([0, 0, self.vertical_displacement])
         return pos
 
     def reset(self, get_intermediate_frames=False, **kwargs):
@@ -650,28 +675,28 @@ class MPEnv(ProxyEnv):
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
-                ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
-                ik_ctrl.update_base_pose(
+                self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
+                self.ik_ctrl.update_base_pose(
                     self.robots[0].base_pos, self.robots[0].base_ori
                 )
-                pos = self.get_init_target_pos()
                 if self.name.endswith("Lift"):
-                    ee_to_object_translation = (
+                    self.ee_to_object_translation = (
                         self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
                     )
                 else:
-                    ee_to_object_translation = (
+                    self.ee_to_object_translation = (
                         self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
                         - self._eef_xpos
                     )
+                pos = self.get_init_target_pos()
                 set_robot_based_on_ee_pos(
                     self,
                     pos,
                     self._eef_xquat,
-                    ik_ctrl,
+                    self.ik_ctrl,
                     self.sim.data.qpos,
                     self.sim.data.qvel,
-                    ee_to_object_translation=ee_to_object_translation,
+                    ee_to_object_translation=self.ee_to_object_translation,
                 )
                 obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
                 self.num_steps += 100
