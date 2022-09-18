@@ -612,31 +612,56 @@ class MPEnv(ProxyEnv):
             self.target_z_pos = (
                 self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025
             )
+        qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
             # the orientation of the arm should not be changed
-            random_perturbation = np.random.normal(0, 1, 3)
-            random_perturbation /= np.linalg.norm(random_perturbation)
-            scale = np.random.uniform(0.02, 0.06)
-            pos += random_perturbation * scale
-            # backtrack from the position just in case we sampled a point in collision
-            backtracking_search_from_goal(
-                self,
-                self.ik_ctrl,
-                False,
-                self._eef_xpos,
-                self._eef_xquat,
-                pos[:3],
-                self._eef_xquat,
-                self.sim.data.qpos,
-                self.sim.data.qvel,
-                ee_to_object_translation=self.ee_to_object_translation,
-                is_grasped=False,
-                movement_fraction=self.backtrack_movement_fraction,
-            )
+            stop_sampling_target_pos = False
+            xquat = self._eef_xquat
+            xpos = self._eef_xpos
+            while not stop_sampling_target_pos:
+                random_perturbation = np.random.normal(0, 1, 3)
+                random_perturbation[2] = np.abs(random_perturbation[2])
+                random_perturbation /= np.linalg.norm(random_perturbation)
+                scale = np.random.uniform(0.03, 0.06)
+                pos += random_perturbation * scale
+                # backtrack from the position just in case we sampled a point in collision
+                pos = backtracking_search_from_goal(
+                    self,
+                    self.ik_ctrl,
+                    False,
+                    xpos,
+                    xquat,
+                    pos[:3],
+                    xquat,
+                    qpos,
+                    self.sim.data.qvel,
+                    ee_to_object_translation=self.ee_to_object_translation,
+                    is_grasped=False,
+                    movement_fraction=self.backtrack_movement_fraction,
+                )[:3]
+                if np.linalg.norm(self._eef_xquat - xquat) < 1e-6:
+                    stop_sampling_target_pos = True
+                else:
+                    self.sim.data.qpos[:] = qpos
+                    self.sim.data.qvel[:] = qvel
+                    self.sim.forward()
         else:
             pos += np.array([0, 0, self.vertical_displacement])
+            set_robot_based_on_ee_pos(
+                self,
+                pos,
+                self._eef_xquat,
+                self.ik_ctrl,
+                qpos,
+                qvel,
+                ee_to_object_translation=self.ee_to_object_translation,
+            )
         return pos
+
+    def get_observation(self):
+        di = self._wrapped_env._get_observations(force_update=True)
+        return self._wrapped_env._flatten_obs(di)
 
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
@@ -689,16 +714,7 @@ class MPEnv(ProxyEnv):
                         - self._eef_xpos
                     )
                 pos = self.get_init_target_pos()
-                set_robot_based_on_ee_pos(
-                    self,
-                    pos,
-                    self._eef_xquat,
-                    self.ik_ctrl,
-                    self.sim.data.qpos,
-                    self.sim.data.qvel,
-                    ee_to_object_translation=self.ee_to_object_translation,
-                )
-                obs, reward, done, info = self._wrapped_env.step(np.zeros(7))
+                obs = self.get_observation()
                 self.num_steps += 100
             else:
                 pos = self.get_init_target_pos()
