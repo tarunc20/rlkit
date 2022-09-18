@@ -489,7 +489,7 @@ def experiment(variant):
             # if eval_env.envs[0]._check_success():
             #     exit()
     else:
-        if variant.get("mp_kwargs_kwagrs", None):
+        if variant.get("mp_kwargs_kwargs", None):
             if not variant["mp_env_kwargs"]["teleport_position"]:
                 if variant["plan_to_learned_goals"]:
                     func = video_func_v4
