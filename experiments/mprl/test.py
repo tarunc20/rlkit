@@ -17,15 +17,14 @@ if __name__ == "__main__":
     environment_kwargs = {
         "control_freq": 20,
         "controller": "OSC_POSE",
-        "env_name": "Lift",
+        "env_name": "PickPlaceBread",
         "hard_reset": False,
         "ignore_done": True,
         "reward_scale": 1.0,
         "robots": "Panda",
-        "horizon": 50,
     }
     mp_env_kwargs = {
-        "vertical_displacement": 0.03,
+        "vertical_displacement": 0.04,
         "teleport_position": True,
         "planning_time": 1,
         "mp_bounds_low": (-1.45, -1.25, 0.8),
@@ -42,19 +41,22 @@ if __name__ == "__main__":
     env = suite.make(
         **environment_kwargs,
         has_renderer=False,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=True,
         use_object_obs=True,
         use_camera_obs=False,
         reward_shaping=True,
         controller_configs=controller_config,
+        camera_names="frontview",
+        camera_heights=512,
+        camera_widths=512,
     )
     env = MPEnv(
         NormalizedBoxEnv(GymWrapper(env)),
         **mp_env_kwargs,
     )
-    for i in range(1):
-        env.reset()
-        o = env.render(mode="rgb_array")
-        cv2.imwrite(f"test_{i}.png", o)
+    for i in range(10):
+        env.reset(get_intermediate_frames=True)
+        im = env.get_image()
+        cv2.imwrite(f"test/test_{i}.png", im)
         # for _ in range(52):
         #     env.step(env.action_space.sample())
