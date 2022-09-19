@@ -604,7 +604,19 @@ class MPEnv(ProxyEnv):
         im = cv2.flip(im[:, :, ::-1], 0)
         return im
 
+    def compute_ee_to_object_translation(self):
+        if self.name.endswith("Lift"):
+            return (
+                self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
+            )
+        else:
+            return (
+                self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
+                - self._eef_xpos
+            )
+
     def get_init_target_pos(self):
+        ee_to_object_translation = self.compute_ee_to_object_translation()
         if self.name.endswith("Lift"):
             pos = self.sim.data.body_xpos[self.cube_body_id]
         elif self.name.endswith("PickPlaceBread"):
@@ -636,7 +648,7 @@ class MPEnv(ProxyEnv):
                     xquat,
                     qpos,
                     self.sim.data.qvel,
-                    ee_to_object_translation=self.ee_to_object_translation,
+                    ee_to_object_translation=ee_to_object_translation,
                     is_grasped=False,
                     movement_fraction=self.backtrack_movement_fraction,
                 )[:3]
@@ -655,7 +667,7 @@ class MPEnv(ProxyEnv):
                 self.ik_ctrl,
                 qpos,
                 qvel,
-                ee_to_object_translation=self.ee_to_object_translation,
+                ee_to_object_translation=ee_to_object_translation,
             )
         return pos
 
@@ -704,15 +716,6 @@ class MPEnv(ProxyEnv):
                 self.ik_ctrl.update_base_pose(
                     self.robots[0].base_pos, self.robots[0].base_ori
                 )
-                if self.name.endswith("Lift"):
-                    self.ee_to_object_translation = (
-                        self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
-                    )
-                else:
-                    self.ee_to_object_translation = (
-                        self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
-                        - self._eef_xpos
-                    )
                 pos = self.get_init_target_pos()
                 obs = self.get_observation()
                 self.num_steps += 100
@@ -830,12 +833,18 @@ class MPEnv(ProxyEnv):
             if self.ep_step_ctr == self.horizon:
                 is_grasped = self.check_grasp()
                 target_pos = self.get_target_pos()
+                ee_to_object_translation = self.compute_ee_to_object_translation()
                 if self.teleport_position:
-                    for _ in range(50):
-                        self._wrapped_env.step(
-                            np.concatenate((target_pos - self._eef_xpos, [0, 0, 0, 1]))
-                        )
-                        self.num_steps += 1
+                    set_robot_based_on_ee_pos(
+                        self,
+                        target_pos,
+                        self._eef_xquat,
+                        self.ik_ctrl,
+                        self.sim.data.qpos,
+                        self.sim.data.qvel,
+                        ee_to_object_translation=ee_to_object_translation,
+                        is_grasped=is_grasped,
+                    )
                 else:
                     mp_to_point(
                         self,

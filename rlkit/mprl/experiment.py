@@ -13,6 +13,48 @@ def preprocess_variant(variant):
         ]
     return variant
 
+def teleport_video_func(algorithm, epoch):
+    import copy
+    import os
+    import pickle
+
+    import numpy as np
+
+    from rlkit.core import logger
+    from rlkit.torch.model_based.dreamer.visualization import make_video
+
+    if epoch % 50 == 0 or epoch == -1 and epoch != 0:
+        policy = algorithm.eval_data_collector._policy
+        max_path_length = algorithm.max_path_length
+        env = algorithm.eval_env.envs[0]
+        num_rollouts = 5
+        frames = []
+        for _ in range(num_rollouts):
+            policy.reset()
+            o = env.reset()
+            im = env.get_image()
+            for path_length in range(max_path_length):
+                a, agent_info = policy.get_action(o)
+                o, r, d, i = env.step(
+                    copy.deepcopy(a)
+                )
+                im = env.get_image()
+                if len(frames) > path_length:
+                    frames[path_length] = np.concatenate(
+                        (frames[path_length], im), axis=1
+                    )
+                else:
+                    frames.append(im)
+                if d:
+                    break
+            print(
+                f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}"
+            )
+            print(f"Success: {env._check_success()}")
+        logdir = logger.get_snapshot_dir()
+        make_video(frames, logdir, epoch)
+        print("saved video for epoch {}".format(epoch))
+        pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
 
 def video_func(algorithm, epoch):
     from rlkit.torch.model_based.dreamer.visualization import add_text
@@ -489,12 +531,14 @@ def experiment(variant):
             # if eval_env.envs[0]._check_success():
             #     exit()
     else:
-        if variant.get("mp_kwargs_kwargs", None):
-            if not variant["mp_env_kwargs"]["teleport_position"]:
+        if variant.get("mp_env_kwargs", None):
+            if variant["mp_env_kwargs"]["teleport_position"]:
+                func = teleport_video_func
+            else:
                 if variant["plan_to_learned_goals"]:
                     func = video_func_v4
                 else:
                     func = video_func
-                func(algorithm, -1)
-                algorithm.post_epoch_funcs.append(func)
+            func(algorithm, -1)
+            algorithm.post_epoch_funcs.append(func)
         algorithm.train()

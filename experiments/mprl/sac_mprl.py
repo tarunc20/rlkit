@@ -71,7 +71,7 @@ if __name__ == "__main__":
         },
         "version": "normal",
         "plan_to_learned_goals": True,
-        "num_expl_envs": 5,
+        "num_expl_envs": 10,
         "planner_num_trains_per_train_loop": 1000,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
