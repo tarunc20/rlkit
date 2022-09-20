@@ -43,6 +43,8 @@ if __name__ == "__main__":
             "teleport_position": False,
             "mp_bounds_low": (-1.45, -1.25, 0.45),
             "mp_bounds_high": (0.45, 0.85, 2.25),
+            "backtrack_movement_fraction": 0.001,
+            "clamp_actions": True,
             "update_with_true_state": True,
             "grip_ctrl_scale": 0.0025,
             "planning_time": 20,
@@ -71,7 +73,7 @@ if __name__ == "__main__":
         },
         "version": "normal",
         "plan_to_learned_goals": False,
-        "num_expl_envs": 5,
+        "num_expl_envs": 10,
         "planner_num_trains_per_train_loop": 1000,
     }
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

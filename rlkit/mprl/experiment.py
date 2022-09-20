@@ -13,6 +13,7 @@ def preprocess_variant(variant):
         ]
     return variant
 
+
 def teleport_video_func(algorithm, epoch):
     import copy
     import os
@@ -35,9 +36,7 @@ def teleport_video_func(algorithm, epoch):
             im = env.get_image()
             for path_length in range(max_path_length):
                 a, agent_info = policy.get_action(o)
-                o, r, d, i = env.step(
-                    copy.deepcopy(a)
-                )
+                o, r, d, i = env.step(copy.deepcopy(a))
                 im = env.get_image()
                 if len(frames) > path_length:
                     frames[path_length] = np.concatenate(
@@ -55,6 +54,7 @@ def teleport_video_func(algorithm, epoch):
         make_video(frames, logdir, epoch)
         print("saved video for epoch {}".format(epoch))
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
+
 
 def video_func(algorithm, epoch):
     from rlkit.torch.model_based.dreamer.visualization import add_text

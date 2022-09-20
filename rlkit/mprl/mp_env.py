@@ -606,9 +606,7 @@ class MPEnv(ProxyEnv):
 
     def compute_ee_to_object_translation(self):
         if self.name.endswith("Lift"):
-            return (
-                self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
-            )
+            return self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
         else:
             return (
                 self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
@@ -632,6 +630,7 @@ class MPEnv(ProxyEnv):
             xquat = self._eef_xquat
             xpos = self._eef_xpos
             while not stop_sampling_target_pos:
+                #TODO: re-write this to say if the object is in collision, re-sample the initial pose
                 random_perturbation = np.random.normal(0, 1, 3)
                 random_perturbation[2] = np.abs(random_perturbation[2])
                 random_perturbation /= np.linalg.norm(random_perturbation)
@@ -718,7 +717,7 @@ class MPEnv(ProxyEnv):
                 )
                 pos = self.get_init_target_pos()
                 obs = self.get_observation()
-                self.num_steps += 100
+                # self.num_steps += 100 #don't log this
             else:
                 pos = self.get_init_target_pos()
                 pos = np.concatenate((pos, self.reset_ori))
