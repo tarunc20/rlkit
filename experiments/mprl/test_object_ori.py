@@ -1,12 +1,17 @@
+import time
 import cv2
 import numpy as np
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.mprl.mp_env import MPEnv, set_robot_based_on_ee_pos, update_controller_config
+from rlkit.mprl.mp_env import (
+    MPEnv,
+    check_robot_collision,
+    set_robot_based_on_ee_pos,
+    update_controller_config,
+)
 from robosuite.controllers import controller_factory
 from robosuite.controllers.controller_factory import load_controller_config
 from robosuite.wrappers.gym_wrapper import GymWrapper
 import robosuite as suite
-from tqdm import tqdm
 
 if __name__ == "__main__":
     environment_kwargs = {
@@ -44,36 +49,13 @@ if __name__ == "__main__":
         camera_heights=1024,
         camera_widths=1024,
     )
-    env = MPEnv(NormalizedBoxEnv(GymWrapper(env)), **mp_env_kwargs)
-    num_steps = 10
-    total = 0
-    for s in range(num_steps):
-        env.reset()
-        qpos, qvel = env.sim.data.qpos.copy(), env.sim.data.qvel.copy()
-        target_z_pos = (
-            env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]][-1] + 0.05
-        )
-        pose = np.array(
-            [
-                0.2,
-                0.15,
-                target_z_pos,
-            ]
-        )
-        target_pos = pose
-        for i in tqdm(range(100)):
-            env.step(env.action_space.sample())
-        cv2.imwrite(f"before_{s}.png", env.get_image())
-        error = set_robot_based_on_ee_pos(
-            env,
-            target_pos,
-            env.reset_ori,
-            env.ik_ctrl,
-            qpos,
-            qvel,
-            None,
-            is_grasped=False,
-        )
-        cv2.imwrite(f"after_{s}.png", env.get_image())
-        total += error
-    print(f"Avg Distance to target: {total/num_steps})")
+    env = MPEnv(
+        NormalizedBoxEnv(GymWrapper(env)),
+        **mp_env_kwargs,
+    )
+    for i in range(10):
+        env.reset(get_intermediate_frames=True)
+        im = env.get_image()
+        cv2.imwrite(f"test/test_{i}.png", im)
+        # for _ in range(52):
+        #     env.step(env.action_space.sample())

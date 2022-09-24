@@ -24,18 +24,19 @@ def teleport_video_func(algorithm, epoch):
     from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.visualization import make_video
 
-    if epoch % 50 == 0 or epoch == -1 and epoch != 0:
+    if epoch % 100 == 0 or epoch == -1 and epoch != 0:
         policy = algorithm.eval_data_collector._policy
         max_path_length = algorithm.max_path_length
         env = algorithm.eval_env.envs[0]
         num_rollouts = 5
         frames = []
+        success_rate = 0
         for _ in range(num_rollouts):
             policy.reset()
             o = env.reset()
             im = env.get_image()
             for path_length in range(max_path_length):
-                a, agent_info = policy.get_action(o)
+                a, _ = policy.get_action(o)
                 o, r, d, i = env.step(copy.deepcopy(a))
                 im = env.get_image()
                 if len(frames) > path_length:
@@ -50,9 +51,11 @@ def teleport_video_func(algorithm, epoch):
                 f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}"
             )
             print(f"Success: {env._check_success()}")
+            success_rate += env._check_success()
         logdir = logger.get_snapshot_dir()
         make_video(frames, logdir, epoch)
         print("saved video for epoch {}".format(epoch))
+        print(f"Success rate: {success_rate / num_rollouts}")
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
 
 
@@ -315,7 +318,6 @@ def experiment(variant):
     )
     from rlkit.samplers.rollout_functions import rollout_modular
     import robosuite as suite
-    from robosuite.controllers import load_controller_config
     from robosuite.wrappers import GymWrapper
 
     import rlkit.torch.pytorch_util as ptu
@@ -333,20 +335,15 @@ def experiment(variant):
 
     # Create gym-compatible envs
     def make_env_expl():
-        controller = variant["expl_environment_kwargs"].pop("controller")
-        controller_config = load_controller_config(default_controller=controller)
         expl_env = suite.make(
             **variant["expl_environment_kwargs"],
             has_renderer=False,
             has_offscreen_renderer=False,
-            use_object_obs=True,
             use_camera_obs=False,
-            reward_shaping=True,
-            controller_configs=controller_config,
         )
         if variant.get("mprl", False):
             expl_env = MPEnv(
-                NormalizedBoxEnv(GymWrapper(expl_env)),
+                GymWrapper(expl_env),
                 **variant.get("mp_env_kwargs"),
             )
         else:
@@ -354,23 +351,18 @@ def experiment(variant):
         return expl_env
 
     def make_env_eval():
-        controller = variant["eval_environment_kwargs"].pop("controller")
-        controller_config = load_controller_config(default_controller=controller)
         eval_env = suite.make(
             **variant["eval_environment_kwargs"],
             has_renderer=False,
             has_offscreen_renderer=True,
-            use_object_obs=True,
             use_camera_obs=False,
-            reward_shaping=True,
-            controller_configs=controller_config,
             camera_names="frontview",
-            camera_heights=256,
-            camera_widths=256,
+            camera_heights=1024,
+            camera_widths=1024,
         )
         if variant.get("mprl", False):
             eval_env = MPEnv(
-                NormalizedBoxEnv(GymWrapper(eval_env)),
+                GymWrapper(eval_env),
                 **variant.get("mp_env_kwargs"),
             )
         else:
@@ -515,21 +507,17 @@ def experiment(variant):
     algorithm.to(ptu.device)
     if variant.get("load_path", None):
         policy = pickle.load(open(os.path.join(variant["load_path"]), "rb"))
+        policy = MakeDeterministic(policy)
         algorithm.eval_data_collector._policy = policy
-        video_func(algorithm, -1)
-        exit()
-        for _ in range(10):
-            o = eval_env.reset()
-            policy.reset()
-            for _ in range(eval_env.envs[0].horizon):
-                a = policy.get_action(o)[0]
-                o, r, d, i = eval_env.step(a)
-                print(
-                    f"r:{r}, is grasped:{eval_env.envs[0].check_grasp()},logged grasp: {i['grasped']}"
-                )
-            print(f"Success: {eval_env.envs[0]._check_success()}")
-            # if eval_env.envs[0]._check_success():
-            #     exit()
+        if variant.get("mp_env_kwargs", None):
+            if variant["mp_env_kwargs"]["teleport_position"]:
+                func = teleport_video_func
+            else:
+                if variant["plan_to_learned_goals"]:
+                    func = video_func_v4
+                else:
+                    func = video_func
+            func(algorithm, -1)
     else:
         if variant.get("mp_env_kwargs", None):
             if variant["mp_env_kwargs"]["teleport_position"]:

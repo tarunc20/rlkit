@@ -1,22 +1,17 @@
-import math
-import time
 import cv2
 import numpy as np
 from rlkit.torch.model_based.dreamer.visualization import add_text
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
-    axisangle2quat,
     euler2mat,
     mat2quat,
     quat2mat,
     quat_conjugate,
-    quat_distance,
     quat_multiply,
 )
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
-import matplotlib
 
 try:
     from ompl import base as ob
@@ -33,41 +28,51 @@ except ImportError:
     from ompl import util as ou
     from ompl import geometric as og
 
-from mpl_toolkits import mplot3d
-import matplotlib.pyplot as plt
-
 
 def set_robot_based_on_ee_pos(
-    env, pos, quat, ctrl, qpos, qvel, ee_to_object_translation, is_grasped=False
+    env,
+    target_pos,
+    target_quat,
+    ctrl,
+    qpos,
+    qvel,
+    gripper_qpos_in=None,
+    gripper_qvel_in=None,
+    ee_to_object_translation=None,
+    is_grasped=False,
 ):
+    object_quat = env.sim.data.qpos[19:23]
     gripper_qpos = env.sim.data.qpos[7:9]
     gripper_qvel = env.sim.data.qvel[7:9]
+
+    # reset to canonical state before doing IK
     env.sim.data.qpos[:] = qpos
     env.sim.data.qvel[:] = qvel
     env.sim.forward()
 
     ctrl.sync_state()
     cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
-    rot_diff = quat2mat(quat_multiply(quat, cur_rot_inv))
-    joint_pos = ctrl.joint_positions_for_eef_command(pos - env._eef_xpos, rot_diff)
+    rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
+    joint_pos = ctrl.joint_positions_for_eef_command(
+        target_pos - env._eef_xpos, rot_diff
+    )
     env.robots[0].set_robot_joint_positions(joint_pos)
-    assert (env.sim.data.qpos[:7] - joint_pos).sum() < 1e-10
+    assert (
+        env.sim.data.qpos[:7] - joint_pos
+    ).sum() < 1e-10  # ensure we accurately set the sim pose to the ik command
     if is_grasped:
-        # TODO: we should also match relative orientation of object wrt ee
-        # TODO: we should apply rotation diff of ee from before and after ik to object -> this will simulate the orientation change
         env.sim.data.qpos[7:9] = gripper_qpos
         env.sim.data.qvel[7:9] = gripper_qvel
+        if gripper_qpos_in is not None:
+            env.sim.data.qpos[7:9] = gripper_qpos_in
+        if gripper_qvel_in is not None:
+            env.sim.data.qvel[7:9] = gripper_qvel_in
         if env.name.endswith("Lift"):
             env.sim.data.qpos[9:12] = env._eef_xpos + ee_to_object_translation
         elif env.name.endswith("PickPlaceBread"):
             env.sim.data.qpos[16:19] = env._eef_xpos + ee_to_object_translation
-            quat_transition = quat_multiply(env._eef_xquat, cur_rot_inv)
-            env.sim.data.qpos[19:23] = quat_multiply(
-                quat_transition, env.sim.data.qpos[19:23]
-            )
+            env.sim.data.qpos[19:23] = quat_multiply(mat2quat(rot_diff), object_quat)
         env.sim.forward()
-    error = np.linalg.norm(env._eef_xpos - pos)
-    return error
 
 
 def check_robot_string(string):
@@ -608,10 +613,7 @@ class MPEnv(ProxyEnv):
         if self.name.endswith("Lift"):
             return self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
         else:
-            return (
-                self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
-                - self._eef_xpos
-            )
+            return self.sim.data.qpos[16:19] - self._eef_xpos
 
     def get_init_target_pos(self):
         ee_to_object_translation = self.compute_ee_to_object_translation()
@@ -619,9 +621,7 @@ class MPEnv(ProxyEnv):
             pos = self.sim.data.body_xpos[self.cube_body_id]
         elif self.name.endswith("PickPlaceBread"):
             pos = self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
-            self.target_z_pos = (
-                self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]][-1] + 0.025
-            )
+            self.target_z_pos = pos[-1] + 0.1
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
@@ -630,7 +630,7 @@ class MPEnv(ProxyEnv):
             xquat = self._eef_xquat
             xpos = self._eef_xpos
             while not stop_sampling_target_pos:
-                #TODO: re-write this to say if the object is in collision, re-sample the initial pose
+                # TODO: re-write this to say if the object is in collision, re-sample the initial pose
                 random_perturbation = np.random.normal(0, 1, 3)
                 random_perturbation[2] = np.abs(random_perturbation[2])
                 random_perturbation /= np.linalg.norm(random_perturbation)
@@ -705,6 +705,7 @@ class MPEnv(ProxyEnv):
         self.ep_step_ctr = 0
         self.num_failed_solves = 0
         self.num_steps = 0
+        self.reset_pos = self._eef_xpos.copy()
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
@@ -736,9 +737,7 @@ class MPEnv(ProxyEnv):
                 obs = self._flatten_obs(obs)
         return obs
 
-    def check_grasp(
-        self,
-    ):
+    def check_grasp(self):
         if self.name.endswith("Lift"):
             is_grasped = self._check_grasp(
                 gripper=self.robots[0].gripper,
@@ -767,24 +766,6 @@ class MPEnv(ProxyEnv):
         return pose
 
     def clamp_planner_action_mp_space_bounds(self, action):
-        # action[0] = (
-        #     action[0] * (self.mp_bounds_high[0] - self.mp_bounds_low[0]) / 2
-        #     + self.mp_bounds_low[0] / 2
-        #     + self.mp_bounds_high[0] / 2
-        # )
-        # action[1] = (
-        #     action[1] * (self.mp_bounds_high[1] - self.mp_bounds_low[1]) / 2
-        #     + self.mp_bounds_low[1] / 2
-        #     + self.mp_bounds_high[1] / 2
-        # )
-        # action[2] = (
-        #     action[2] * (self.mp_bounds_high[2] - self.mp_bounds_low[2]) / 2
-        #     + self.mp_bounds_low[2] / 2
-        #     + self.mp_bounds_high[2] / 2
-        # )
-        # assert (action[:3] >= self.mp_bounds_low).all() and (
-        #     action[:3] <= self.mp_bounds_high
-        # ).all(), action
         action[:3] = np.clip(action[:3], self.mp_bounds_low, self.mp_bounds_high)
         return action
 
@@ -817,10 +798,7 @@ class MPEnv(ProxyEnv):
                     get_intermediate_frames=get_intermediate_frames,
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
-                o = self._flatten_obs(o)
-                r = self.reward(action)
-                i = {}
-                d = False
+                o, r, d, i = self._flatten_obs(o), self.reward(action), {}, False
             else:
                 o, r, d, i = self._wrapped_env.step(action)
                 self.num_steps += 1
@@ -829,21 +807,37 @@ class MPEnv(ProxyEnv):
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
-            if self.ep_step_ctr == self.horizon:
+            if self.ep_step_ctr == self.horizon - 1:
                 is_grasped = self.check_grasp()
                 target_pos = self.get_target_pos()
-                ee_to_object_translation = self.compute_ee_to_object_translation()
+                ee_to_object_translation = (
+                    self.compute_ee_to_object_translation().copy()
+                )
                 if self.teleport_position:
                     set_robot_based_on_ee_pos(
                         self,
                         target_pos,
-                        self._eef_xquat,
+                        self.reset_ori,
                         self.ik_ctrl,
-                        self.sim.data.qpos,
-                        self.sim.data.qvel,
+                        self.reset_qpos,
+                        self.reset_qvel,
+                        gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
+                        gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
                         ee_to_object_translation=ee_to_object_translation,
                         is_grasped=is_grasped,
                     )
+                    if self.name.endswith("PickPlaceBread"):
+                        for _ in range(30):
+                            self.robots[
+                                0
+                            ].controller.reset_goal()  # teleporting the arm can break the controller
+                            action = np.zeros(7)
+                            action[-1] = -1
+                            self.env.step(action)
+                        if is_grasped and not self._check_success():
+                            print("FAILED TO DROP THE CUBE")
+                            print()
+                            print()
                 else:
                     mp_to_point(
                         self,
