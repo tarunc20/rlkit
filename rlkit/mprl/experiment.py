@@ -361,6 +361,8 @@ def experiment(variant):
             camera_widths=1024,
         )
         if variant.get("mprl", False):
+            mp_env_kwargs = variant.get("mp_env_kwargs").copy()
+            mp_env_kwargs["teleport_on_grasp"] = True
             eval_env = MPEnv(
                 GymWrapper(eval_env),
                 **variant.get("mp_env_kwargs"),

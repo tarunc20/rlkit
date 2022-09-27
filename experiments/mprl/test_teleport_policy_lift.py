@@ -18,14 +18,6 @@ import torch
 from robosuite.utils.transform_utils import *
 from rlkit.torch.sac.policies import MakeDeterministic
 
-def open_gripper(env):
-    for i in range(30):
-        env.robots[0].controller.reset_goal()
-        action = np.zeros(7)
-        action[-1] = -1
-        env.step(action)
-
-
 if __name__ == "__main__":
     robosuite_args = dict(
         robots="Panda",
@@ -33,7 +25,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceBread",
+        env_name="Lift",
         horizon=50,
     )
     # OSC controller spec
@@ -57,7 +49,7 @@ if __name__ == "__main__":
     )
     robosuite_args["controller_configs"] = controller_args
     mp_env_kwargs = {
-        "vertical_displacement": 0.04,
+        "vertical_displacement": 0.03,
         "teleport_position": True,
         "randomize_init_target_pos": False,
         "mp_bounds_low": (-1.45, -1.25, 0.45),
@@ -81,7 +73,7 @@ if __name__ == "__main__":
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
     num_episodes = 100
     total = 0
-    load_path = "/home/mdalal/Downloads/policy_2200.pkl"
+    load_path = "/home/mdalal/research/mprl/rlkit/data/09-24-sac-mprl-lift-test-new-code-v2/09-24-sac_mprl_lift_test_new_code_v2_2022_09_24_18_18_52_0000--s-79434/policy_1200.pkl"
     policy = pickle.load(open(load_path, "rb"))
     policy = MakeDeterministic(policy)
     ptu.device = torch.device("cuda")

@@ -569,6 +569,7 @@ class MPEnv(ProxyEnv):
         clamp_actions=False,
         backtrack_movement_fraction=0.001,
         randomize_init_target_pos=False,
+        teleport_on_grasp=False,
     ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -603,6 +604,7 @@ class MPEnv(ProxyEnv):
         self.clamp_actions = clamp_actions
         self.backtrack_movement_fraction = backtrack_movement_fraction
         self.randomize_init_target_pos = randomize_init_target_pos
+        self.teleport_on_grasp = teleport_on_grasp
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -658,16 +660,17 @@ class MPEnv(ProxyEnv):
                     self.sim.data.qvel[:] = qvel
                     self.sim.forward()
         else:
-            pos += np.array([0, 0, self.vertical_displacement])
+            shifted_pos = pos + np.array([0, 0, self.vertical_displacement])
             set_robot_based_on_ee_pos(
                 self,
-                pos,
+                shifted_pos.copy(),
                 self._eef_xquat,
                 self.ik_ctrl,
                 qpos,
                 qvel,
                 ee_to_object_translation=ee_to_object_translation,
             )
+            assert not self.check_grasp()
         return pos
 
     def get_observation(self):
@@ -807,7 +810,7 @@ class MPEnv(ProxyEnv):
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
-            if self.ep_step_ctr == self.horizon - 1:
+            if self.ep_step_ctr == self.horizon or (self.teleport_on_grasp and self.check_grasp()):
                 is_grasped = self.check_grasp()
                 target_pos = self.get_target_pos()
                 ee_to_object_translation = (
@@ -853,7 +856,9 @@ class MPEnv(ProxyEnv):
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
                 # this should ensure the manipulator prioritizes trajectories that lead to high level success over just naive grasping
-                r += self.reward(action)
+                # r += self.reward(action)
+                if (self.teleport_on_grasp and self.check_grasp()):
+                    d = True
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
