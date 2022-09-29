@@ -630,30 +630,29 @@ class MPEnv(ProxyEnv):
             # the orientation of the arm should not be changed
             stop_sampling_target_pos = False
             xquat = self._eef_xquat
-            xpos = self._eef_xpos
             while not stop_sampling_target_pos:
                 # TODO: re-write this to say if the object is in collision, re-sample the initial pose
                 random_perturbation = np.random.normal(0, 1, 3)
                 random_perturbation[2] = np.abs(random_perturbation[2])
                 random_perturbation /= np.linalg.norm(random_perturbation)
                 scale = np.random.uniform(0.03, 0.06)
-                pos += random_perturbation * scale
+                shifted_pos = pos + random_perturbation * scale
                 # backtrack from the position just in case we sampled a point in collision
-                pos = backtracking_search_from_goal(
+                set_robot_based_on_ee_pos(
                     self,
+                    shifted_pos.copy(),
+                    self._eef_xquat,
                     self.ik_ctrl,
-                    False,
-                    xpos,
-                    xquat,
-                    pos[:3],
-                    xquat,
                     qpos,
-                    self.sim.data.qvel,
+                    qvel,
                     ee_to_object_translation=ee_to_object_translation,
-                    is_grasped=False,
-                    movement_fraction=self.backtrack_movement_fraction,
-                )[:3]
-                if np.linalg.norm(self._eef_xquat - xquat) < 1e-6:
+                )
+                ori_cond = np.linalg.norm(self._eef_xquat - xquat) < 1e-6
+                grasp_cond = not self.check_grasp()
+                collision_cond = not check_robot_collision(
+                    self, ignore_object_collision=False
+                )
+                if ori_cond and grasp_cond and collision_cond:
                     stop_sampling_target_pos = True
                 else:
                     self.sim.data.qpos[:] = qpos
@@ -670,7 +669,7 @@ class MPEnv(ProxyEnv):
                 qvel,
                 ee_to_object_translation=ee_to_object_translation,
             )
-            assert not self.check_grasp()
+            assert not self.check_grasp()  # we should not cheat!
         return pos
 
     def get_observation(self):
@@ -810,7 +809,9 @@ class MPEnv(ProxyEnv):
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
-            if self.ep_step_ctr == self.horizon or (self.teleport_on_grasp and self.check_grasp()):
+            if self.ep_step_ctr == self.horizon or (
+                self.teleport_on_grasp and self.check_grasp()
+            ):
                 is_grasped = self.check_grasp()
                 target_pos = self.get_target_pos()
                 ee_to_object_translation = (
@@ -857,7 +858,7 @@ class MPEnv(ProxyEnv):
                     )
                 # this should ensure the manipulator prioritizes trajectories that lead to high level success over just naive grasping
                 # r += self.reward(action)
-                if (self.teleport_on_grasp and self.check_grasp()):
+                if self.teleport_on_grasp and self.check_grasp():
                     d = True
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
