@@ -6,6 +6,13 @@ from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
 
 
 def preprocess_variant(variant):
+    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
+    variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
+        50 * variant["max_path_length"]
+    )
+    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
+
     return variant
 
 
@@ -13,6 +20,7 @@ if __name__ == "__main__":
     # noinspection PyTypeChecker
     args = get_args()
     variant = dict(
+        max_path_length=500,
         algorithm_kwargs=dict(
             batch_size=128,
             min_num_steps_before_training=3300,
@@ -20,6 +28,7 @@ if __name__ == "__main__":
             num_eval_steps_per_epoch=2500,
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
+            num_train_loops_per_epoch=10,
             max_path_length=500,
         ),
         eval_environment_kwargs=dict(
