@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from gym import spaces
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
@@ -232,11 +233,6 @@ def mp_to_point(
         ee_to_object_translation = (
             env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]] - og_eef_xpos
         )
-    # fig = plt.figure()
-    # ax = plt.axes(projection="3d")
-    x, y, z = [], [], []
-    col_x, col_y, col_z = [], [], []
-    log_dir = logger.get_snapshot_dir()
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -259,15 +255,6 @@ def mp_to_point(
             valid = not check_robot_collision(
                 env, ignore_object_collision=ignore_object_collision
             )
-
-            if valid:
-                x.append(state.getX())
-                y.append(state.getY())
-                z.append(state.getZ())
-            else:
-                col_x.append(state.getX())
-                col_y.append(state.getY())
-                col_z.append(state.getZ())
             return valid
 
     # create an SE3 state space
@@ -356,12 +343,6 @@ def mp_to_point(
                 env.get_image(),
             )
     if grasp and get_intermediate_frames:
-        # cv2.imwrite(
-        #     f"{logger.get_snapshot_dir()}/grasp_{env.num_steps}.png", env.get_image()
-        # )
-        #     assert (
-        #         env.reward(None) == 1.0
-        #     ), f"goal state should have reward 1.0. xpos:{pos[:3]} xquat:{pos[3:]}"
         print(f"Goal state has reward {env.reward(None)}")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
@@ -378,31 +359,6 @@ def mp_to_point(
     solved = planner.solve(planning_time)
 
     if get_intermediate_frames:
-        # ax.scatter3D(
-        #     x,
-        #     y,
-        #     z,
-        #     c="g",
-        # )
-        # ax.scatter3D(
-        #     col_x,
-        #     col_y,
-        #     col_z,
-        #     c="r",
-        # )
-        # ax.scatter3D(
-        #     goal().getX(),
-        #     goal().getY(),
-        #     goal().getZ(),
-        #     c="b",
-        # )
-        # ax.scatter3D(
-        #     start().getX(),
-        #     start().getY(),
-        #     start().getZ(),
-        #     c="y",
-        # )
-        log_dir = logger.get_snapshot_dir()
         set_robot_based_on_ee_pos(
             env,
             og_eef_xpos,
@@ -413,7 +369,6 @@ def mp_to_point(
             ee_to_object_translation,
             grasp,
         )
-        # cv2.imwrite(f"{log_dir}/start_{env.num_steps}.png", env.get_image())
         set_robot_based_on_ee_pos(
             env,
             pos[:3],
@@ -424,46 +379,10 @@ def mp_to_point(
             ee_to_object_translation,
             grasp,
         )
-        # cv2.imwrite(f"{log_dir}/goal_{env.num_steps}.png", env.get_image())
-        # plt.savefig(f"{log_dir}/plot_{env.num_steps}.png")
     intermediate_frames = []
     if solved:
         path = pdef.getSolutionPath()
-        # print(f"Simplifying Path, path len: {[path.getStateCount()]}")
-        # st = time.time()
         success = og.PathSimplifier(si).simplify(path, 1.0)
-        # print(f"time taken to simplify, {time.time() - st}")
-        # print(f"Simplified Path, path len: {[path.getStateCount()]}")
-        # path.interpolate()
-        # print(f"Interpolated Path, path len: {[path.getStateCount()]}")
-        # print("Running Controller")
-        if get_intermediate_frames:
-            # ax.scatter3D(
-            #     x,
-            #     y,
-            #     z,
-            #     c="g",
-            # )
-            # ax.scatter3D(
-            #     col_x,
-            #     col_y,
-            #     col_z,
-            #     c="r",
-            # )
-            # ax.scatter3D(
-            #     goal().getX(),
-            #     goal().getY(),
-            #     goal().getZ(),
-            #     c="b",
-            # )
-            # ax.scatter3D(
-            #     start().getX(),
-            #     start().getY(),
-            #     start().getZ(),
-            #     c="y",
-            # )
-            log_dir = logger.get_snapshot_dir()
-            # plt.savefig(f"{log_dir}/plot_post_shorten_{env.num_steps}.png")
         converted_path = []
         for s, state in enumerate(path.getStates()):
             new_state = [
@@ -488,11 +407,6 @@ def mp_to_point(
                     grasp,
                 )
                 new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
-                # if get_intermediate_frames:
-                #     cv2.imwrite(
-                #         f"{log_dir}/solution_path_{env.num_steps}_{s}.png",
-                #         env.get_image(),
-                #     )
             else:
                 new_state = np.array(new_state)
             converted_path.append(new_state)
@@ -506,7 +420,6 @@ def mp_to_point(
         osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
         osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
         osc_ctrl.reset_goal()
-        # prev_grasp = env.sim.data.qpos[7]
         for state in converted_path:
             desired_rot = quat2mat(state[3:])
             for _ in range(50):
@@ -533,13 +446,10 @@ def mp_to_point(
                     im = env.get_image()
                     add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
                     intermediate_frames.append(im)
-                # print(env.reward(None), env.check_grasp(), env._check_success())
         env.mp_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
         print(f"Controller reaching MSE: {env.mp_mse}")
-        # if get_intermediate_frames:
-        #     cv2.imwrite(f"{log_dir}/goal_achieved_{env.num_steps}.png", env.get_image())
         env.goal_error = goal_error
     else:
         env._wrapped_env.reset()
@@ -571,26 +481,11 @@ class MPEnv(ProxyEnv):
         backtrack_movement_fraction=0.001,
         randomize_init_target_pos=False,
         teleport_on_grasp=False,
+        slack_reward=0,
+        predict_done_actions=False,
     ):
         super().__init__(env)
-        for (cam_name, cam_w, cam_h, cam_d) in zip(
-            self.camera_names,
-            self.camera_widths,
-            self.camera_heights,
-            self.camera_depths,
-            # self.camera_segmentations,
-        ):
-
-            # Add cameras associated to our arrays
-            cam_sensors, cam_sensor_names = self._create_camera_sensors(
-                cam_name,
-                cam_w=cam_w,
-                cam_h=cam_h,
-                cam_d=cam_d,
-                # cam_segs=cam_segs,
-                modality="image",
-            )
-            self.cam_sensor = cam_sensors
+        self.add_cameras()
         self.num_steps = 0
         self.vertical_displacement = vertical_displacement
         self.teleport_position = teleport_position
@@ -606,6 +501,35 @@ class MPEnv(ProxyEnv):
         self.backtrack_movement_fraction = backtrack_movement_fraction
         self.randomize_init_target_pos = randomize_init_target_pos
         self.teleport_on_grasp = teleport_on_grasp
+        self.slack_reward = slack_reward
+        self.predict_done_actions = predict_done_actions
+
+    @property
+    def action_space(self):
+        if self.predict_done_actions:
+            return spaces.Box(
+                np.concatenate((self._wrapped_env.action_space.low, [-1])),
+                np.concatenate((self._wrapped_env.action_space.high, [1])),
+            )
+        else:
+            return self._wrapped_env.action_space
+
+    def add_cameras(self):
+        for (cam_name, cam_w, cam_h, cam_d) in zip(
+            self.camera_names,
+            self.camera_widths,
+            self.camera_heights,
+            self.camera_depths,
+        ):
+            # Add cameras associated to our arrays
+            cam_sensors, _ = self._create_camera_sensors(
+                cam_name,
+                cam_w=cam_w,
+                cam_h=cam_h,
+                cam_d=cam_d,
+                modality="image",
+            )
+            self.cam_sensor = cam_sensors
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -632,7 +556,6 @@ class MPEnv(ProxyEnv):
             stop_sampling_target_pos = False
             xquat = self._eef_xquat
             while not stop_sampling_target_pos:
-                # TODO: re-write this to say if the object is in collision, re-sample the initial pose
                 random_perturbation = np.random.normal(0, 1, 3)
                 random_perturbation[2] = np.abs(random_perturbation[2])
                 random_perturbation /= np.linalg.norm(random_perturbation)
@@ -868,6 +791,9 @@ class MPEnv(ProxyEnv):
             i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves
             i["goal_error"] = self.goal_error
+        r += self.slack_reward
+        if self.predict_done_actions:
+            d = action[-1] > 0
         return o, r, d, i
 
 
