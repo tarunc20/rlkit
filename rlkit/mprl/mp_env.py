@@ -798,7 +798,8 @@ class MPEnv(ProxyEnv):
 
 
 class RobosuiteEnv(ProxyEnv):
-    def __init__(self, env):
+    def __init__(self, env, slack_reward=0,
+        predict_done_actions=False,terminate_on_success=False):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
             self.camera_names,
@@ -817,6 +818,19 @@ class RobosuiteEnv(ProxyEnv):
             )
             self.cam_sensor = cam_sensors
         self.num_steps = 0
+        self.slack_reward = slack_reward
+        self.predict_done_actions = predict_done_actions
+        self.terminate_on_success = terminate_on_success
+
+    @property
+    def action_space(self):
+        if self.predict_done_actions:
+            return spaces.Box(
+                np.concatenate((self._wrapped_env.action_space.low, [-1])),
+                np.concatenate((self._wrapped_env.action_space.high, [1])),
+            )
+        else:
+            return self._wrapped_env.action_space
 
     def get_image(self):
         im = self.cam_sensor[0](None)
@@ -848,4 +862,9 @@ class RobosuiteEnv(ProxyEnv):
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
+        r += self.slack_reward
+        if self.predict_done_actions:
+            d = action[-1] > 0
+        if self.terminate_on_success:
+            d = float(self._check_success())
         return o, r, d, i

@@ -31,6 +31,11 @@ if __name__ == "__main__":
             num_train_loops_per_epoch=10,
             max_path_length=500,
         ),
+        robosuite_env_kwargs=dict(
+            slack_reward=0,
+            predict_done_actions=False,
+            terminate_on_success=False,
+        ),
         eval_environment_kwargs=dict(
             robots="Panda",
             reward_shaping=True,

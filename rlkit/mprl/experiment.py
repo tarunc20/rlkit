@@ -337,14 +337,14 @@ def experiment(variant):
             use_camera_obs=False,
         )
         if variant.get("mprl", False):
-            mp_env_kwargs = variant.get("mp_env_kwargs").copy()
-            mp_env_kwargs["teleport_on_grasp"] = True
+            # mp_env_kwargs = variant.get("mp_env_kwargs").copy()
+            # mp_env_kwargs["teleport_on_grasp"] = True
             expl_env = MPEnv(
                 GymWrapper(expl_env),
                 **variant.get("mp_env_kwargs"),
             )
         else:
-            expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)))
+            expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)), **variant.get('robosuite_env_kwargs'))
         return expl_env
 
     def make_env_eval():
@@ -365,7 +365,7 @@ def experiment(variant):
                 **variant.get("mp_env_kwargs"),
             )
         else:
-            eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)))
+            eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)), **variant.get('robosuite_env_kwargs'))
         return eval_env
 
     num_expl_envs = variant.get("num_expl_envs", 1)
