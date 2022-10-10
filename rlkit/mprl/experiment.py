@@ -14,7 +14,7 @@ def preprocess_variant(variant):
     return variant
 
 
-def teleport_video_func(algorithm, epoch):
+def video_func(algorithm, epoch):
     import copy
     import os
     import pickle
@@ -59,7 +59,7 @@ def teleport_video_func(algorithm, epoch):
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
 
 
-def video_func(algorithm, epoch):
+def mp_video_func(algorithm, epoch):
     import copy
     import os
     import pickle
@@ -188,7 +188,7 @@ def video_func(algorithm, epoch):
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
 
 
-def video_func_v4(algorithm, epoch):
+def mp_video_func_v4(algorithm, epoch):
     import copy
     import os
     import pickle
@@ -510,22 +510,24 @@ def experiment(variant):
         algorithm.eval_data_collector._policy = policy
         if variant.get("mp_env_kwargs", None):
             if variant["mp_env_kwargs"]["teleport_position"]:
-                func = teleport_video_func
+                func = video_func
             else:
                 if variant["plan_to_learned_goals"]:
-                    func = video_func_v4
+                    func = mp_video_func_v4
                 else:
-                    func = video_func
+                    func = mp_video_func
             func(algorithm, -1)
     else:
         if variant.get("mp_env_kwargs", None):
             if variant["mp_env_kwargs"]["teleport_position"]:
-                func = teleport_video_func
+                func = video_func
             else:
                 if variant["plan_to_learned_goals"]:
-                    func = video_func_v4
+                    func = mp_video_func_v4
                 else:
-                    func = video_func
-            func(algorithm, -1)
-            algorithm.post_epoch_funcs.append(func)
+                    func = mp_video_func
+        else:
+            func = video_func
+        func(algorithm, -1)
+        algorithm.post_epoch_funcs.append(func)
         algorithm.train()
