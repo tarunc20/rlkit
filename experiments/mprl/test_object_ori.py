@@ -1,6 +1,12 @@
 import time
+
 import cv2
 import numpy as np
+import robosuite as suite
+from robosuite.controllers import controller_factory
+from robosuite.controllers.controller_factory import load_controller_config
+from robosuite.wrappers.gym_wrapper import GymWrapper
+
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
 from rlkit.mprl.mp_env import (
     MPEnv,
@@ -8,10 +14,6 @@ from rlkit.mprl.mp_env import (
     set_robot_based_on_ee_pos,
     update_controller_config,
 )
-from robosuite.controllers import controller_factory
-from robosuite.controllers.controller_factory import load_controller_config
-from robosuite.wrappers.gym_wrapper import GymWrapper
-import robosuite as suite
 
 if __name__ == "__main__":
     environment_kwargs = {

@@ -60,8 +60,6 @@ def teleport_video_func(algorithm, epoch):
 
 
 def video_func(algorithm, epoch):
-    from rlkit.torch.model_based.dreamer.visualization import add_text
-
     import copy
     import os
     import pickle
@@ -69,7 +67,7 @@ def video_func(algorithm, epoch):
     import numpy as np
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.visualization import make_video
+    from rlkit.torch.model_based.dreamer.visualization import add_text, make_video
 
     if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         policy = algorithm.eval_data_collector._policy
@@ -191,7 +189,6 @@ def video_func(algorithm, epoch):
 
 
 def video_func_v4(algorithm, epoch):
-    from rlkit.torch.model_based.dreamer.visualization import add_text
     import copy
     import os
     import pickle
@@ -199,7 +196,7 @@ def video_func_v4(algorithm, epoch):
     import numpy as np
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.visualization import make_video
+    from rlkit.torch.model_based.dreamer.visualization import add_text, make_video
 
     if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         planner, policy = algorithm.eval_data_collector._policy
@@ -310,21 +307,19 @@ def load_policy(path):
 
 
 def experiment(variant):
-    from rlkit.samplers.rollout_functions import vec_rollout
-
-    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
-        DummyVecEnv,
-        StableBaselinesVecEnv,
-    )
-    from rlkit.samplers.rollout_functions import rollout_modular
     import robosuite as suite
     from robosuite.wrappers import GymWrapper
 
     import rlkit.torch.pytorch_util as ptu
     from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
     from rlkit.envs.wrappers import NormalizedBoxEnv
+    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
+        DummyVecEnv,
+        StableBaselinesVecEnv,
+    )
     from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
     from rlkit.samplers.data_collector import MdpPathCollector
+    from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.networks.mlp import ConcatMlp
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
@@ -342,6 +337,8 @@ def experiment(variant):
             use_camera_obs=False,
         )
         if variant.get("mprl", False):
+            mp_env_kwargs = variant.get("mp_env_kwargs").copy()
+            mp_env_kwargs["teleport_on_grasp"] = True
             expl_env = MPEnv(
                 GymWrapper(expl_env),
                 **variant.get("mp_env_kwargs"),

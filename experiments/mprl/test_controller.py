@@ -1,11 +1,12 @@
 import cv2
 import numpy as np
-from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.mprl.mp_env import MPEnv, mp_to_point
+import robosuite as suite
 from robosuite.controllers.controller_factory import load_controller_config
 from robosuite.wrappers.gym_wrapper import GymWrapper
-import robosuite as suite
+
 from rlkit.core import logger
+from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
+from rlkit.mprl.mp_env import MPEnv, mp_to_point
 
 if __name__ == "__main__":
     environment_kwargs = {

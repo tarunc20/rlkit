@@ -1,5 +1,16 @@
+import pickle
+
 import cv2
 import numpy as np
+import robosuite as suite
+import torch
+from robosuite.controllers import controller_factory
+from robosuite.controllers.controller_factory import load_controller_config
+from robosuite.utils.transform_utils import *
+from robosuite.wrappers.gym_wrapper import GymWrapper
+from tqdm import tqdm
+
+import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
 from rlkit.mprl.mp_env import (
     MPEnv,
@@ -7,16 +18,8 @@ from rlkit.mprl.mp_env import (
     set_robot_based_on_ee_pos,
     update_controller_config,
 )
-from robosuite.controllers import controller_factory
-from robosuite.controllers.controller_factory import load_controller_config
-from robosuite.wrappers.gym_wrapper import GymWrapper
-import robosuite as suite
-from tqdm import tqdm
-import pickle
-import rlkit.torch.pytorch_util as ptu
-import torch
-from robosuite.utils.transform_utils import *
 from rlkit.torch.sac.policies import MakeDeterministic
+
 
 def open_gripper(env):
     for i in range(30):

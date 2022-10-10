@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from rlkit.torch.model_based.dreamer.visualization import add_text
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
@@ -10,13 +9,15 @@ from robosuite.utils.transform_utils import (
     quat_conjugate,
     quat_multiply,
 )
+
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
+from rlkit.torch.model_based.dreamer.visualization import add_text
 
 try:
     from ompl import base as ob
-    from ompl import util as ou
     from ompl import geometric as og
+    from ompl import util as ou
 except ImportError:
     # if the ompl module is not in the PYTHONPATH assume it is installed in a
     # subdirectory of the parent directory called "py-bindings."
@@ -25,8 +26,8 @@ except ImportError:
 
     sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
     from ompl import base as ob
-    from ompl import util as ou
     from ompl import geometric as og
+    from ompl import util as ou
 
 
 def set_robot_based_on_ee_pos(
