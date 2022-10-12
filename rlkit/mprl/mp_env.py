@@ -821,16 +821,11 @@ class RobosuiteEnv(ProxyEnv):
         self.slack_reward = slack_reward
         self.predict_done_actions = predict_done_actions
         self.terminate_on_success = terminate_on_success
-
-    @property
-    def action_space(self):
         if self.predict_done_actions:
             return spaces.Box(
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
-        else:
-            return self._wrapped_env.action_space
 
     def get_image(self):
         im = self.cam_sensor[0](None)
