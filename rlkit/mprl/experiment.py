@@ -2,11 +2,14 @@ import os
 import pickle
 
 
-def preprocess_variant(variant):
+def preprocess_variant_mp(variant):
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
     variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
+    variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
+        50 * variant["max_path_length"]
+    )
     if variant["plan_to_learned_goals"]:
         variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
             "planner_num_trains_per_train_loop"
@@ -24,7 +27,7 @@ def video_func(algorithm, epoch):
     from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.visualization import make_video
 
-    if epoch % 100 == 0 or epoch == -1 and epoch != 0:
+    if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         policy = algorithm.eval_data_collector._policy
         max_path_length = algorithm.max_path_length
         env = algorithm.eval_env.envs[0]
@@ -337,14 +340,15 @@ def experiment(variant):
             use_camera_obs=False,
         )
         if variant.get("mprl", False):
-            # mp_env_kwargs = variant.get("mp_env_kwargs").copy()
-            # mp_env_kwargs["teleport_on_grasp"] = True
             expl_env = MPEnv(
                 GymWrapper(expl_env),
                 **variant.get("mp_env_kwargs"),
             )
         else:
-            expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)), **variant.get('robosuite_env_kwargs'))
+            expl_env = RobosuiteEnv(
+                NormalizedBoxEnv(GymWrapper(expl_env)),
+                **variant.get("robosuite_env_kwargs"),
+            )
         return expl_env
 
     def make_env_eval():
@@ -358,14 +362,15 @@ def experiment(variant):
             camera_widths=1024,
         )
         if variant.get("mprl", False):
-            mp_env_kwargs = variant.get("mp_env_kwargs").copy()
-            mp_env_kwargs["teleport_on_grasp"] = True
             eval_env = MPEnv(
                 GymWrapper(eval_env),
                 **variant.get("mp_env_kwargs"),
             )
         else:
-            eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)), **variant.get('robosuite_env_kwargs'))
+            eval_env = RobosuiteEnv(
+                NormalizedBoxEnv(GymWrapper(eval_env)),
+                **variant.get("robosuite_env_kwargs"),
+            )
         return eval_env
 
     num_expl_envs = variant.get("num_expl_envs", 1)
