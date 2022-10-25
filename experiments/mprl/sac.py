@@ -24,6 +24,9 @@ def preprocess_variant(variant):
     variant["eval_environment_kwargs"]["dist_reduced_reward_scale"] = variant[
         "dist_reduced_reward_scale"
     ]
+    variant["eval_environment_kwargs"]["first_grasp_reward"] = variant[
+        "first_grasp_reward"
+    ]
 
     variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["expl_environment_kwargs"][
@@ -34,6 +37,9 @@ def preprocess_variant(variant):
     ]
     variant["expl_environment_kwargs"]["dist_reduced_reward_scale"] = variant[
         "dist_reduced_reward_scale"
+    ]
+    variant["expl_environment_kwargs"]["first_grasp_reward"] = variant[
+        "first_grasp_reward"
     ]
 
     return variant
@@ -47,6 +53,7 @@ if __name__ == "__main__":
         use_distance_reduced_to_object_reward=True,
         use_min_prev_distance=False,
         dist_reduced_reward_scale=225,
+        first_grasp_reward=False,
         algorithm_kwargs=dict(
             batch_size=128,
             min_num_steps_before_training=3300,
