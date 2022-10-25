@@ -872,4 +872,6 @@ class RobosuiteEnv(ProxyEnv):
             d = old_action[-1] > 0
         if self.terminate_on_success:
             d = float(self._check_success())
+        if self.num_steps == self.horizon:
+            d = True
         return o, r, d, i
