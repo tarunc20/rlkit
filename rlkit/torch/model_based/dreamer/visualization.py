@@ -2,6 +2,7 @@ import os
 import os.path as osp
 
 import cv2
+import imageio
 import numpy as np
 import torch
 
@@ -393,17 +394,11 @@ def visualize_primitive_unsubsampled_rollout(
 
 
 def make_video(frames, logdir, epoch):
-    height, width, _ = frames[0].shape
-    size = (width, height)
-
-    out = cv2.VideoWriter(
-        logdir + "/" + f"viz_{epoch}.avi", cv2.VideoWriter_fourcc(*"DIVX"), 60, size
-    )
-
+    video_path = logdir + "/" + f"viz_{epoch}.mp4"
+    video_writer = imageio.get_writer(video_path, fps=20)
     for frame in frames:
-        out.write(frame)
-
-    out.release()
+        video_writer.append_data(frame[:, :, ::-1])
+    video_writer.close()
 
 
 def post_epoch_visualize_func(algorithm, epoch):
