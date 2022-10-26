@@ -487,6 +487,7 @@ class MPEnv(ProxyEnv):
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
+        run_controller_to_finish_place=True,
     ):
         super().__init__(env)
         self.add_cameras()
@@ -508,6 +509,7 @@ class MPEnv(ProxyEnv):
         self.slack_reward = slack_reward
         self.predict_done_actions = predict_done_actions
         self.terminate_on_success = terminate_on_success
+        self.run_controller_to_finish_place = run_controller_to_finish_place
         if self.predict_done_actions:
             self.action_space = spaces.Box(
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
@@ -758,7 +760,7 @@ class MPEnv(ProxyEnv):
                     )
                     # teleporting the arm can break the controller
                     self.robots[0].controller.reset_goal()
-                    if self.name.endswith("PickPlaceBread"):
+                    if self.name.endswith("PickPlaceBread") and self.run_controller_to_finish_place:
                         for _ in range(30):
                             self.robots[
                                 0
