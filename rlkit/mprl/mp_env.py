@@ -35,7 +35,7 @@ def set_robot_based_on_ee_pos(
     env,
     target_pos,
     target_quat,
-    ctrl,
+    ik,
     qpos,
     qvel,
     gripper_qpos_in=None,
@@ -43,6 +43,11 @@ def set_robot_based_on_ee_pos(
     ee_to_object_translation=None,
     is_grasped=False,
 ):
+    """
+    Set robot joint positions based on target ee pose. Uses IK to solve for joint positions.
+    If grasping an object, ensures the object moves with the arm in a consistent way.
+    """
+    # cache quantities from prior to setting the state
     object_quat = env.sim.data.qpos[19:23]
     gripper_qpos = env.sim.data.qpos[7:9]
     gripper_qvel = env.sim.data.qvel[7:9]
@@ -52,12 +57,10 @@ def set_robot_based_on_ee_pos(
     env.sim.data.qvel[:] = qvel
     env.sim.forward()
 
-    ctrl.sync_state()
+    ik.sync_state()
     cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
     rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
-    joint_pos = ctrl.joint_positions_for_eef_command(
-        target_pos - env._eef_xpos, rot_diff
-    )
+    joint_pos = ik.joint_positions_for_eef_command(target_pos - env._eef_xpos, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
     assert (
         env.sim.data.qpos[:7] - joint_pos
@@ -483,6 +486,8 @@ class MPEnv(ProxyEnv):
         teleport_on_grasp=False,
         slack_reward=0,
         predict_done_actions=False,
+        terminate_on_success=False,
+        run_controller_to_finish_place=True,
     ):
         super().__init__(env)
         self.add_cameras()
@@ -503,16 +508,13 @@ class MPEnv(ProxyEnv):
         self.teleport_on_grasp = teleport_on_grasp
         self.slack_reward = slack_reward
         self.predict_done_actions = predict_done_actions
-
-    @property
-    def action_space(self):
+        self.terminate_on_success = terminate_on_success
+        self.run_controller_to_finish_place = run_controller_to_finish_place
         if self.predict_done_actions:
-            return spaces.Box(
+            self.action_space = spaces.Box(
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
-        else:
-            return self._wrapped_env.action_space
 
     def add_cameras(self):
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -594,6 +596,8 @@ class MPEnv(ProxyEnv):
                 ee_to_object_translation=ee_to_object_translation,
             )
             assert not self.check_grasp()  # we should not cheat!
+        # teleporting the arm can break the controller
+        self.robots[0].controller.reset_goal()
         return pos
 
     def get_observation(self):
@@ -754,7 +758,9 @@ class MPEnv(ProxyEnv):
                         ee_to_object_translation=ee_to_object_translation,
                         is_grasped=is_grasped,
                     )
-                    if self.name.endswith("PickPlaceBread"):
+                    # teleporting the arm can break the controller
+                    self.robots[0].controller.reset_goal()
+                    if self.name.endswith("PickPlaceBread") and self.run_controller_to_finish_place:
                         for _ in range(30):
                             self.robots[
                                 0
@@ -780,10 +786,6 @@ class MPEnv(ProxyEnv):
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
-                # this should ensure the manipulator prioritizes trajectories that lead to high level success over just naive grasping
-                # r += self.reward(action)
-                if self.teleport_on_grasp and self.check_grasp():
-                    d = True
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
@@ -794,12 +796,19 @@ class MPEnv(ProxyEnv):
         r += self.slack_reward
         if self.predict_done_actions:
             d = action[-1] > 0
+        if self.terminate_on_success:
+            d = float(self._check_success())
         return o, r, d, i
 
 
 class RobosuiteEnv(ProxyEnv):
-    def __init__(self, env, slack_reward=0,
-        predict_done_actions=False,terminate_on_success=False):
+    def __init__(
+        self,
+        env,
+        slack_reward=0,
+        predict_done_actions=False,
+        terminate_on_success=False,
+    ):
         super().__init__(env)
         for (cam_name, cam_w, cam_h, cam_d) in zip(
             self.camera_names,
@@ -822,7 +831,7 @@ class RobosuiteEnv(ProxyEnv):
         self.predict_done_actions = predict_done_actions
         self.terminate_on_success = terminate_on_success
         if self.predict_done_actions:
-            return spaces.Box(
+            self.action_space = spaces.Box(
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
@@ -852,6 +861,9 @@ class RobosuiteEnv(ProxyEnv):
         return is_grasped
 
     def step(self, action):
+        if self.predict_done_actions:
+            old_action = action
+            action = action[:-1]
         o, r, d, i = super().step(action)
         self.num_steps += 1
         i["success"] = float(self._check_success())
@@ -859,7 +871,9 @@ class RobosuiteEnv(ProxyEnv):
         i["num_steps"] = self.num_steps
         r += self.slack_reward
         if self.predict_done_actions:
-            d = action[-1] > 0
+            d = old_action[-1] > 0
         if self.terminate_on_success:
             d = float(self._check_success())
+        if self.num_steps == self.horizon:
+            d = True
         return o, r, d, i

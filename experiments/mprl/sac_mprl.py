@@ -1,4 +1,4 @@
-from rlkit.mprl.experiment import experiment, preprocess_variant
+from rlkit.mprl.experiment import experiment, preprocess_variant_mp
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
     setup_sweep_and_launch_exp,
@@ -110,4 +110,4 @@ if __name__ == "__main__":
         num_expl_envs=10,
         planner_num_trains_per_train_loop=1000,
     )
-    setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
+    setup_sweep_and_launch_exp(preprocess_variant_mp, variant, experiment, args)

@@ -10,8 +10,37 @@ def preprocess_variant(variant):
     variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
         50 * variant["max_path_length"]
     )
+
     variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["eval_environment_kwargs"][
+        "use_distance_reduced_to_object_reward"
+    ] = variant["use_distance_reduced_to_object_reward"]
+    variant["eval_environment_kwargs"][
+        "use_distance_reduced_to_object_reward"
+    ] = variant["use_distance_reduced_to_object_reward"]
+    variant["eval_environment_kwargs"]["use_min_prev_distance"] = variant[
+        "use_min_prev_distance"
+    ]
+    variant["eval_environment_kwargs"]["dist_reduced_reward_scale"] = variant[
+        "dist_reduced_reward_scale"
+    ]
+    variant["eval_environment_kwargs"]["first_grasp_reward"] = variant[
+        "first_grasp_reward"
+    ]
+
     variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["expl_environment_kwargs"][
+        "use_distance_reduced_to_object_reward"
+    ] = variant["use_distance_reduced_to_object_reward"]
+    variant["expl_environment_kwargs"]["use_min_prev_distance"] = variant[
+        "use_min_prev_distance"
+    ]
+    variant["expl_environment_kwargs"]["dist_reduced_reward_scale"] = variant[
+        "dist_reduced_reward_scale"
+    ]
+    variant["expl_environment_kwargs"]["first_grasp_reward"] = variant[
+        "first_grasp_reward"
+    ]
 
     return variant
 
@@ -20,11 +49,15 @@ if __name__ == "__main__":
     # noinspection PyTypeChecker
     args = get_args()
     variant = dict(
-        max_path_length=500,
+        max_path_length=250,
+        use_distance_reduced_to_object_reward=True,
+        use_min_prev_distance=False,
+        dist_reduced_reward_scale=225,
+        first_grasp_reward=False,
         algorithm_kwargs=dict(
             batch_size=128,
             min_num_steps_before_training=3300,
-            num_epochs=5000,
+            num_epochs=500,
             num_eval_steps_per_epoch=2500,
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
