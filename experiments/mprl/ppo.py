@@ -7,6 +7,7 @@ from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
     setup_sweep_and_launch_exp,
 )
 
+
 def experiment(variant):
     from a2c_ppo_acktr.main import experiment
 
@@ -86,6 +87,6 @@ if __name__ == "__main__":
         use_raw_actions=True,
         use_linear_lr_decay=False,
         env_name="RobosuiteLift",
-        env_suite="robosuite"
+        env_suite="robosuite",
     )
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

@@ -1,26 +1,16 @@
-import pickle
-
-import cv2
+from matplotlib import pyplot as plt
 import numpy as np
+from rlkit.torch.model_based.dreamer.visualization import make_video
 import robosuite as suite
 import torch
-from matplotlib import pyplot as plt
-from robosuite.controllers import controller_factory
-from robosuite.controllers.controller_factory import load_controller_config
 from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
 
 import rlkit.torch.pytorch_util as ptu
-from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
 from rlkit.mprl.mp_env import (
-    MPEnv,
     RobosuiteEnv,
-    apply_controller,
-    set_robot_based_on_ee_pos,
-    update_controller_config,
 )
-from rlkit.torch.sac.policies import MakeDeterministic
 
 if __name__ == "__main__":
     robosuite_args = dict(
@@ -29,11 +19,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="Lift",
-        horizon=50,
-        use_distance_reduced_to_object_reward=False,
-        use_min_prev_distance=False,
-        dist_reduced_reward_scale=1,
+        env_name="PickPlaceBread",
     )
     # OSC controller spec
     controller_args = dict(
@@ -57,52 +43,69 @@ if __name__ == "__main__":
     robosuite_args["controller_configs"] = controller_args
     env = suite.make(
         **robosuite_args,
-        has_renderer=False,
+        has_renderer=True,
         has_offscreen_renderer=False,
         use_camera_obs=False,
         camera_names="frontview",
         camera_heights=1024,
         camera_widths=1024,
     )
+    np.random.seed(1)
     env = RobosuiteEnv(GymWrapper(env))
     num_episodes = 1
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0
+    frames = []
+    target_pos = np.array(
+        [
+            0.2,
+            0.15,
+            env.sim.data.qpos[18] + 0.1,
+        ]
+    )
     for s in tqdm(range(num_episodes)):
         o = env.reset()
         rs = []
-        for i in range(150):
+        for i in range(300):
             a = np.concatenate(
                 (
-                    env.sim.data.body_xpos[env.cube_body_id] - env._eef_xpos,
+                    env.sim.data.qpos[16:19] + np.array([0, 0, 0.1]) - env._eef_xpos,
                     [0, 0, 0, -1],
                 )
             )
             o, r, d, info = env.step(a)
             rs.append(r)
-            # env.render()
-            cube_pos = env.sim.data.body_xpos[env.cube_body_id]
-            gripper_site_pos = env.sim.data.site_xpos[env.robots[0].eef_site_id]
-            dist = np.linalg.norm(gripper_site_pos - cube_pos)
-            print(r, dist)
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, -0.1], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     env.render()
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     # rs.append(r)
-        #     env.render()
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, .1], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     # rs.append(r)
-        #     env.render()
+            env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, 0.2], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            env.render()
+        for i in range(200):
+            a = np.concatenate((target_pos - env._eef_xpos, [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, -0.0], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            env.render()
+
         print(env._check_success())
         plt.plot(rs)
         plt.show()
         success_rate += env._check_success()
+        make_video(frames, "test", 0)
     print(f"Success Rate: {success_rate/num_episodes}")

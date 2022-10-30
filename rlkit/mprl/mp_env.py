@@ -760,7 +760,10 @@ class MPEnv(ProxyEnv):
                     )
                     # teleporting the arm can break the controller
                     self.robots[0].controller.reset_goal()
-                    if self.name.endswith("PickPlaceBread") and self.run_controller_to_finish_place:
+                    if (
+                        self.name.endswith("PickPlaceBread")
+                        and self.run_controller_to_finish_place
+                    ):
                         for _ in range(30):
                             self.robots[
                                 0
