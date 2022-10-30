@@ -1,4 +1,6 @@
 import cv2
+import io
+import xml.etree.ElementTree as ET
 import numpy as np
 from gym import spaces
 from robosuite.controllers import controller_factory
@@ -539,18 +541,12 @@ class MPEnv(ProxyEnv):
         return im
 
     def compute_ee_to_object_translation(self):
-        if self.name.endswith("Lift"):
-            return self.sim.data.body_xpos[self.cube_body_id] - self._eef_xpos
-        else:
-            return self.sim.data.qpos[16:19] - self._eef_xpos
+        return self.get_object_pos() - self._eef_xpos
 
     def get_init_target_pos(self):
         ee_to_object_translation = self.compute_ee_to_object_translation()
-        if self.name.endswith("Lift"):
-            pos = self.sim.data.body_xpos[self.cube_body_id]
-        elif self.name.endswith("PickPlaceBread"):
-            pos = self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
-            self.target_z_pos = pos[-1] + 0.1
+        pos = self.get_object_pos()
+        self.target_z_pos = pos[-1] + 0.1
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
@@ -678,7 +674,51 @@ class MPEnv(ProxyEnv):
                 gripper=self.robots[0].gripper,
                 object_geoms=self.objects[self.object_id],
             )
-        return is_grasped
+
+        if is_grasped:
+            # check if left gripper pad is left of the com of object, right gripper pad is right of the com of object
+            from rlkit.mprl import module
+
+            mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
+            with io.StringIO() as string:
+                string.write(ET.tostring(self.model.root, encoding="unicode"))
+                st = string.getvalue()
+            dm_mujoco = module.get_dm_mujoco()
+            dm_sim = dm_mujoco.Physics.from_xml_string(st)
+            model = dm_sim.model
+
+            def name2id(type_name, name):
+                obj_id = mjlib.mj_name2id(
+                    model.ptr, mjlib.mju_str2Type(type_name), name.encode()
+                )
+                if obj_id < 0:
+                    raise ValueError(
+                        'No {} with name "{}" exists.'.format(type_name, name)
+                    )
+                return obj_id
+
+            left_pos = self.sim.data.geom_xpos[
+                name2id(
+                    "geom", self.robots[0].gripper.important_geoms["left_fingerpad"][0]
+                )
+            ]
+            right_pos = self.sim.data.geom_xpos[
+                name2id(
+                    "geom", self.robots[0].gripper.important_geoms["right_fingerpad"][0]
+                )
+            ]
+            object_pos = self.get_object_pos()
+            caging_condition = (
+                left_pos[1] < object_pos[1] and right_pos[1] > object_pos[1]
+            )
+            below_com_grasp = (left_pos[-1] - object_pos[-1]) < 0 and (
+                right_pos[-1] - object_pos[-1]
+            ) < 0
+            if caging_condition and below_com_grasp:
+                return True
+            else:
+                return False
+        return False
 
     def get_target_pos(
         self,
@@ -698,6 +738,13 @@ class MPEnv(ProxyEnv):
     def clamp_planner_action_mp_space_bounds(self, action):
         action[:3] = np.clip(action[:3], self.mp_bounds_low, self.mp_bounds_high)
         return action
+
+    def get_object_pos(self):
+        if self.name.endswith("Lift"):
+            pos = self.sim.data.body_xpos[self.cube_body_id]
+        elif self.name.endswith("PickPlaceBread"):
+            pos = self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
+        return pos
 
     def step(self, action, get_intermediate_frames=False):
         if self.plan_to_learned_goals:
@@ -746,6 +793,7 @@ class MPEnv(ProxyEnv):
                     self.compute_ee_to_object_translation().copy()
                 )
                 if self.teleport_position:
+                    # cv2.imwrite("test1.png", self.get_image())
                     set_robot_based_on_ee_pos(
                         self,
                         target_pos,
@@ -753,11 +801,12 @@ class MPEnv(ProxyEnv):
                         self.ik_ctrl,
                         self.reset_qpos,
                         self.reset_qvel,
-                        gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
-                        gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
+                        # gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
+                        # gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
                         ee_to_object_translation=ee_to_object_translation,
                         is_grasped=is_grasped,
                     )
+                    # cv2.imwrite("test2.png", self.get_image())
                     # teleporting the arm can break the controller
                     self.robots[0].controller.reset_goal()
                     if (
