@@ -50,9 +50,16 @@ def set_robot_based_on_ee_pos(
     If grasping an object, ensures the object moves with the arm in a consistent way.
     """
     # cache quantities from prior to setting the state
-    object_quat = env.sim.data.qpos[19:23]
-    gripper_qpos = env.sim.data.qpos[7:9]
-    gripper_qvel = env.sim.data.qvel[7:9]
+    object_quat = env.sim.data.qpos[19:23].copy()
+    gripper_qpos = env.sim.data.qpos[7:9].copy()
+    gripper_qvel = env.sim.data.qvel[7:9].copy()
+    old_eef_xquat = env._eef_xquat.copy()
+    rot_diff_full = quat2mat(
+        quat_multiply(target_quat, quat_conjugate(old_eef_xquat))
+    ).copy()
+    ee_to_object_rotation = (
+        quat2mat(object_quat) @ np.linalg.inv(quat2mat(old_eef_xquat))
+    ).copy()
 
     # reset to canonical state before doing IK
     env.sim.data.qpos[:] = qpos
@@ -78,7 +85,11 @@ def set_robot_based_on_ee_pos(
             env.sim.data.qpos[9:12] = env._eef_xpos + ee_to_object_translation
         elif env.name.endswith("PickPlaceBread"):
             env.sim.data.qpos[16:19] = env._eef_xpos + ee_to_object_translation
-            env.sim.data.qpos[19:23] = quat_multiply(mat2quat(rot_diff), object_quat)
+            env.sim.data.qpos[19:23] = quat_multiply(
+                mat2quat(rot_diff_full), object_quat
+            )
+            # env.sim.data.qpos[19:23] = mat2quat(ee_to_object_rotation @ quat2mat(env._eef_xquat))
+            # env.sim.data.qpos[19:23] = object_quat
         env.sim.forward()
 
 
@@ -517,6 +528,15 @@ class MPEnv(ProxyEnv):
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
+        from rlkit.mprl import module
+
+        self.mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
+        with io.StringIO() as string:
+            string.write(ET.tostring(self.model.root, encoding="unicode"))
+            st = string.getvalue()
+        self.dm_mujoco = module.get_dm_mujoco()
+        self.dm_sim = self.dm_mujoco.Physics.from_xml_string(st)
+        self.model = self.dm_sim.model
 
     def add_cameras(self):
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -661,6 +681,7 @@ class MPEnv(ProxyEnv):
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
                 obs = self._flatten_obs(obs)
+        self.hasnt_teleported = True
         return obs
 
     def check_grasp(self):
@@ -677,19 +698,10 @@ class MPEnv(ProxyEnv):
 
         if is_grasped:
             # check if left gripper pad is left of the com of object, right gripper pad is right of the com of object
-            from rlkit.mprl import module
-
-            mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
-            with io.StringIO() as string:
-                string.write(ET.tostring(self.model.root, encoding="unicode"))
-                st = string.getvalue()
-            dm_mujoco = module.get_dm_mujoco()
-            dm_sim = dm_mujoco.Physics.from_xml_string(st)
-            model = dm_sim.model
 
             def name2id(type_name, name):
-                obj_id = mjlib.mj_name2id(
-                    model.ptr, mjlib.mju_str2Type(type_name), name.encode()
+                obj_id = self.mjlib.mj_name2id(
+                    self.model.ptr, self.mjlib.mju_str2Type(type_name), name.encode()
                 )
                 if obj_id < 0:
                     raise ValueError(
@@ -784,10 +796,10 @@ class MPEnv(ProxyEnv):
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
-            if self.ep_step_ctr == self.horizon or (
-                self.teleport_on_grasp and self.check_grasp()
+            is_grasped = self.check_grasp()
+            if (self.ep_step_ctr == self.horizon and is_grasped) or (
+                self.teleport_on_grasp and is_grasped and self.hasnt_teleported
             ):
-                is_grasped = self.check_grasp()
                 target_pos = self.get_target_pos()
                 ee_to_object_translation = (
                     self.compute_ee_to_object_translation().copy()
@@ -824,6 +836,7 @@ class MPEnv(ProxyEnv):
                             print("FAILED TO DROP THE CUBE")
                             print()
                             print()
+                    self.hasnt_teleported = False
                 else:
                     mp_to_point(
                         self,
