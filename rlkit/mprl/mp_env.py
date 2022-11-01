@@ -805,7 +805,6 @@ class MPEnv(ProxyEnv):
                     self.compute_ee_to_object_translation().copy()
                 )
                 if self.teleport_position:
-                    # cv2.imwrite("test1.png", self.get_image())
                     set_robot_based_on_ee_pos(
                         self,
                         target_pos,
@@ -813,12 +812,11 @@ class MPEnv(ProxyEnv):
                         self.ik_ctrl,
                         self.reset_qpos,
                         self.reset_qvel,
-                        # gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
-                        # gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
+                        gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
+                        gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
                         ee_to_object_translation=ee_to_object_translation,
                         is_grasped=is_grasped,
                     )
-                    # cv2.imwrite("test2.png", self.get_image())
                     # teleporting the arm can break the controller
                     self.robots[0].controller.reset_goal()
                     if (
