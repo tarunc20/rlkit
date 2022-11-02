@@ -34,55 +34,85 @@ except ImportError:
 
 
 def get_object_pose(env):
-    if env.name.endswith("Lift"):
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
         object_pos = env.sim.data.qpos[9:12].copy()
         object_quat = env.sim.data.qpos[12:16].copy()
-    elif env.name.endswith("PickPlaceBread"):
+    elif name.startswith("PickPlaceMilk"):
+        object_pos = env.sim.data.qpos[9:12].copy()
+        object_quat = env.sim.data.qpos[12:16].copy()
+    elif name.startswith("PickPlaceBread"):
         object_pos = env.sim.data.qpos[16:19].copy()
         object_quat = env.sim.data.qpos[19:23].copy()
+    elif name.startswith("PickPlaceCereal"):
+        object_pos = env.sim.data.qpos[23:26].copy()
+        object_quat = env.sim.data.qpos[26:30].copy()
+    elif name.startswith("PickPlaceCan"):
+        object_pos = env.sim.data.qpos[30:33].copy()
+        object_quat = env.sim.data.qpos[33:37].copy()
+
     else:
         raise NotImplementedError()
     return np.concatenate((object_pos, object_quat))
 
 
 def set_object_pose(env, object_pos, object_quat):
-    if env.name.endswith("Lift"):
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
         env.sim.data.qpos[9:12] = object_pos
         env.sim.data.qpos[12:16] = object_quat
-    elif env.name.endswith("PickPlaceBread"):
+    elif name.startswith("PickPlaceBread"):
         env.sim.data.qpos[16:19] = object_pos
         env.sim.data.qpos[19:23] = object_quat
+    elif name.startswith("PickPlaceMilk"):
+        env.sim.data.qpos[9:12] = object_pos
+        env.sim.data.qpos[12:16] = object_quat
+    elif name.startswith("PickPlaceCereal"):
+        env.sim.data.qpos[23:26] = object_pos
+        env.sim.data.qpos[26:30] = object_quat
+    elif name.startswith("PickPlaceCan"):
+        env.sim.data.qpos[30:33] = object_pos
+        env.sim.data.qpos[33:37] = object_quat
     else:
         raise NotImplementedError()
 
 
 def get_object_string(env):
-    if env.name.endswith("Lift"):
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
         obj_string = "cube"
-    elif env.name.endswith("PickPlaceBread"):
-        obj_string = "Bread"
+    elif name.startswith("PickPlace"):
+        if name.endswith("Bread"):
+            obj_string = "Bread"
+        elif name.endswith("Can"):
+            obj_string = "Can"
+        elif name.endswith("Milk"):
+            obj_string = "Milk"
+        elif name.endswith("Cereal"):
+            obj_string = "Cereal"
     else:
         raise NotImplementedError()
     return obj_string
 
 
 def check_object_grasp(env):
-    if env.name.endswith("Lift"):
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
             object_geoms=env.cube,
         )
-    elif env.name.endswith("PickPlaceBread"):
+    elif name.startswith("PickPlace"):
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
             object_geoms=env.objects[env.object_id],
         )
-    elif env.name.endswith("NutAssemblySquare"):
+    elif name.endswith("NutAssemblySquare"):
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
             object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
         )
-    elif env.name.endswith("NutAssemblyRound"):
+    elif name.endswith("NutAssemblyRound"):
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
             object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
@@ -753,8 +783,7 @@ class MPEnv(RobosuiteEnv):
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
-        pos = get_object_pose(self)[:3]
-        self.target_z_pos = pos[-1] + 0.1
+        self.initial_object_pos = get_object_pose(self)[:3]
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
@@ -830,7 +859,15 @@ class MPEnv(RobosuiteEnv):
                 [
                     0.2,
                     0.15,
-                    self.target_z_pos,
+                    self.initial_object_pos[-1] + 0.1,
+                ]
+            )
+        elif self.name.endswith("PickPlaceCan"):
+            pose = np.array(
+                [
+                    0.2,
+                    0.4,
+                    self.initial_object_pos[-1] + 0.2,
                 ]
             )
         return pose
