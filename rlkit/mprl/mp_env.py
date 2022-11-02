@@ -1,3 +1,4 @@
+import copy
 import cv2
 import io
 import xml.etree.ElementTree as ET
@@ -133,6 +134,7 @@ def set_robot_based_on_ee_pos(
     gripper_qvel_in=None,
     ee_to_object_translation=None,
     is_grasped=False,
+    default_controller_args=None,
 ):
     """
     Set robot joint positions based on target ee pose. Uses IK to solve for joint positions.
@@ -176,6 +178,14 @@ def set_robot_based_on_ee_pos(
         )
         set_object_pose(env, new_object_pose[:3], new_object_pose[3:])
         env.sim.forward()
+
+    # teleporting the arm breaks the controller -> rebuilt it entirely
+    new_args = copy.deepcopy(default_controller_args)
+    update_controller_config(env, new_args)
+    osc_ctrl = controller_factory("OSC_POSE", new_args)
+    osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
+    osc_ctrl.reset_goal()
+    env.robots[0].controller = osc_ctrl
 
 
 def check_robot_string(string):
@@ -659,6 +669,7 @@ class MPEnv(RobosuiteEnv):
         run_controller_to_finish_place=False,
         check_com_grasp=False,
         recompute_reward_post_teleport=False,
+        controller_args=None,
     ):
         super().__init__(
             env,
@@ -693,6 +704,7 @@ class MPEnv(RobosuiteEnv):
         self.model = self.dm_sim.model
         self.check_com_grasp = check_com_grasp
         self.recompute_reward_post_teleport = recompute_reward_post_teleport
+        self.controller_args = controller_args
 
     def compute_ee_to_object_translation(self):
         return get_object_pose(self)[:3] - self._eef_xpos
@@ -743,6 +755,9 @@ class MPEnv(RobosuiteEnv):
                 qpos,
                 qvel,
                 ee_to_object_translation=ee_to_object_translation,
+                gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
+                gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
+                default_controller_args=self.controller_args,
             )
         # teleporting the arm can break the controller
         self.robots[0].controller.reset_goal()
@@ -783,7 +798,7 @@ class MPEnv(RobosuiteEnv):
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
-        self.initial_object_pos = get_object_pose(self)[:3]
+        self.initial_object_pos = get_object_pose(self)[:3].copy()
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
@@ -847,6 +862,8 @@ class MPEnv(RobosuiteEnv):
                 return True
             else:
                 return False
+        elif is_grasped and not self.check_com_grasp:
+            return True
         return False
 
     def get_target_pos(
@@ -867,7 +884,7 @@ class MPEnv(RobosuiteEnv):
                 [
                     0.2,
                     0.4,
-                    self.initial_object_pos[-1] + 0.2,
+                    self.initial_object_pos[-1] + 0.1,
                 ]
             )
         return pose
@@ -936,9 +953,8 @@ class MPEnv(RobosuiteEnv):
                         gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
                         ee_to_object_translation=ee_to_object_translation,
                         is_grasped=is_grasped,
+                        default_controller_args=self.controller_args,
                     )
-                    # teleporting the arm can break the controller
-                    self.robots[0].controller.reset_goal()
                     self.hasnt_teleported = False
                 else:
                     mp_to_point(
