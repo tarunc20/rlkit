@@ -12,7 +12,7 @@ from rlkit.torch.model_based.dreamer.visualization import make_video
 
 if __name__ == "__main__":
     mp_env_kwargs = dict(
-        vertical_displacement=0.08,
+        vertical_displacement=0.04,
         teleport_position=True,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
@@ -23,7 +23,8 @@ if __name__ == "__main__":
         grip_ctrl_scale=0.0025,
         planning_time=20,
         teleport_on_grasp=True,
-        terminate_on_success=True,
+        check_com_grasp=True,
+        terminate_on_success=False,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -99,10 +100,10 @@ if __name__ == "__main__":
             o, r, d, info = env.step(a)
             rs.append(r)
             env.render()
-            if d:
-                break
-        if d:
-            continue
+        #     if d:
+        #         break
+        # if d:
+        #     continue
         # for i in range(50):
         #     a = np.concatenate(([0, 0, 0.2], [0, 0, 0, 1]))
         #     o, r, d, info = env.step(a)

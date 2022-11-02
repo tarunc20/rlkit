@@ -33,6 +33,55 @@ except ImportError:
     from ompl import util as ou
 
 
+def get_object_pose(env):
+    if env.name.endswith("Lift"):
+        object_pos = env.sim.data.qpos[9:12].copy()
+        object_quat = env.sim.data.qpos[12:16].copy()
+    elif env.name.endswith("PickPlaceBread"):
+        object_pos = env.sim.data.qpos[16:19].copy()
+        object_quat = env.sim.data.qpos[19:23].copy()
+    else:
+        raise NotImplementedError()
+    return np.concatenate((object_pos, object_quat))
+
+
+def set_object_pose(env, object_pos, object_quat):
+    if env.name.endswith("Lift"):
+        env.sim.data.qpos[9:12] = object_pos
+        env.sim.data.qpos[12:16] = object_quat
+    elif env.name.endswith("PickPlaceBread"):
+        env.sim.data.qpos[16:19] = object_pos
+        env.sim.data.qpos[19:23] = object_quat
+    else:
+        raise NotImplementedError()
+
+
+def get_object_string(env):
+    if env.name.endswith("Lift"):
+        obj_string = "cube"
+    elif env.name.endswith("PickPlaceBread"):
+        obj_string = "Bread"
+    else:
+        raise NotImplementedError()
+    return obj_string
+
+
+def check_object_grasp(env):
+    if env.name.endswith("Lift"):
+        is_grasped = env._check_grasp(
+            gripper=env.robots[0].gripper,
+            object_geoms=env.cube,
+        )
+    elif env.name.endswith("PickPlaceBread"):
+        is_grasped = env._check_grasp(
+            gripper=env.robots[0].gripper,
+            object_geoms=env.objects[env.object_id],
+        )
+    else:
+        raise NotImplementedError()
+    return is_grasped
+
+
 def set_robot_based_on_ee_pos(
     env,
     target_pos,
@@ -50,15 +99,12 @@ def set_robot_based_on_ee_pos(
     If grasping an object, ensures the object moves with the arm in a consistent way.
     """
     # cache quantities from prior to setting the state
-    object_quat = env.sim.data.qpos[19:23].copy()
+    object_pose = get_object_pose(env).copy()
     gripper_qpos = env.sim.data.qpos[7:9].copy()
     gripper_qvel = env.sim.data.qvel[7:9].copy()
     old_eef_xquat = env._eef_xquat.copy()
     rot_diff_full = quat2mat(
         quat_multiply(target_quat, quat_conjugate(old_eef_xquat))
-    ).copy()
-    ee_to_object_rotation = (
-        quat2mat(object_quat) @ np.linalg.inv(quat2mat(old_eef_xquat))
     ).copy()
 
     # reset to canonical state before doing IK
@@ -81,15 +127,14 @@ def set_robot_based_on_ee_pos(
             env.sim.data.qpos[7:9] = gripper_qpos_in
         if gripper_qvel_in is not None:
             env.sim.data.qvel[7:9] = gripper_qvel_in
-        if env.name.endswith("Lift"):
-            env.sim.data.qpos[9:12] = env._eef_xpos + ee_to_object_translation
-        elif env.name.endswith("PickPlaceBread"):
-            env.sim.data.qpos[16:19] = env._eef_xpos + ee_to_object_translation
-            env.sim.data.qpos[19:23] = quat_multiply(
-                mat2quat(rot_diff_full), object_quat
+
+        new_object_pose = np.concatenate(
+            (
+                env._eef_xpos + ee_to_object_translation,
+                quat_multiply(mat2quat(rot_diff_full), object_pose[3:]),
             )
-            # env.sim.data.qpos[19:23] = mat2quat(ee_to_object_rotation @ quat2mat(env._eef_xquat))
-            # env.sim.data.qpos[19:23] = object_quat
+        )
+        set_object_pose(env, new_object_pose[:3], new_object_pose[3:])
         env.sim.forward()
 
 
@@ -106,10 +151,7 @@ def check_string(string, other_string):
 
 
 def check_robot_collision(env, ignore_object_collision):
-    if env.name.endswith("Lift"):
-        obj_string = "cube"
-    elif env.name.endswith("PickPlaceBread"):
-        obj_string = "Bread"
+    obj_string = get_object_string(env)
     d = env.sim.data
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
@@ -479,64 +521,29 @@ def mp_to_point(
     return env._get_observations()
 
 
-class MPEnv(ProxyEnv):
+class RobosuiteEnv(ProxyEnv):
     def __init__(
         self,
         env,
-        vertical_displacement=0.03,
-        teleport_position=True,
-        planning_time=1,
-        plan_to_learned_goals=False,
-        execute_hardcoded_policy_to_goal=False,
-        learn_residual=False,
-        mp_bounds_low=None,
-        mp_bounds_high=None,
-        update_with_true_state=False,
-        grip_ctrl_scale=1,
-        clamp_actions=False,
-        backtrack_movement_fraction=0.001,
-        randomize_init_target_pos=False,
-        teleport_on_grasp=False,
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
-        run_controller_to_finish_place=True,
     ):
         super().__init__(env)
         self.add_cameras()
         self.num_steps = 0
-        self.vertical_displacement = vertical_displacement
-        self.teleport_position = teleport_position
-        self.planning_time = planning_time
-        self.plan_to_learned_goals = plan_to_learned_goals
-        self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
-        self.learn_residual = learn_residual
-        self.mp_bounds_low = mp_bounds_low
-        self.mp_bounds_high = mp_bounds_high
-        self.update_with_true_state = update_with_true_state
-        self.grip_ctrl_scale = grip_ctrl_scale
-        self.clamp_actions = clamp_actions
-        self.backtrack_movement_fraction = backtrack_movement_fraction
-        self.randomize_init_target_pos = randomize_init_target_pos
-        self.teleport_on_grasp = teleport_on_grasp
         self.slack_reward = slack_reward
         self.predict_done_actions = predict_done_actions
         self.terminate_on_success = terminate_on_success
-        self.run_controller_to_finish_place = run_controller_to_finish_place
         if self.predict_done_actions:
             self.action_space = spaces.Box(
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
-        from rlkit.mprl import module
 
-        self.mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
-        with io.StringIO() as string:
-            string.write(ET.tostring(self.model.root, encoding="unicode"))
-            st = string.getvalue()
-        self.dm_mujoco = module.get_dm_mujoco()
-        self.dm_sim = self.dm_mujoco.Physics.from_xml_string(st)
-        self.model = self.dm_sim.model
+    def get_observation(self):
+        di = self._wrapped_env._get_observations(force_update=True)
+        return self._wrapped_env._flatten_obs(di)
 
     def add_cameras(self):
         for (cam_name, cam_w, cam_h, cam_d) in zip(
@@ -560,13 +567,99 @@ class MPEnv(ProxyEnv):
         im = cv2.flip(im[:, :, ::-1], 0)
         return im
 
+    def reset(self, **kwargs):
+        self.num_steps = 0
+        return super().reset(**kwargs)
+
+    def check_grasp(
+        self,
+    ):
+        return check_object_grasp(self)
+
+    def step(self, action):
+        if self.predict_done_actions:
+            old_action = action
+            action = action[:-1]
+        o, r, d, i = super().step(action)
+        self.num_steps += 1
+        i["success"] = float(self._check_success())
+        i["grasped"] = float(self.check_grasp())
+        i["num_steps"] = self.num_steps
+        r += self.slack_reward
+        if self.predict_done_actions:
+            d = old_action[-1] > 0
+        if self.terminate_on_success:
+            d = float(self._check_success())
+        if self.num_steps == self.horizon:
+            d = True
+        return o, r, d, i
+
+
+class MPEnv(RobosuiteEnv):
+    def __init__(
+        self,
+        env,
+        vertical_displacement=0.03,
+        teleport_position=True,
+        planning_time=1,
+        plan_to_learned_goals=False,
+        execute_hardcoded_policy_to_goal=False,
+        learn_residual=False,
+        mp_bounds_low=None,
+        mp_bounds_high=None,
+        update_with_true_state=False,
+        grip_ctrl_scale=1,
+        clamp_actions=False,
+        backtrack_movement_fraction=0.001,
+        randomize_init_target_pos=False,
+        teleport_on_grasp=False,
+        slack_reward=0,
+        predict_done_actions=False,
+        terminate_on_success=False,
+        run_controller_to_finish_place=False,
+        check_com_grasp=False,
+        recompute_reward_post_teleport=False,
+    ):
+        super().__init__(
+            env,
+            slack_reward=slack_reward,
+            predict_done_actions=predict_done_actions,
+            terminate_on_success=terminate_on_success,
+        )
+        self.num_steps = 0
+        self.vertical_displacement = vertical_displacement
+        self.teleport_position = teleport_position
+        self.planning_time = planning_time
+        self.plan_to_learned_goals = plan_to_learned_goals
+        self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
+        self.learn_residual = learn_residual
+        self.mp_bounds_low = mp_bounds_low
+        self.mp_bounds_high = mp_bounds_high
+        self.update_with_true_state = update_with_true_state
+        self.grip_ctrl_scale = grip_ctrl_scale
+        self.clamp_actions = clamp_actions
+        self.backtrack_movement_fraction = backtrack_movement_fraction
+        self.randomize_init_target_pos = randomize_init_target_pos
+        self.teleport_on_grasp = teleport_on_grasp
+        self.run_controller_to_finish_place = run_controller_to_finish_place
+        from rlkit.mprl import module
+
+        self.mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
+        with io.StringIO() as string:
+            string.write(ET.tostring(self.model.root, encoding="unicode"))
+            st = string.getvalue()
+        self.dm_mujoco = module.get_dm_mujoco()
+        self.dm_sim = self.dm_mujoco.Physics.from_xml_string(st)
+        self.model = self.dm_sim.model
+        self.check_com_grasp = check_com_grasp
+        self.recompute_reward_post_teleport = recompute_reward_post_teleport
+
     def compute_ee_to_object_translation(self):
-        return self.get_object_pos() - self._eef_xpos
+        return get_object_pose(self)[:3] - self._eef_xpos
 
     def get_init_target_pos(self):
         ee_to_object_translation = self.compute_ee_to_object_translation()
-        pos = self.get_object_pos()
-        self.target_z_pos = pos[-1] + 0.1
+        pos = get_object_pose(self)[:3]
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
@@ -611,14 +704,9 @@ class MPEnv(ProxyEnv):
                 qvel,
                 ee_to_object_translation=ee_to_object_translation,
             )
-            assert not self.check_grasp()  # we should not cheat!
         # teleporting the arm can break the controller
         self.robots[0].controller.reset_goal()
         return pos
-
-    def get_observation(self):
-        di = self._wrapped_env._get_observations(force_update=True)
-        return self._wrapped_env._flatten_obs(di)
 
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
@@ -655,6 +743,8 @@ class MPEnv(ProxyEnv):
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
+        pos = get_object_pose(self)[:3]
+        self.target_z_pos = pos[-1] + 0.1
         if not self.plan_to_learned_goals:
             if self.teleport_position:
                 update_controller_config(self, self.ik_controller_config)
@@ -685,18 +775,9 @@ class MPEnv(ProxyEnv):
         return obs
 
     def check_grasp(self):
-        if self.name.endswith("Lift"):
-            is_grasped = self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.cube,
-            )
-        elif self.name.endswith("PickPlaceBread"):
-            is_grasped = self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.objects[self.object_id],
-            )
+        is_grasped = super().check_grasp()
 
-        if is_grasped:
+        if is_grasped and self.check_com_grasp:
             # check if left gripper pad is left of the com of object, right gripper pad is right of the com of object
 
             def name2id(type_name, name):
@@ -719,14 +800,11 @@ class MPEnv(ProxyEnv):
                     "geom", self.robots[0].gripper.important_geoms["right_fingerpad"][0]
                 )
             ]
-            object_pos = self.get_object_pos()
-            caging_condition = (
-                left_pos[1] < object_pos[1] and right_pos[1] > object_pos[1]
-            )
+            object_pos = get_object_pose(self)[:3]
             below_com_grasp = (left_pos[-1] - object_pos[-1]) < 0 and (
                 right_pos[-1] - object_pos[-1]
             ) < 0
-            if caging_condition and below_com_grasp:
+            if below_com_grasp:
                 return True
             else:
                 return False
@@ -750,13 +828,6 @@ class MPEnv(ProxyEnv):
     def clamp_planner_action_mp_space_bounds(self, action):
         action[:3] = np.clip(action[:3], self.mp_bounds_low, self.mp_bounds_high)
         return action
-
-    def get_object_pos(self):
-        if self.name.endswith("Lift"):
-            pos = self.sim.data.body_xpos[self.cube_body_id]
-        elif self.name.endswith("PickPlaceBread"):
-            pos = self.sim.data.body_xpos[self.obj_body_id[self.obj_to_use]]
-        return pos
 
     def step(self, action, get_intermediate_frames=False):
         if self.plan_to_learned_goals:
@@ -798,7 +869,9 @@ class MPEnv(ProxyEnv):
             self.ep_step_ctr += 1
             is_grasped = self.check_grasp()
             if (self.ep_step_ctr == self.horizon and is_grasped) or (
-                self.teleport_on_grasp and is_grasped and self.hasnt_teleported
+                self.teleport_on_grasp
+                and is_grasped
+                and self.hasnt_teleported  # hasnt teleported flag ensures you only teleport once
             ):
                 target_pos = self.get_target_pos()
                 ee_to_object_translation = (
@@ -819,21 +892,6 @@ class MPEnv(ProxyEnv):
                     )
                     # teleporting the arm can break the controller
                     self.robots[0].controller.reset_goal()
-                    if (
-                        self.name.endswith("PickPlaceBread")
-                        and self.run_controller_to_finish_place
-                    ):
-                        for _ in range(30):
-                            self.robots[
-                                0
-                            ].controller.reset_goal()  # teleporting the arm can break the controller
-                            action = np.zeros(7)
-                            action[-1] = -1
-                            self.env.step(action)
-                        if is_grasped and not self._check_success():
-                            print("FAILED TO DROP THE CUBE")
-                            print()
-                            print()
                     self.hasnt_teleported = False
                 else:
                     mp_to_point(
@@ -849,10 +907,15 @@ class MPEnv(ProxyEnv):
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
+                # TODO: should re-compute reward here so it is clear what action caused high reward
+                if self.recompute_reward_post_teleport:
+                    r = self.env.reward()
+
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_position:
+            # add in planner logs
             i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves
             i["goal_error"] = self.goal_error
@@ -861,82 +924,4 @@ class MPEnv(ProxyEnv):
             d = action[-1] > 0
         if self.terminate_on_success:
             d = float(self._check_success())
-        return o, r, d, i
-
-
-class RobosuiteEnv(ProxyEnv):
-    def __init__(
-        self,
-        env,
-        slack_reward=0,
-        predict_done_actions=False,
-        terminate_on_success=False,
-    ):
-        super().__init__(env)
-        for (cam_name, cam_w, cam_h, cam_d) in zip(
-            self.camera_names,
-            self.camera_widths,
-            self.camera_heights,
-            self.camera_depths,
-        ):
-
-            # Add cameras associated to our arrays
-            cam_sensors, cam_sensor_names = self._create_camera_sensors(
-                cam_name,
-                cam_w=cam_w,
-                cam_h=cam_h,
-                cam_d=cam_d,
-                modality="image",
-            )
-            self.cam_sensor = cam_sensors
-        self.num_steps = 0
-        self.slack_reward = slack_reward
-        self.predict_done_actions = predict_done_actions
-        self.terminate_on_success = terminate_on_success
-        if self.predict_done_actions:
-            self.action_space = spaces.Box(
-                np.concatenate((self._wrapped_env.action_space.low, [-1])),
-                np.concatenate((self._wrapped_env.action_space.high, [1])),
-            )
-
-    def get_image(self):
-        im = self.cam_sensor[0](None)
-        im = cv2.flip(im[:, :, ::-1], 0)
-        return im
-
-    def reset(self, **kwargs):
-        self.num_steps = 0
-        return super().reset(**kwargs)
-
-    def check_grasp(
-        self,
-    ):
-        if self.name.endswith("Lift"):
-            is_grasped = self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.cube,
-            )
-        elif self.name.endswith("PickPlaceBread"):
-            is_grasped = self._check_grasp(
-                gripper=self.robots[0].gripper,
-                object_geoms=self.objects[self.object_id],
-            )
-        return is_grasped
-
-    def step(self, action):
-        if self.predict_done_actions:
-            old_action = action
-            action = action[:-1]
-        o, r, d, i = super().step(action)
-        self.num_steps += 1
-        i["success"] = float(self._check_success())
-        i["grasped"] = float(self.check_grasp())
-        i["num_steps"] = self.num_steps
-        r += self.slack_reward
-        if self.predict_done_actions:
-            d = old_action[-1] > 0
-        if self.terminate_on_success:
-            d = float(self._check_success())
-        if self.num_steps == self.horizon:
-            d = True
         return o, r, d, i
