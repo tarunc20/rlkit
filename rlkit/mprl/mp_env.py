@@ -77,6 +77,16 @@ def check_object_grasp(env):
             gripper=env.robots[0].gripper,
             object_geoms=env.objects[env.object_id],
         )
+    elif env.name.endswith("NutAssemblySquare"):
+        is_grasped = env._check_grasp(
+            gripper=env.robots[0].gripper,
+            object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
+        )
+    elif env.name.endswith("NutAssemblyRound"):
+        is_grasped = env._check_grasp(
+            gripper=env.robots[0].gripper,
+            object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
+        )
     else:
         raise NotImplementedError()
     return is_grasped
