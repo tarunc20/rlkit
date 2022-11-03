@@ -666,7 +666,6 @@ class MPEnv(RobosuiteEnv):
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
-        run_controller_to_finish_place=False,
         check_com_grasp=False,
         recompute_reward_post_teleport=False,
         controller_args=None,
@@ -692,7 +691,6 @@ class MPEnv(RobosuiteEnv):
         self.backtrack_movement_fraction = backtrack_movement_fraction
         self.randomize_init_target_pos = randomize_init_target_pos
         self.teleport_on_grasp = teleport_on_grasp
-        self.run_controller_to_finish_place = run_controller_to_finish_place
         from rlkit.mprl import module
 
         self.mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
