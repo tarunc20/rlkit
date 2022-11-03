@@ -853,8 +853,8 @@ class MPEnv(RobosuiteEnv):
                 )
             ]
             object_pos = get_object_pose(self)[:3]
-            below_com_grasp = (left_pos[-1] - object_pos[-1]) < 0 and (
-                right_pos[-1] - object_pos[-1]
+            below_com_grasp = (left_pos[-1] - object_pos[-1] - 0.025) < 0 and (
+                right_pos[-1] - object_pos[-1] - 0.025
             ) < 0
             if below_com_grasp:
                 return True

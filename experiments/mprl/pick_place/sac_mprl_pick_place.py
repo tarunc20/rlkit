@@ -69,7 +69,7 @@ if __name__ == "__main__":
             ),
         ),
         mp_env_kwargs=dict(
-            vertical_displacement=0.04,
+            vertical_displacement=0.1,
             teleport_position=True,
             randomize_init_target_pos=False,
             mp_bounds_low=(-1.45, -1.25, 0.45),

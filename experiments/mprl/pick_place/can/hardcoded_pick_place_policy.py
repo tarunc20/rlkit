@@ -1,5 +1,8 @@
+import copy
+import cv2
 import numpy as np
 import robosuite as suite
+from robosuite.controllers import controller_factory
 import torch
 from matplotlib import pyplot as plt
 from robosuite.utils.transform_utils import *
@@ -7,33 +10,10 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
 
 import rlkit.torch.pytorch_util as ptu
-from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv, update_controller_config
 from rlkit.torch.model_based.dreamer.visualization import make_video
 
 if __name__ == "__main__":
-    mp_env_kwargs = dict(
-        vertical_displacement=0.08,
-        teleport_position=True,
-        randomize_init_target_pos=False,
-        mp_bounds_low=(-1.45, -1.25, 0.45),
-        mp_bounds_high=(0.45, 0.85, 2.25),
-        backtrack_movement_fraction=0.001,
-        clamp_actions=True,
-        update_with_true_state=True,
-        grip_ctrl_scale=0.0025,
-        planning_time=20,
-        teleport_on_grasp=True,
-        check_com_grasp=True,
-        terminate_on_success=False,
-    )
-    robosuite_args = dict(
-        robots="Panda",
-        reward_shaping=True,
-        control_freq=20,
-        ignore_done=True,
-        use_object_obs=True,
-        env_name="PickPlaceCan",
-    )
     # OSC controller spec
     controller_args = dict(
         type="OSC_POSE",
@@ -53,6 +33,31 @@ if __name__ == "__main__":
         interpolation=None,
         ramp_ratio=0.2,
     )
+    mp_env_kwargs = dict(
+        vertical_displacement=0.1,
+        teleport_position=True,
+        randomize_init_target_pos=False,
+        mp_bounds_low=(-1.45, -1.25, 0.45),
+        mp_bounds_high=(0.45, 0.85, 2.25),
+        backtrack_movement_fraction=0.001,
+        clamp_actions=True,
+        update_with_true_state=True,
+        grip_ctrl_scale=0.0025,
+        planning_time=20,
+        teleport_on_grasp=True,
+        check_com_grasp=True,
+        terminate_on_success=False,
+        controller_args=controller_args,
+    )
+    robosuite_args = dict(
+        robots="Panda",
+        reward_shaping=True,
+        control_freq=20,
+        ignore_done=True,
+        use_object_obs=True,
+        env_name="PickPlaceBread",
+    )
+
     robosuite_args["controller_configs"] = controller_args
     env = suite.make(
         **robosuite_args,
@@ -64,32 +69,27 @@ if __name__ == "__main__":
         camera_widths=1024,
     )
     np.random.seed(0)
-    env = RobosuiteEnv(GymWrapper(env))
+    env = MPEnv(GymWrapper(env), **mp_env_kwargs)
     num_episodes = 10
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0
     frames = []
-    target_pos = np.array(
-        [
-            0.2,
-            0.4,
-            env.sim.data.qpos[32] + 0.2,
-        ]
-    )
     for s in tqdm(range(num_episodes)):
         o = env.reset()
+        target_pos = env.get_target_pos()
         rs = []
-        for i in range(350):
-            a = np.concatenate(
-                (
-                    env.sim.data.qpos[30:33] + np.array([0, 0, 0.1]) - env._eef_xpos,
-                    [0, 0, 0, -1],
-                )
-            )
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            env.render()
+        # for i in range(350):
+        #     a = np.concatenate(
+        #         (
+        #             env.sim.data.qpos[30:33] + np.array([0, 0, 0.1]) - env._eef_xpos,
+        #             [0, 0, 0, -1],
+        #         )
+        #     )
+        #     o, r, d, info = env.step(a)
+        #     rs.append(r)
+        #     env.render()
+
         for i in range(50):
             a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
@@ -100,13 +100,18 @@ if __name__ == "__main__":
             o, r, d, info = env.step(a)
             rs.append(r)
             env.render()
+        # for i in range(50):
+        #     a = np.concatenate(([0, 0, 0.2], [0, 0, 0, 1]))
+        #     o, r, d, info = env.step(a)
+        #     rs.append(r)
+        #     env.render()
+        # for i in range(300):
+        #     a = np.concatenate((target_pos - env._eef_xpos, [0, 0, 0, 1]))
+        #     o, r, d, info = env.step(a)
+        #     rs.append(r)
+        #     env.render()
         for i in range(50):
             a = np.concatenate(([0, 0, 0.2], [0, 0, 0, 1]))
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            env.render()
-        for i in range(300):
-            a = np.concatenate((target_pos - env._eef_xpos, [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             env.render()
