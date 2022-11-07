@@ -669,6 +669,7 @@ class MPEnv(RobosuiteEnv):
         check_com_grasp=False,
         recompute_reward_post_teleport=False,
         controller_args=None,
+        predict_teleport_actions=False,
     ):
         super().__init__(
             env,
@@ -703,6 +704,7 @@ class MPEnv(RobosuiteEnv):
         self.check_com_grasp = check_com_grasp
         self.recompute_reward_post_teleport = recompute_reward_post_teleport
         self.controller_args = controller_args
+        self.predict_teleport_actions = predict_teleport_actions
 
     def compute_ee_to_object_translation(self):
         return get_object_pose(self)[:3] - self._eef_xpos

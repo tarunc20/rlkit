@@ -1,3 +1,4 @@
+import numpy as np
 from rlkit.mprl.experiment import experiment, preprocess_variant_mp
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
@@ -12,9 +13,10 @@ if __name__ == "__main__":
             batch_size=128,
             min_num_steps_before_training=3300,
             num_epochs=5000,
-            num_eval_steps_per_epoch=2500,
+            num_eval_steps_per_epoch=1000,
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
+            num_train_loops_per_epoch=1,
         ),
         eval_environment_kwargs=dict(
             robots="Panda",
@@ -22,7 +24,7 @@ if __name__ == "__main__":
             control_freq=20,
             ignore_done=True,
             use_object_obs=True,
-            env_name="PickPlaceCan",
+            env_name="PickPlaceBread",
             controller_configs=dict(
                 type="OSC_POSE",
                 input_max=1,
@@ -48,7 +50,7 @@ if __name__ == "__main__":
             control_freq=20,
             ignore_done=True,
             use_object_obs=True,
-            env_name="PickPlaceCan",
+            env_name="PickPlaceBread",
             controller_configs=dict(
                 type="OSC_POSE",
                 input_max=1,
@@ -80,7 +82,8 @@ if __name__ == "__main__":
             grip_ctrl_scale=0.0025,
             planning_time=20,
             teleport_on_grasp=True,
-            check_com_grasp=False,
+            check_com_grasp=True,
+            recompute_reward_post_teleport=False,
             terminate_on_success=False,
             controller_args=dict(
                 type="OSC_POSE",
@@ -124,11 +127,11 @@ if __name__ == "__main__":
         mprl=True,
         algorithm="MPRL-SAC",
         max_path_length=50,
-        replay_buffer_size=int(5e6),
-        seed=129,
+        replay_buffer_size=int(1e7),
+        seed=np.random.randint(0, 1000000),
         version="normal",
         plan_to_learned_goals=False,
-        num_expl_envs=10,
+        num_expl_envs=20,
         planner_num_trains_per_train_loop=1000,
     )
     setup_sweep_and_launch_exp(preprocess_variant_mp, variant, experiment, args)

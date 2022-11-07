@@ -91,4 +91,4 @@ if __name__ == "__main__":
         obs, reward, done, info = env.step(action)
         num_steps_taken += num_envs
     end = time.time()
-    print("Frames per second: ", 1/((end-start)/num_steps_taken))
+    print("Frames per second: ", 1 / ((end - start) / num_steps_taken))

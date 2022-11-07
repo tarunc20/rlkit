@@ -8,7 +8,7 @@ def preprocess_variant_mp(variant):
     variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
     variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
     variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
-        50 * variant["max_path_length"]
+        20 * variant["max_path_length"]
     )
     if variant["plan_to_learned_goals"]:
         variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
@@ -338,6 +338,12 @@ def experiment(variant):
             has_renderer=False,
             has_offscreen_renderer=False,
             use_camera_obs=False,
+            # has_renderer=False,
+            # has_offscreen_renderer=True,
+            # use_camera_obs=False,
+            # camera_names="frontview",
+            # camera_heights=1024,
+            # camera_widths=1024,
         )
         if variant.get("mprl", False):
             expl_env = MPEnv(
@@ -384,8 +390,9 @@ def experiment(variant):
         expl_envs = [make_env_expl()]
         expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
 
-    eval_env = [make_env_eval()]
-    eval_env = DummyVecEnv(eval_env, pass_render_kwargs=False)
+    eval_env = expl_env
+    # eval_env = [make_env_eval()]
+    # eval_env = DummyVecEnv(eval_env, pass_render_kwargs=False)
 
     obs_dim = eval_env.observation_space.low.size
     action_dim = eval_env.action_space.low.size
@@ -533,6 +540,6 @@ def experiment(variant):
                     func = mp_video_func
         else:
             func = video_func
-        func(algorithm, -1)
-        algorithm.post_epoch_funcs.append(func)
+        # func(algorithm, -1)
+        # algorithm.post_epoch_funcs.append(func)
         algorithm.train()
