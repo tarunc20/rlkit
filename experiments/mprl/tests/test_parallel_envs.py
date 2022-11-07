@@ -73,7 +73,7 @@ if __name__ == "__main__":
         )
         return expl_env
 
-    num_envs = 10
+    num_envs = 20
     env_fns = [make_env_expl for _ in range(num_envs)]
     env = StableBaselinesVecEnv(
         env_fns=env_fns,
