@@ -16,7 +16,7 @@ if __name__ == "__main__":
             num_eval_steps_per_epoch=1000,
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
-            num_train_loops_per_epoch=1,
+            num_train_loops_per_epoch=10,
         ),
         eval_environment_kwargs=dict(
             robots="Panda",
@@ -24,7 +24,7 @@ if __name__ == "__main__":
             control_freq=20,
             ignore_done=True,
             use_object_obs=True,
-            env_name="PickPlaceBread",
+            env_name="PickPlaceCan",
             controller_configs=dict(
                 type="OSC_POSE",
                 input_max=1,
@@ -50,7 +50,7 @@ if __name__ == "__main__":
             control_freq=20,
             ignore_done=True,
             use_object_obs=True,
-            env_name="PickPlaceBread",
+            env_name="PickPlaceCan",
             controller_configs=dict(
                 type="OSC_POSE",
                 input_max=1,
