@@ -8,7 +8,9 @@ from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
     euler2mat,
+    mat2pose,
     mat2quat,
+    pose2mat,
     quat2mat,
     quat_conjugate,
     quat_multiply,
@@ -17,6 +19,7 @@ from robosuite.utils.transform_utils import (
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 from rlkit.torch.model_based.dreamer.visualization import add_text
+import robosuite.utils.transform_utils as T
 
 try:
     from ompl import base as ob
@@ -38,19 +41,19 @@ def get_object_pose(env):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
         object_pos = env.sim.data.qpos[9:12].copy()
-        object_quat = env.sim.data.qpos[12:16].copy()
+        object_quat = T.convert_quat(env.sim.data.qpos[12:16].copy(), to="xyzw")
     elif name.startswith("PickPlaceMilk"):
         object_pos = env.sim.data.qpos[9:12].copy()
-        object_quat = env.sim.data.qpos[12:16].copy()
+        object_quat = T.convert_quat(env.sim.data.qpos[12:16].copy(), to="xyzw")
     elif name.startswith("PickPlaceBread"):
         object_pos = env.sim.data.qpos[16:19].copy()
-        object_quat = env.sim.data.qpos[19:23].copy()
+        object_quat = T.convert_quat(env.sim.data.qpos[19:23].copy(), to="xyzw")
     elif name.startswith("PickPlaceCereal"):
         object_pos = env.sim.data.qpos[23:26].copy()
-        object_quat = env.sim.data.qpos[26:30].copy()
+        object_quat = T.convert_quat(env.sim.data.qpos[26:30].copy(), to="xyzw")
     elif name.startswith("PickPlaceCan"):
         object_pos = env.sim.data.qpos[30:33].copy()
-        object_quat = env.sim.data.qpos[33:37].copy()
+        object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
 
     else:
         raise NotImplementedError()
@@ -58,7 +61,17 @@ def get_object_pose(env):
 
 
 def set_object_pose(env, object_pos, object_quat):
+    """
+    Set the object pose in the environment.
+    Makes sure to convert from xyzw to wxyz format for quaternion. qpos requires wxyz!
+    Arguments:
+        env
+        object_pos (np.ndarray): 3D position of the object
+        object_quat (np.ndarray): 4D quaternion of the object (xyzw format)
+
+    """
     name = env.name.split("_")[1]
+    object_quat = T.convert_quat(object_quat, to="wxyz")
     if name.endswith("Lift"):
         env.sim.data.qpos[9:12] = object_pos
         env.sim.data.qpos[12:16] = object_quat
@@ -130,9 +143,6 @@ def set_robot_based_on_ee_pos(
     ik,
     qpos,
     qvel,
-    gripper_qpos_in=None,
-    gripper_qvel_in=None,
-    ee_to_object_translation=None,
     is_grasped=False,
     default_controller_args=None,
 ):
@@ -145,9 +155,7 @@ def set_robot_based_on_ee_pos(
     gripper_qpos = env.sim.data.qpos[7:9].copy()
     gripper_qvel = env.sim.data.qvel[7:9].copy()
     old_eef_xquat = env._eef_xquat.copy()
-    rot_diff_full = quat2mat(
-        quat_multiply(target_quat, quat_conjugate(old_eef_xquat))
-    ).copy()
+    old_eef_xpos = env._eef_xpos.copy()
 
     # reset to canonical state before doing IK
     env.sim.data.qpos[:] = qpos
@@ -165,18 +173,17 @@ def set_robot_based_on_ee_pos(
     if is_grasped:
         env.sim.data.qpos[7:9] = gripper_qpos
         env.sim.data.qvel[7:9] = gripper_qvel
-        if gripper_qpos_in is not None:
-            env.sim.data.qpos[7:9] = gripper_qpos_in
-        if gripper_qvel_in is not None:
-            env.sim.data.qvel[7:9] = gripper_qvel_in
 
-        new_object_pose = np.concatenate(
-            (
-                env._eef_xpos + ee_to_object_translation,
-                quat_multiply(mat2quat(rot_diff_full), object_pose[3:]),
-            )
+        # compute the transform between the old and new eef poses
+        ee_old_mat = pose2mat((old_eef_xpos, old_eef_xquat))
+        ee_new_mat = pose2mat((env._eef_xpos, env._eef_xquat))
+        transform = ee_new_mat @ np.linalg.inv(ee_old_mat)
+
+        # apply the transform to the object
+        new_object_pose = mat2pose(
+            np.dot(transform, pose2mat((object_pose[:3], object_pose[3:])))
         )
-        set_object_pose(env, new_object_pose[:3], new_object_pose[3:])
+        set_object_pose(env, new_object_pose[0], new_object_pose[1])
         env.sim.forward()
 
     # teleporting the arm breaks the controller -> rebuilt it entirely
@@ -669,6 +676,8 @@ class MPEnv(RobosuiteEnv):
         check_com_grasp=False,
         recompute_reward_post_teleport=False,
         controller_args=None,
+        verify_stable_grasp=False,
+        randomize_init_target_pos_range=(0.04, 0.06),
     ):
         super().__init__(
             env,
@@ -703,12 +712,10 @@ class MPEnv(RobosuiteEnv):
         self.check_com_grasp = check_com_grasp
         self.recompute_reward_post_teleport = recompute_reward_post_teleport
         self.controller_args = controller_args
-
-    def compute_ee_to_object_translation(self):
-        return get_object_pose(self)[:3] - self._eef_xpos
+        self.verify_stable_grasp = verify_stable_grasp
+        self.randomize_init_target_pos_range = randomize_init_target_pos_range
 
     def get_init_target_pos(self):
-        ee_to_object_translation = self.compute_ee_to_object_translation()
         pos = get_object_pose(self)[:3]
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         if self.randomize_init_target_pos:
@@ -720,7 +727,7 @@ class MPEnv(RobosuiteEnv):
                 random_perturbation = np.random.normal(0, 1, 3)
                 random_perturbation[2] = np.abs(random_perturbation[2])
                 random_perturbation /= np.linalg.norm(random_perturbation)
-                scale = np.random.uniform(0.03, 0.06)
+                scale = np.random.uniform(*self.randomize_init_target_pos_range)
                 shifted_pos = pos + random_perturbation * scale
                 # backtrack from the position just in case we sampled a point in collision
                 set_robot_based_on_ee_pos(
@@ -730,7 +737,7 @@ class MPEnv(RobosuiteEnv):
                     self.ik_ctrl,
                     qpos,
                     qvel,
-                    ee_to_object_translation=ee_to_object_translation,
+                    default_controller_args=self.controller_args,
                 )
                 ori_cond = np.linalg.norm(self._eef_xquat - xquat) < 1e-6
                 grasp_cond = not self.check_grasp()
@@ -752,9 +759,6 @@ class MPEnv(RobosuiteEnv):
                 self.ik_ctrl,
                 qpos,
                 qvel,
-                ee_to_object_translation=ee_to_object_translation,
-                gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
-                gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
                 default_controller_args=self.controller_args,
             )
         # teleporting the arm can break the controller
@@ -826,8 +830,16 @@ class MPEnv(RobosuiteEnv):
         self.hasnt_teleported = True
         return obs
 
-    def check_grasp(self):
+    def check_grasp(self, verify_stable_grasp=False):
         is_grasped = super().check_grasp()
+
+        if is_grasped and verify_stable_grasp:
+            # verify grasp is stable by shaking the arm and seeing if still in contact with object
+            for i in range(10):
+                action = np.random.uniform(-1, 1, 7)
+                action[-1] = 1.0
+                self._wrapped_env.step(action)
+            is_grasped = super().check_grasp()
 
         if is_grasped and self.check_com_grasp:
             # check if left gripper pad is left of the com of object, right gripper pad is right of the com of object
@@ -929,16 +941,14 @@ class MPEnv(RobosuiteEnv):
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
-            is_grasped = self.check_grasp()
+            if self.hasnt_teleported:
+                is_grasped = self.check_grasp(verify_stable_grasp=True and self.verify_stable_grasp)
+            else:
+                is_grasped = False
             if (self.ep_step_ctr == self.horizon and is_grasped) or (
-                self.teleport_on_grasp
-                and is_grasped
-                and self.hasnt_teleported  # hasnt teleported flag ensures you only teleport once
+                self.teleport_on_grasp and is_grasped
             ):
                 target_pos = self.get_target_pos()
-                ee_to_object_translation = (
-                    self.compute_ee_to_object_translation().copy()
-                )
                 if self.teleport_position:
                     set_robot_based_on_ee_pos(
                         self,
@@ -947,9 +957,6 @@ class MPEnv(RobosuiteEnv):
                         self.ik_ctrl,
                         self.reset_qpos,
                         self.reset_qvel,
-                        gripper_qpos_in=self.sim.data.qpos[7:9].copy(),
-                        gripper_qvel_in=self.sim.data.qvel[7:9].copy(),
-                        ee_to_object_translation=ee_to_object_translation,
                         is_grasped=is_grasped,
                         default_controller_args=self.controller_args,
                     )
@@ -970,7 +977,7 @@ class MPEnv(RobosuiteEnv):
                     )
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
-                    r = self.env.reward()
+                    r += self.env.reward()
 
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
