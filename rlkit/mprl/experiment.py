@@ -310,6 +310,10 @@ def load_policy(path):
 
 
 def experiment(variant):
+    import gym
+
+    gym.logger.set_level(40)  # resolves annoying bbox warning
+
     import robosuite as suite
     from robosuite.wrappers import GymWrapper
 
@@ -333,6 +337,9 @@ def experiment(variant):
 
     # Create gym-compatible envs
     def make_env_expl():
+        import gym
+
+        gym.logger.set_level(40)  # resolves annoying bbox warning
         expl_env = suite.make(
             **variant["expl_environment_kwargs"],
             has_renderer=False,

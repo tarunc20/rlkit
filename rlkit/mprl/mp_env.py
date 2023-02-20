@@ -942,7 +942,9 @@ class MPEnv(RobosuiteEnv):
             self.num_steps += 1
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
-                is_grasped = self.check_grasp(verify_stable_grasp=True and self.verify_stable_grasp)
+                is_grasped = self.check_grasp(
+                    verify_stable_grasp=True and self.verify_stable_grasp
+                )
             else:
                 is_grasped = False
             if (self.ep_step_ctr == self.horizon and is_grasped) or (

@@ -36,7 +36,6 @@ if __name__ == "__main__":
     mp_env_kwargs = dict(
         vertical_displacement=0.1,
         teleport_position=True,
-        randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
         mp_bounds_high=(0.45, 0.85, 2.25),
         backtrack_movement_fraction=0.001,
@@ -45,9 +44,10 @@ if __name__ == "__main__":
         grip_ctrl_scale=0.0025,
         planning_time=20,
         teleport_on_grasp=True,
-        check_com_grasp=True,
+        check_com_grasp=False,
         terminate_on_success=False,
         controller_args=controller_args,
+        verify_stable_grasp=True,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -55,7 +55,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceBread",
+        env_name="PickPlaceCan",
     )
 
     robosuite_args["controller_configs"] = controller_args
@@ -90,7 +90,7 @@ if __name__ == "__main__":
         #     rs.append(r)
         #     env.render()
 
-        for i in range(50):
+        for i in range(25):
             a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
             rs.append(r)
