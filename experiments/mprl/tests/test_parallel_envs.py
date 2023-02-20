@@ -1,7 +1,6 @@
 import time
+
 import numpy as np
-from rlkit.envs.wrappers import NormalizedBoxEnv
-from rlkit.envs.wrappers.mujoco_vec_wrappers import StableBaselinesVecEnv
 import robosuite as suite
 import torch
 from matplotlib import pyplot as plt
@@ -10,6 +9,8 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
 
 import rlkit.torch.pytorch_util as ptu
+from rlkit.envs.wrappers import NormalizedBoxEnv
+from rlkit.envs.wrappers.mujoco_vec_wrappers import StableBaselinesVecEnv
 from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
 from rlkit.torch.model_based.dreamer.visualization import make_video
 

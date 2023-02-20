@@ -1,10 +1,11 @@
 import copy
+
 import cv2
 import numpy as np
 import robosuite as suite
-from robosuite.controllers import controller_factory
 import torch
 from matplotlib import pyplot as plt
+from robosuite.controllers import controller_factory
 from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
