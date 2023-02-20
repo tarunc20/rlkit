@@ -1,60 +1,22 @@
 import os
-from rlkit.mprl.experiment import experiment
+from rlkit.mprl.experiment import experiment, preprocess_variant
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
     setup_sweep_and_launch_exp,
 )
 
-
-def preprocess_variant(variant):
-    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
-    variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
-        50 * variant["max_path_length"]
-    )
-
-    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["eval_environment_kwargs"][
-        "use_distance_reduced_to_object_reward"
-    ] = variant["use_distance_reduced_to_object_reward"]
-    variant["eval_environment_kwargs"][
-        "use_distance_reduced_to_object_reward"
-    ] = variant["use_distance_reduced_to_object_reward"]
-    variant["eval_environment_kwargs"]["use_min_prev_distance"] = variant[
-        "use_min_prev_distance"
-    ]
-    variant["eval_environment_kwargs"]["dist_reduced_reward_scale"] = variant[
-        "dist_reduced_reward_scale"
-    ]
-    variant["eval_environment_kwargs"]["first_grasp_reward"] = variant[
-        "first_grasp_reward"
-    ]
-
-    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["expl_environment_kwargs"][
-        "use_distance_reduced_to_object_reward"
-    ] = variant["use_distance_reduced_to_object_reward"]
-    variant["expl_environment_kwargs"]["use_min_prev_distance"] = variant[
-        "use_min_prev_distance"
-    ]
-    variant["expl_environment_kwargs"]["dist_reduced_reward_scale"] = variant[
-        "dist_reduced_reward_scale"
-    ]
-    variant["expl_environment_kwargs"]["first_grasp_reward"] = variant[
-        "first_grasp_reward"
-    ]
-
-    return variant
-
-
 if __name__ == "__main__":
     # noinspection PyTypeChecker
     args = get_args()
+
     variant = dict(
         max_path_length=250,
-        use_distance_reduced_to_object_reward=True,
-        use_min_prev_distance=False,
-        dist_reduced_reward_scale=225,
-        first_grasp_reward=False,
+        additional_reward_configs=dict(
+            use_distance_reduced_to_object_reward=False,
+            use_min_prev_distance=False,
+            dist_reduced_reward_scale=225,
+            first_grasp_reward=False,
+        ),
         algorithm_kwargs=dict(
             batch_size=128,
             min_num_steps_before_training=3300,
@@ -70,34 +32,25 @@ if __name__ == "__main__":
             predict_done_actions=False,
             terminate_on_success=False,
         ),
-        eval_environment_kwargs=dict(
-            robots="Panda",
-            reward_shaping=True,
-            control_freq=20,
-            ignore_done=True,
-            use_object_obs=True,
-            env_name="Lift",
-            horizon=500,
-            controller_configs=dict(
-                type="OSC_POSE",
-                input_max=1,
-                input_min=-1,
-                output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
-                output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
-                kp=150,
-                damping=1,
-                impedance_mode="fixed",
-                kp_limits=[0, 300],
-                damping_limits=[0, 10],
-                position_limits=None,
-                orientation_limits=None,
-                uncouple_pos_ori=True,
-                control_delta=True,
-                interpolation=None,
-                ramp_ratio=0.2,
-            ),
+        controller_configs=dict(
+            type="OSC_POSE",
+            input_max=1,
+            input_min=-1,
+            output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
+            output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
+            kp=150,
+            damping=1,
+            impedance_mode="fixed",
+            kp_limits=[0, 300],
+            damping_limits=[0, 10],
+            position_limits=None,
+            orientation_limits=None,
+            uncouple_pos_ori=True,
+            control_delta=True,
+            interpolation=None,
+            ramp_ratio=0.2,
         ),
-        expl_environment_kwargs=dict(
+        environment_kwargs=dict(
             robots="Panda",
             reward_shaping=True,
             control_freq=20,
@@ -105,24 +58,6 @@ if __name__ == "__main__":
             use_object_obs=True,
             env_name="Lift",
             horizon=500,
-            controller_configs=dict(
-                type="OSC_POSE",
-                input_max=1,
-                input_min=-1,
-                output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
-                output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
-                kp=150,
-                damping=1,
-                impedance_mode="fixed",
-                kp_limits=[0, 300],
-                damping_limits=[0, 10],
-                position_limits=None,
-                orientation_limits=None,
-                uncouple_pos_ori=True,
-                control_delta=True,
-                interpolation=None,
-                ramp_ratio=0.2,
-            ),
         ),
         policy_kwargs=dict(hidden_sizes=(256, 256)),
         qf_kwargs=dict(hidden_sizes=(256, 256)),
@@ -141,6 +76,6 @@ if __name__ == "__main__":
         seed=129,
         version="normal",
         plan_to_learned_goals=False,
-        num_expl_envs=int(os.environ.get('SLURM_CPUS_ON_NODE', os.cpu_count())),
+        num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),
     )
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)

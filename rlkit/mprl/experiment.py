@@ -1,6 +1,47 @@
 import os
 import pickle
 
+
+def preprocess_variant(variant, debug):
+    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
+    variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
+        50 * variant["max_path_length"]
+    )
+    controller_configs = variant.pop("controller_configs")
+    environment_kwargs = variant.pop("environment_kwargs")
+
+    environment_kwargs["controller_configs"] = controller_configs
+    environment_kwargs["horizon"] = variant["max_path_length"]
+
+    environment_kwargs.update(variant.get("additional_reward_configs", {}))
+
+    variant["expl_environment_kwargs"] = environment_kwargs
+    variant["eval_environment_kwargs"] = environment_kwargs
+    if "mp_env_kwargs" in variant:
+        variant["mp_env_kwargs"]["controller_configs"] = controller_configs
+    if debug:
+        algorithm_kwargs = variant["algorithm_kwargs"]
+        algorithm_kwargs["min_num_steps_before_training"] = max(
+            variant["max_path_length"], algorithm_kwargs["batch_size"]
+        )
+        algorithm_kwargs["num_epochs"] = 2
+        algorithm_kwargs["num_eval_steps_per_epoch"] = variant["max_path_length"]
+        algorithm_kwargs["num_expl_steps_per_train_loop"] = variant["max_path_length"]
+        algorithm_kwargs["num_trains_per_train_loop"] = 1
+        algorithm_kwargs["num_train_loops_per_epoch"] = 1
+    return variant
+
+
+def preprocess_variant_mp(variant, debug):
+    variant = preprocess_variant(variant, debug)
+    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
+    if variant["plan_to_learned_goals"]:
+        variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
+            "planner_num_trains_per_train_loop"
+        ]
+    return variant
+
+
 # Create gym-compatible envs
 def make_env_expl(variant):
     from robosuite.wrappers import GymWrapper
@@ -8,7 +49,6 @@ def make_env_expl(variant):
     import gym
     from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
     from rlkit.envs.wrappers import NormalizedBoxEnv
-
 
     gym.logger.set_level(40)  # resolves annoying bbox warning
     expl_env = suite.make(
@@ -34,6 +74,7 @@ def make_env_expl(variant):
             **variant.get("robosuite_env_kwargs"),
         )
     return expl_env
+
 
 def make_env_eval(variant):
     from robosuite.wrappers import GymWrapper
@@ -63,20 +104,6 @@ def make_env_eval(variant):
             **variant.get("robosuite_env_kwargs"),
         )
     return eval_env
-
-def preprocess_variant_mp(variant):
-    variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
-    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
-    variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
-        20 * variant["max_path_length"]
-    )
-    if variant["plan_to_learned_goals"]:
-        variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
-            "planner_num_trains_per_train_loop"
-        ]
-    return variant
 
 
 def video_func(algorithm, epoch):
@@ -390,7 +417,7 @@ def experiment(variant):
 
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:
-        env_fns = [lambda : make_env_expl(variant) for _ in range(num_expl_envs)]
+        env_fns = [lambda: make_env_expl(variant) for _ in range(num_expl_envs)]
         expl_env = StableBaselinesVecEnv(
             env_fns=env_fns,
             start_method="fork",

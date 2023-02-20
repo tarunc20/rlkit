@@ -7,24 +7,6 @@ from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
 
 if __name__ == "__main__":
     # noinspection PyTypeChecker
-    controller_configs = dict(
-        type="OSC_POSE",
-        input_max=1,
-        input_min=-1,
-        output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
-        output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
-        kp=150,
-        damping=1,
-        impedance_mode="fixed",
-        kp_limits=[0, 300],
-        damping_limits=[0, 10],
-        position_limits=None,
-        orientation_limits=None,
-        uncouple_pos_ori=True,
-        control_delta=True,
-        interpolation=None,
-        ramp_ratio=0.2,
-    )
     args = get_args()
     variant = dict(
         algorithm_kwargs=dict(
@@ -35,23 +17,31 @@ if __name__ == "__main__":
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
         ),
-        eval_environment_kwargs=dict(
-            robots="Panda",
-            reward_shaping=True,
-            control_freq=20,
-            ignore_done=True,
-            use_object_obs=True,
-            env_name="Lift",
-            controller_configs=controller_configs,
+        controller_configs=dict(
+            type="OSC_POSE",
+            input_max=1,
+            input_min=-1,
+            output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
+            output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
+            kp=150,
+            damping=1,
+            impedance_mode="fixed",
+            kp_limits=[0, 300],
+            damping_limits=[0, 10],
+            position_limits=None,
+            orientation_limits=None,
+            uncouple_pos_ori=True,
+            control_delta=True,
+            interpolation=None,
+            ramp_ratio=0.2,
         ),
-        expl_environment_kwargs=dict(
+        environment_kwargs=dict(
             robots="Panda",
             reward_shaping=True,
             control_freq=20,
             ignore_done=True,
             use_object_obs=True,
             env_name="Lift",
-            controller_configs=controller_configs,
         ),
         mp_env_kwargs=dict(
             vertical_displacement=0.03,
@@ -64,7 +54,6 @@ if __name__ == "__main__":
             update_with_true_state=True,
             grip_ctrl_scale=0.0025,
             planning_time=20,
-            controller_args=controller_configs,
         ),
         policy_kwargs=dict(hidden_sizes=(256, 256)),
         qf_kwargs=dict(hidden_sizes=(256, 256)),
@@ -93,7 +82,7 @@ if __name__ == "__main__":
         seed=129,
         version="normal",
         plan_to_learned_goals=False,
-        num_expl_envs=int(os.environ.get('SLURM_CPUS_ON_NODE', os.cpu_count())),
+        num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),
         planner_num_trains_per_train_loop=1000,
     )
     setup_sweep_and_launch_exp(preprocess_variant_mp, variant, experiment, args)
