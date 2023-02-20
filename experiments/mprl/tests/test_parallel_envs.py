@@ -1,6 +1,8 @@
+import os
 import time
 
 import numpy as np
+from rlkit.mprl.experiment import make_env_expl
 import robosuite as suite
 import torch
 from matplotlib import pyplot as plt
@@ -58,24 +60,16 @@ if __name__ == "__main__":
         ramp_ratio=0.2,
     )
     robosuite_args["controller_configs"] = controller_args
+    mp_env_kwargs["controller_args"] = controller_args
 
-    def make_env_expl():
-        expl_env = suite.make(
-            **robosuite_args,
-            has_renderer=False,
-            has_offscreen_renderer=False,
-            use_camera_obs=False,
-            camera_names="frontview",
-            camera_heights=1024,
-            camera_widths=1024,
-        )
-        expl_env = RobosuiteEnv(
-            NormalizedBoxEnv(GymWrapper(expl_env)),
-        )
-        return expl_env
+    variant = dict(
+        mp_env_kwargs=mp_env_kwargs,
+        expl_environment_kwargs=robosuite_args,
+        mprl=True,
+    )
 
-    num_envs = 20
-    env_fns = [make_env_expl for _ in range(num_envs)]
+    num_envs = os.cpu_count()
+    env_fns = [lambda : make_env_expl(variant) for _ in range(num_envs)]
     env = StableBaselinesVecEnv(
         env_fns=env_fns,
         start_method="fork",
@@ -86,10 +80,10 @@ if __name__ == "__main__":
     num_steps = 1000
     num_steps_taken = 0
     start = time.time()
-    # obs = env.reset()
     for _ in tqdm(range(num_steps // num_envs)):
         action = np.random.normal(size=(num_envs, env.action_space.low.size))
         obs, reward, done, info = env.step(action)
         num_steps_taken += num_envs
     end = time.time()
-    print("Frames per second: ", 1 / ((end - start) / num_steps_taken))
+    print(f"Num Envs: {num_envs}, Frames per second: ", 1 / ((end - start) / num_steps_taken))
+    env.close()

@@ -1,6 +1,68 @@
 import os
 import pickle
 
+# Create gym-compatible envs
+def make_env_expl(variant):
+    from robosuite.wrappers import GymWrapper
+    import robosuite as suite
+    import gym
+    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+    from rlkit.envs.wrappers import NormalizedBoxEnv
+
+
+    gym.logger.set_level(40)  # resolves annoying bbox warning
+    expl_env = suite.make(
+        **variant["expl_environment_kwargs"],
+        has_renderer=False,
+        has_offscreen_renderer=False,
+        use_camera_obs=False,
+        # has_renderer=False,
+        # has_offscreen_renderer=True,
+        # use_camera_obs=False,
+        # camera_names="frontview",
+        # camera_heights=1024,
+        # camera_widths=1024,
+    )
+    if variant.get("mprl", False):
+        expl_env = MPEnv(
+            GymWrapper(expl_env),
+            **variant.get("mp_env_kwargs"),
+        )
+    else:
+        expl_env = RobosuiteEnv(
+            NormalizedBoxEnv(GymWrapper(expl_env)),
+            **variant.get("robosuite_env_kwargs"),
+        )
+    return expl_env
+
+def make_env_eval(variant):
+    from robosuite.wrappers import GymWrapper
+    import robosuite as suite
+    import gym
+    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+    from rlkit.envs.wrappers import NormalizedBoxEnv
+
+    gym.logger.set_level(40)  # resolves annoying bbox warning
+    eval_env = suite.make(
+        **variant["eval_environment_kwargs"],
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        use_camera_obs=False,
+        camera_names="frontview",
+        camera_heights=1024,
+        camera_widths=1024,
+    )
+    if variant.get("mprl", False):
+        eval_env = MPEnv(
+            GymWrapper(eval_env),
+            **variant.get("mp_env_kwargs"),
+        )
+    else:
+        eval_env = RobosuiteEnv(
+            NormalizedBoxEnv(GymWrapper(eval_env)),
+            **variant.get("robosuite_env_kwargs"),
+        )
+    return eval_env
 
 def preprocess_variant_mp(variant):
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
@@ -310,21 +372,12 @@ def load_policy(path):
 
 
 def experiment(variant):
-    import gym
-
-    gym.logger.set_level(40)  # resolves annoying bbox warning
-
-    import robosuite as suite
-    from robosuite.wrappers import GymWrapper
-
     import rlkit.torch.pytorch_util as ptu
     from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
-    from rlkit.envs.wrappers import NormalizedBoxEnv
     from rlkit.envs.wrappers.mujoco_vec_wrappers import (
         DummyVecEnv,
         StableBaselinesVecEnv,
     )
-    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
     from rlkit.samplers.data_collector import MdpPathCollector
     from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.networks.mlp import ConcatMlp
@@ -335,66 +388,15 @@ def experiment(variant):
         TorchBatchRLAlgorithm,
     )
 
-    # Create gym-compatible envs
-    def make_env_expl():
-        import gym
-
-        gym.logger.set_level(40)  # resolves annoying bbox warning
-        expl_env = suite.make(
-            **variant["expl_environment_kwargs"],
-            has_renderer=False,
-            has_offscreen_renderer=False,
-            use_camera_obs=False,
-            # has_renderer=False,
-            # has_offscreen_renderer=True,
-            # use_camera_obs=False,
-            # camera_names="frontview",
-            # camera_heights=1024,
-            # camera_widths=1024,
-        )
-        if variant.get("mprl", False):
-            expl_env = MPEnv(
-                GymWrapper(expl_env),
-                **variant.get("mp_env_kwargs"),
-            )
-        else:
-            expl_env = RobosuiteEnv(
-                NormalizedBoxEnv(GymWrapper(expl_env)),
-                **variant.get("robosuite_env_kwargs"),
-            )
-        return expl_env
-
-    def make_env_eval():
-        eval_env = suite.make(
-            **variant["eval_environment_kwargs"],
-            has_renderer=False,
-            has_offscreen_renderer=True,
-            use_camera_obs=False,
-            camera_names="frontview",
-            camera_heights=1024,
-            camera_widths=1024,
-        )
-        if variant.get("mprl", False):
-            eval_env = MPEnv(
-                GymWrapper(eval_env),
-                **variant.get("mp_env_kwargs"),
-            )
-        else:
-            eval_env = RobosuiteEnv(
-                NormalizedBoxEnv(GymWrapper(eval_env)),
-                **variant.get("robosuite_env_kwargs"),
-            )
-        return eval_env
-
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:
-        env_fns = [make_env_expl for _ in range(num_expl_envs)]
+        env_fns = [lambda : make_env_expl(variant) for _ in range(num_expl_envs)]
         expl_env = StableBaselinesVecEnv(
             env_fns=env_fns,
             start_method="fork",
         )
     else:
-        expl_envs = [make_env_expl()]
+        expl_envs = [make_env_expl(variant)]
         expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
 
     eval_env = expl_env
