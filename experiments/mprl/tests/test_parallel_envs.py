@@ -68,7 +68,7 @@ if __name__ == "__main__":
         mprl=True,
     )
 
-    num_envs = os.cpu_count()
+    num_envs = int(os.environ.get('SLURM_CPUS_ON_NODE', os.cpu_count()))
     env_fns = [lambda : make_env_expl(variant) for _ in range(num_envs)]
     env = StableBaselinesVecEnv(
         env_fns=env_fns,

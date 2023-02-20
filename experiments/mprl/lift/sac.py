@@ -1,3 +1,4 @@
+import os
 from rlkit.mprl.experiment import experiment
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
@@ -140,6 +141,6 @@ if __name__ == "__main__":
         seed=129,
         version="normal",
         plan_to_learned_goals=False,
-        num_expl_envs=10,
+        num_expl_envs=int(os.environ.get('SLURM_CPUS_ON_NODE', os.cpu_count())),
     )
     setup_sweep_and_launch_exp(preprocess_variant, variant, experiment, args)
