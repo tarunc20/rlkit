@@ -719,6 +719,9 @@ class MPEnv(RobosuiteEnv):
     def get_init_target_pos(self):
         pos = get_object_pose(self)[:3]
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
+        # make gripper fully open at start
+        qpos[7] = 0.04
+        qpos[8] = -0.04
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
             # the orientation of the arm should not be changed
@@ -881,7 +884,7 @@ class MPEnv(RobosuiteEnv):
         self,
     ):
         if self.name.endswith("Lift"):
-            pose = np.array([0, 0, 0.05]) + self._eef_xpos
+            pose = np.array([0, 0, 0.1]) + self._eef_xpos
         elif self.name.endswith("PickPlaceBread"):
             pose = np.array(
                 [
@@ -895,6 +898,22 @@ class MPEnv(RobosuiteEnv):
                 [
                     0.2,
                     0.4,
+                    self.initial_object_pos[-1] + 0.1,
+                ]
+            )
+        elif self.name.endswith("PickPlaceCereal"):
+            pose = np.array(
+                [
+                    0.0,
+                    0.4,
+                    self.initial_object_pos[-1] + 0.1,
+                ]
+            )
+        elif self.name.endswith("PickPlaceMilk"):
+            pose = np.array(
+                [
+                    0.0,
+                    0.15,
                     self.initial_object_pos[-1] + 0.1,
                 ]
             )
@@ -964,6 +983,10 @@ class MPEnv(RobosuiteEnv):
                         default_controller_configs=self.controller_configs,
                     )
                     self.hasnt_teleported = False
+                    print(
+                        "distance to goal: ",
+                        np.linalg.norm(target_pos - self._eef_xpos),
+                    )
                 else:
                     mp_to_point(
                         self,
@@ -981,7 +1004,6 @@ class MPEnv(RobosuiteEnv):
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
-
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
