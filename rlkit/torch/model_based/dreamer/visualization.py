@@ -4,6 +4,7 @@ import os.path as osp
 import cv2
 import numpy as np
 import torch
+import wandb
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.core import logger
@@ -397,14 +398,19 @@ def make_video(frames, logdir, epoch):
     size = (width, height)
 
     out = cv2.VideoWriter(
-        logdir + "/" + f"viz_{epoch}.avi", cv2.VideoWriter_fourcc(*"DIVX"), 60, size
+        logdir + "/" + f"viz_{epoch}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 60, size
     )
 
     for frame in frames:
         out.write(frame)
-
-    out.release()
-
+    try:
+        out.release()
+        frames = np.asarray(frames)
+        frames = frames.transpose((0, 3, 1, 2))
+        log_dict = {"eval_video":wandb.Video(frames, fps=60, format="mp4")}
+        wandb.log(log_dict)
+    except:
+        pass
 
 def post_epoch_visualize_func(algorithm, epoch):
     if epoch % 10 == 0:

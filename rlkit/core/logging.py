@@ -14,6 +14,7 @@ import sys
 from collections import OrderedDict
 from contextlib import contextmanager
 from enum import Enum
+import wandb
 
 import dateutil.tz
 import numpy as np
@@ -200,6 +201,10 @@ class Logger(object):
         self._tabular.append((self._tabular_prefix_str + str(key), str(val)))
 
     def record_dict(self, d, prefix=None):
+        try:
+            wandb.log(d)
+        except:
+            pass
         if prefix is not None:
             self.push_tabular_prefix(prefix)
         for k, v in d.items():

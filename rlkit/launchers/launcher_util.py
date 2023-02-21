@@ -6,6 +6,7 @@ import pickle
 import random
 import sys
 import time
+import wandb
 from collections import namedtuple
 
 import __main__ as main
@@ -144,7 +145,16 @@ def run_experiment_here(
         script_name=script_name,
         **setup_logger_kwargs
     )
-
+    experiment_uuid = actual_log_dir.split('/')[-1]
+    run = None
+    if variant.get("wandb", False):
+        exp_pref = variant["exp_prefix"]
+        exp_id = variant["exp_id"]
+        group_name = f"{exp_pref}_{exp_id}"
+        run = wandb.init(project=variant['project'], config=variant, group=group_name)
+        run.name = experiment_uuid
+        # save json file as well
+        wandb.save(actual_log_dir + "variant.json")
     set_seed(seed)
     from rlkit.torch.pytorch_util import set_gpu_mode
 
@@ -166,7 +176,10 @@ def run_experiment_here(
     save_experiment_data(
         dict(run_experiment_here_kwargs=run_experiment_here_kwargs), actual_log_dir
     )
-    return experiment_function(variant)
+    result = experiment_function(variant)
+    if variant.get("wandb", False):
+        run.finish()
+    return result
 
 
 def create_exp_name(exp_prefix, exp_id=0, seed=0):
