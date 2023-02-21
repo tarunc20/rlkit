@@ -201,7 +201,6 @@ class Logger(object):
         self._tabular.append((self._tabular_prefix_str + str(key), str(val)))
 
     def record_dict(self, d, prefix=None):
-        print(f"Recording dict: {d}")
         try:
             wandb.log(d)
         except:

@@ -407,7 +407,7 @@ def make_video(frames, logdir, epoch):
         out.release()
         frames = np.asarray(frames)
         frames = frames.transpose((0, 3, 1, 2))
-        log_dict = {"eval_video":wandb.Video(frames, fps=45, format="mp4")}
+        log_dict = {"eval_video":wandb.Video(frames, fps=60, format="mp4")}
         wandb.log(log_dict)
     except:
         pass

@@ -57,6 +57,8 @@ def teleport_video_func(algorithm, epoch):
 
 
 def video_func(algorithm, epoch):
+    from rlkit.torch.model_based.dreamer.visualization import add_text
+
     import copy
     import os
     import pickle
@@ -71,34 +73,119 @@ def video_func(algorithm, epoch):
         max_path_length = algorithm.max_path_length
         env = algorithm.eval_env.envs[0]
         num_rollouts = 5
+        intermediate_frames_length = 100
         frames = []
-        success_rate = 0
         for _ in range(num_rollouts):
             policy.reset()
-            o = env.reset()
+            o = env.reset(get_intermediate_frames=True)
             im = env.get_image()
-            for path_length in range(max_path_length):
-                a, _ = policy.get_action(o)
-                o, r, d, i = env.step(copy.deepcopy(a))
-                im = env.get_image()
-                if len(frames) > path_length:
-                    frames[path_length] = np.concatenate(
-                        (frames[path_length], im), axis=1
-                    )
+            intermediate_frames = np.array(env.intermediate_frames)
+            idxs = np.linspace(
+                0, len(intermediate_frames), intermediate_frames_length, endpoint=False
+            )
+            if len(intermediate_frames) > 0:
+                intermediate_frames = intermediate_frames[idxs.astype(int)]
+            else:
+                intermediate_frames = [im] * intermediate_frames_length
+            if len(frames) > 0:
+                for j, fr in enumerate(intermediate_frames):
+                    frames[j] = np.concatenate([frames[j], fr], axis=1)
+                frames[len(intermediate_frames)] = np.concatenate(
+                    (frames[len(intermediate_frames)], im), axis=1
+                )
+                # frames[0] = np.concatenate((frames[0], im), axis=1)
+            else:
+                frames.extend(intermediate_frames)
+                frames.append(im)
+            prev_intermediate_frames_len = len(intermediate_frames)
+            for path_length in range(1, max_path_length + 1):
+                a, agent_info = policy.get_action(o)
+                if path_length == max_path_length:
+                    get_intermediate_frames = True
                 else:
-                    frames.append(im)
+                    get_intermediate_frames = False
+                o, r, d, i = env.step(
+                    copy.deepcopy(a), get_intermediate_frames=get_intermediate_frames
+                )
+
+                im = env.get_image()
+                if get_intermediate_frames:
+                    intermediate_frames = np.array(env.intermediate_frames)
+                    idxs = np.linspace(
+                        0,
+                        len(intermediate_frames),
+                        intermediate_frames_length,
+                        endpoint=False,
+                    )
+                    if len(intermediate_frames) > 0:
+                        intermediate_frames = intermediate_frames[idxs.astype(int)]
+                    else:
+                        intermediate_frames = [im] * intermediate_frames_length
+                    if len(frames) > path_length + prev_intermediate_frames_len:
+                        for j, fr in enumerate(intermediate_frames):
+                            frames[
+                                j
+                                + path_length
+                                + prev_intermediate_frames_len
+                                # j
+                                # + prev_intermediate_frames_len
+                            ] = np.concatenate(
+                                [
+                                    frames[
+                                        j
+                                        + path_length
+                                        + prev_intermediate_frames_len
+                                        # j
+                                        # + prev_intermediate_frames_len
+                                    ],
+                                    fr,
+                                ],
+                                axis=1,
+                            )
+                        frames[
+                            path_length
+                            + prev_intermediate_frames_len
+                            + len(intermediate_frames)
+                        ] = np.concatenate(
+                            (
+                                frames[
+                                    prev_intermediate_frames_len
+                                    + len(intermediate_frames)
+                                    + path_length
+                                ],
+                                im,
+                            ),
+                            axis=1,
+                        )
+                        # frames[path_length] = np.concatenate(
+                        #     (
+                        #         frames[path_length],
+                        #         im,
+                        #     ),
+                        #     axis=1,
+                        # )
+                    else:
+                        frames.extend(intermediate_frames)
+                        frames.append(im)
+                else:
+                    add_text(im, "Manipulator", (1, 10), 0.5, (0, 255, 0))
+                    if len(frames) > path_length + len(intermediate_frames):
+                        frames[path_length + len(intermediate_frames)] = np.concatenate(
+                            (frames[path_length + len(intermediate_frames)], im), axis=1
+                        )
+                    else:
+                        frames.append(im)
                 if d:
                     break
             print(
                 f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}"
             )
             print(f"Success: {env._check_success()}")
-            success_rate += env._check_success()
         logdir = logger.get_snapshot_dir()
         make_video(frames, logdir, epoch)
         print("saved video for epoch {}".format(epoch))
-        print(f"Success rate: {success_rate / num_rollouts}")
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
+
 
 def video_func_v4(algorithm, epoch):
     from rlkit.torch.model_based.dreamer.visualization import add_text
@@ -452,10 +539,6 @@ def experiment(variant):
                     func = video_func_v4
                 else:
                     func = video_func
-            func(algorithm, -1)
-            algorithm.post_epoch_funcs.append(func)
-        else:
-            func = video_func
             func(algorithm, -1)
             algorithm.post_epoch_funcs.append(func)
         algorithm.train()

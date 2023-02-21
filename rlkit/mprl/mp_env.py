@@ -29,9 +29,9 @@ except ImportError:
     from os.path import abspath, dirname, join
 
     sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
-    # from ompl import base as ob
-    # from ompl import util as ou
-    # from ompl import geometric as og
+    from ompl import base as ob
+    from ompl import util as ou
+    from ompl import geometric as og
 
 from mpl_toolkits import mplot3d
 import matplotlib.pyplot as plt
