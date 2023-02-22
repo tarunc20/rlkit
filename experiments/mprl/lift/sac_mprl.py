@@ -88,7 +88,7 @@ if __name__ == "__main__":
         ),
         mprl=True,
         algorithm="MPRL-SAC",
-        max_path_length=50,
+        max_path_length=25,
         replay_buffer_size=int(5e6),
         seed=129,
         version="normal",
