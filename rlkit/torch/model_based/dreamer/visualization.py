@@ -395,14 +395,6 @@ def visualize_primitive_unsubsampled_rollout(
 
 
 def make_video(frames, logdir, epoch):
-<<<<<<< HEAD
-    video_path = logdir + "/" + f"viz_{epoch}.mp4"
-    video_writer = imageio.get_writer(video_path, fps=20)
-    for frame in frames:
-        video_writer.append_data(frame[:, :, ::-1])
-    video_writer.close()
-
-=======
     height, width, _ = frames[0].shape
     size = (width, height)
 
@@ -420,7 +412,6 @@ def make_video(frames, logdir, epoch):
         wandb.log(log_dict)
     except:
         pass
->>>>>>> mprl
 
 def post_epoch_visualize_func(algorithm, epoch):
     if epoch % 10 == 0:
