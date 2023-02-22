@@ -939,19 +939,38 @@ class MPEnv(RobosuiteEnv):
                     # quat = quat / np.linalg.norm(quat)
                     quat = self._eef_xquat
                 is_grasped = self.check_grasp()
-                o = mp_to_point(
-                    self,
-                    self.ik_controller_config,
-                    self.osc_controller_config,
-                    np.concatenate((pos, quat), dtype=np.float64),
-                    qpos=self.reset_qpos,
-                    qvel=self.reset_qvel,
-                    grasp=is_grasped,
-                    ignore_object_collision=is_grasped,
-                    planning_time=self.planning_time,
-                    get_intermediate_frames=get_intermediate_frames,
-                    backtrack_movement_fraction=self.backtrack_movement_fraction,
-                )
+                if self.teleport_position:
+                    set_robot_based_on_ee_pos(
+                        self,
+                        pos,
+                        quat,
+                        self.reset_ori,
+                        self.ik_ctrl,
+                        self.reset_qpos,
+                        self.reset_qvel,
+                        is_grasped=is_grasped,
+                        default_controller_configs=self.controller_configs,
+                    )
+                    self.hasnt_teleported = False
+                    print(
+                        "distance to goal: ",
+                        np.linalg.norm(target_pos - self._eef_xpos),
+                    )
+                    o = self._get_observations()
+                else:
+                    o = mp_to_point(
+                        self,
+                        self.ik_controller_config,
+                        self.osc_controller_config,
+                        np.concatenate((pos, quat), dtype=np.float64),
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=is_grasped,
+                        ignore_object_collision=is_grasped,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=get_intermediate_frames,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    )
                 o, r, d, i = self._flatten_obs(o), self.reward(action), {}, False
             else:
                 o, r, d, i = self._wrapped_env.step(action)

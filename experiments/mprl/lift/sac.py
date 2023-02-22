@@ -10,9 +10,6 @@ if __name__ == "__main__":
     args = get_args()
 
     variant = dict(
-        wandb=True,
-        project='test',
-        root_dir=os.getcwd()[:-6], # remove /rlkit
         max_path_length=250,
         additional_reward_configs=dict(
             use_distance_reduced_to_object_reward=False,

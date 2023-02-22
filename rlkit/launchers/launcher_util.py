@@ -105,7 +105,7 @@ def run_experiment_here(
     base_log_dir=None,
     force_randomize_seed=False,
     log_dir=None,
-    **setup_logger_kwargs
+    **setup_logger_kwargs,
 ):
     """
     Run an experiment locally without any serialization.
@@ -143,17 +143,17 @@ def run_experiment_here(
         log_dir=log_dir,
         git_infos=git_infos,
         script_name=script_name,
-        **setup_logger_kwargs
+        **setup_logger_kwargs,
     )
-    experiment_uuid = actual_log_dir.split('/')[-1]
+    experiment_uuid = actual_log_dir.split("/")[-1]
     run = None
     if variant.get("wandb", False):
         exp_pref = variant["exp_prefix"]
         exp_id = variant["exp_id"]
         group_name = f"{exp_pref}_{exp_id}"
-        run = wandb.init(project=variant['project'], config=variant, group=group_name)
+        run = wandb.init(project=variant["project"], config=variant, group=group_name)
         run.name = experiment_uuid
-        run.log_code(variant['root_dir'])
+        run.log_code(variant["root_dir"])
         # save json file as well
         wandb.save(actual_log_dir + "variant.json")
     set_seed(seed)
@@ -172,7 +172,7 @@ def run_experiment_here(
         git_infos=git_infos,
         script_name=script_name,
         base_log_dir=base_log_dir,
-        **setup_logger_kwargs
+        **setup_logger_kwargs,
     )
     save_experiment_data(
         dict(run_experiment_here_kwargs=run_experiment_here_kwargs), actual_log_dir
@@ -239,7 +239,7 @@ def setup_logger(
     log_dir=None,
     git_infos=None,
     script_name=None,
-    **create_log_dir_kwargs
+    **create_log_dir_kwargs,
 ):
     """
     Set up logger to have some reasonable default settings.
@@ -748,7 +748,7 @@ def run_experiment(
             gpu=use_gpu,
             aws_s3_path=aws_s3_path,
             num_exps=num_exps_per_instance,
-            **mode_kwargs
+            **mode_kwargs,
         )
     elif mode == "gcp":
         image_name = conf.GCP_IMAGE_NAME
@@ -768,7 +768,7 @@ def run_experiment(
             gcp_bucket_name=conf.GCP_BUCKET_NAME,
             gcp_log_prefix=exp_prefix,
             gcp_log_name="",
-            **config_kwargs
+            **config_kwargs,
         )
     else:
         raise NotImplementedError("Mode not supported: {}".format(mode))
