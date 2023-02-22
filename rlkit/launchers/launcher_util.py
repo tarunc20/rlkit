@@ -153,6 +153,7 @@ def run_experiment_here(
         group_name = f"{exp_pref}_{exp_id}"
         run = wandb.init(project=variant['project'], config=variant, group=group_name)
         run.name = experiment_uuid
+        run.log_code(variant['root_dir'])
         # save json file as well
         wandb.save(actual_log_dir + "variant.json")
     set_seed(seed)

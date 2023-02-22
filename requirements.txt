@@ -22,3 +22,4 @@ ipdb
 pre-commit
 protobuf==3.20.0
 dm_control
+wandb
