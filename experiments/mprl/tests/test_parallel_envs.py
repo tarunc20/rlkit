@@ -68,8 +68,8 @@ if __name__ == "__main__":
         mprl=True,
     )
 
-    num_envs = int(os.environ.get('SLURM_CPUS_ON_NODE', os.cpu_count()))
-    env_fns = [lambda : make_env_expl(variant) for _ in range(num_envs)]
+    num_envs = int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count()))
+    env_fns = [lambda: make_env_expl(variant) for _ in range(num_envs)]
     env = StableBaselinesVecEnv(
         env_fns=env_fns,
         start_method="fork",
@@ -85,5 +85,8 @@ if __name__ == "__main__":
         obs, reward, done, info = env.step(action)
         num_steps_taken += num_envs
     end = time.time()
-    print(f"Num Envs: {num_envs}, Frames per second: ", 1 / ((end - start) / num_steps_taken))
+    print(
+        f"Num Envs: {num_envs}, Frames per second: ",
+        1 / ((end - start) / num_steps_taken),
+    )
     env.close()

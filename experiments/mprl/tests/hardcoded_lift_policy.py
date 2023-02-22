@@ -1,26 +1,16 @@
 import pickle
 import random
 
-import cv2
 import imageio
 import numpy as np
 import robosuite as suite
 import torch
-from robosuite.controllers import controller_factory
-from robosuite.controllers.controller_factory import load_controller_config
 from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
 
 import rlkit.torch.pytorch_util as ptu
-from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.mprl.mp_env import (
-    MPEnv,
-    apply_controller,
-    set_robot_based_on_ee_pos,
-    update_controller_config,
-)
-from rlkit.torch.model_based.dreamer.visualization import make_video
+from rlkit.mprl.mp_env import MPEnv, get_object_pose
 from rlkit.torch.sac.policies import MakeDeterministic
 
 if __name__ == "__main__":
@@ -30,7 +20,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceBread",
+        env_name="PickPlaceCereal",
         horizon=100,
     )
     # OSC controller spec
@@ -65,8 +55,11 @@ if __name__ == "__main__":
         "teleport_on_grasp": True,
         "teleport_position": True,
         "update_with_true_state": True,
-        "vertical_displacement": 0.04,
+        "vertical_displacement": 0.04,  # lift
+        # "vertical_displacement": 0.06, # can/bread
+        "vertical_displacement": 0.08,  # cereal/milk
         "controller_configs": controller_configs,
+        "verify_stable_grasp": True,
     }
     env = suite.make(
         **robosuite_args,
@@ -80,10 +73,6 @@ if __name__ == "__main__":
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
     num_episodes = 10
     total = 0
-    load_path = "/home/mdalal/research/mprl/rlkit/data/10-29-sac-mprl-pick-place-teleport-on-grasp-multi-step-policy-better-grasp-v1/10-29-sac_mprl_pick_place_teleport_on_grasp_multi_step_policy_better_grasp_v1_2022_10_29_22_06_35_0000--s-35851/policy_450.pkl"
-    policy = pickle.load(open(load_path, "rb"))
-    policy = MakeDeterministic(policy)
-    ptu.device = torch.device("cuda")
     success_rate = 0
     frames = []
 
@@ -92,15 +81,45 @@ if __name__ == "__main__":
     torch.manual_seed(0)
     random.seed(0)
     for s in tqdm(range(num_episodes)):
-        policy.reset()
         o = env.reset()
-        for i in tqdm(range(100)):
-            a, _ = policy.get_action(o)
-            o, r, d, _ = env.step(a)
+        for i in tqdm(range(5)):
+            a = np.concatenate(
+                (
+                    [0, 0, -1],
+                    [0, 0, 0, -1],
+                )
+            )
+            o, r, d, info = env.step(a)
             frames.append(env.get_image())
-            if d:
-                print("ended early")
-                break
+        for i in tqdm(range(10)):
+            a = np.concatenate(
+                (
+                    [0, 0, 0],
+                    [0, 0, 0, 1],
+                )
+            )
+            o, r, d, info = env.step(a)
+            frames.append(env.get_image())
+        for i in tqdm(range(10)):
+            a = np.concatenate(
+                (
+                    [0, 0, 0],
+                    [0, 0, 0, -1],
+                )
+            )
+            o, r, d, info = env.step(a)
+            frames.append(env.get_image())
+        # for i in tqdm(range(10)):
+        #     a = np.concatenate(
+        #         (
+        #             [0, 0, 1],
+        #             [0, 0, 0, 1],
+        #         )
+        #     )
+        #     o, r, d, info = env.step(a)
+
+        # save final image to disk
+        imageio.imwrite(f"final_{s}.png", env.get_image()[:, :, ::-1])
         print(env._check_success())
         success_rate += env._check_success()
     print(f"Success Rate: {success_rate/num_episodes}")

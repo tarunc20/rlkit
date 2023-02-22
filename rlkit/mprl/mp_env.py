@@ -145,7 +145,7 @@ def set_robot_based_on_ee_pos(
     qpos,
     qvel,
     is_grasped=False,
-    default_controller_args=None,
+    default_controller_configs=None,
 ):
     """
     Set robot joint positions based on target ee pose. Uses IK to solve for joint positions.
@@ -188,7 +188,7 @@ def set_robot_based_on_ee_pos(
         env.sim.forward()
 
     # teleporting the arm breaks the controller -> rebuilt it entirely
-    new_args = copy.deepcopy(default_controller_args)
+    new_args = copy.deepcopy(default_controller_configs)
     update_controller_config(env, new_args)
     osc_ctrl = controller_factory("OSC_POSE", new_args)
     osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
@@ -676,7 +676,7 @@ class MPEnv(RobosuiteEnv):
         terminate_on_success=False,
         check_com_grasp=False,
         recompute_reward_post_teleport=False,
-        controller_args=None,
+        controller_configs=None,
         verify_stable_grasp=False,
         randomize_init_target_pos_range=(0.04, 0.06),
     ):
@@ -712,13 +712,16 @@ class MPEnv(RobosuiteEnv):
         self.model = self.dm_sim.model
         self.check_com_grasp = check_com_grasp
         self.recompute_reward_post_teleport = recompute_reward_post_teleport
-        self.controller_args = controller_args
+        self.controller_configs = controller_configs
         self.verify_stable_grasp = verify_stable_grasp
         self.randomize_init_target_pos_range = randomize_init_target_pos_range
 
     def get_init_target_pos(self):
         pos = get_object_pose(self)[:3]
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
+        # make gripper fully open at start
+        qpos[7] = 0.04
+        qpos[8] = -0.04
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
             # the orientation of the arm should not be changed
@@ -738,7 +741,7 @@ class MPEnv(RobosuiteEnv):
                     self.ik_ctrl,
                     qpos,
                     qvel,
-                    default_controller_args=self.controller_args,
+                    default_controller_configs=self.controller_configs,
                 )
                 ori_cond = np.linalg.norm(self._eef_xquat - xquat) < 1e-6
                 grasp_cond = not self.check_grasp()
@@ -760,7 +763,7 @@ class MPEnv(RobosuiteEnv):
                 self.ik_ctrl,
                 qpos,
                 qvel,
-                default_controller_args=self.controller_args,
+                default_controller_configs=self.controller_configs,
             )
         # teleporting the arm can break the controller
         self.robots[0].controller.reset_goal()
@@ -881,7 +884,7 @@ class MPEnv(RobosuiteEnv):
         self,
     ):
         if self.name.endswith("Lift"):
-            pose = np.array([0, 0, 0.05]) + self._eef_xpos
+            pose = np.array([0, 0, 0.1]) + self._eef_xpos
         elif self.name.endswith("PickPlaceBread"):
             pose = np.array(
                 [
@@ -895,6 +898,22 @@ class MPEnv(RobosuiteEnv):
                 [
                     0.2,
                     0.4,
+                    self.initial_object_pos[-1] + 0.1,
+                ]
+            )
+        elif self.name.endswith("PickPlaceCereal"):
+            pose = np.array(
+                [
+                    0.0,
+                    0.4,
+                    self.initial_object_pos[-1] + 0.1,
+                ]
+            )
+        elif self.name.endswith("PickPlaceMilk"):
+            pose = np.array(
+                [
+                    0.0,
+                    0.15,
                     self.initial_object_pos[-1] + 0.1,
                 ]
             )
@@ -961,9 +980,13 @@ class MPEnv(RobosuiteEnv):
                         self.reset_qpos,
                         self.reset_qvel,
                         is_grasped=is_grasped,
-                        default_controller_args=self.controller_args,
+                        default_controller_configs=self.controller_configs,
                     )
                     self.hasnt_teleported = False
+                    print(
+                        "distance to goal: ",
+                        np.linalg.norm(target_pos - self._eef_xpos),
+                    )
                 else:
                     mp_to_point(
                         self,
@@ -981,7 +1004,6 @@ class MPEnv(RobosuiteEnv):
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
-
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
