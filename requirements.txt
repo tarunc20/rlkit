@@ -5,7 +5,7 @@ gym==0.21.0
 numpy-quaternion==2021.4.5.14.42.35
 python-dateutil==2.8.1
 matplotlib==3.3.4
-numpy==1.21.4
+numpy==1.23.5
 opencv-python==4.5.2.52
 numba==0.53.1
 click==8.0.1
@@ -20,3 +20,5 @@ isort==5.10.1
 pytest==6.2.5
 ipdb
 pre-commit
+protobuf==3.20.0
+dm_control

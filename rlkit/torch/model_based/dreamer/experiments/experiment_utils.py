@@ -98,7 +98,7 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
         default_parameters=variant,
     )
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
-        variant = preprocess_variant_fn(variant)
+        variant = preprocess_variant_fn(variant, debug=args.debug)
         for _ in range(args.num_seeds):
             seed = random.randint(0, 100000)
             variant["seed"] = seed

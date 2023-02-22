@@ -2,10 +2,38 @@ import os
 import pickle
 
 
-def preprocess_variant(variant):
+def preprocess_variant(variant, debug):
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
-    variant["eval_environment_kwargs"]["horizon"] = variant["max_path_length"]
-    variant["expl_environment_kwargs"]["horizon"] = variant["max_path_length"]
+    variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
+        50 * variant["max_path_length"]
+    )
+    controller_configs = variant.pop("controller_configs")
+    environment_kwargs = variant.pop("environment_kwargs")
+
+    environment_kwargs["controller_configs"] = controller_configs
+    environment_kwargs["horizon"] = variant["max_path_length"]
+
+    environment_kwargs.update(variant.get("additional_reward_configs", {}))
+
+    variant["expl_environment_kwargs"] = environment_kwargs
+    variant["eval_environment_kwargs"] = environment_kwargs
+    if "mp_env_kwargs" in variant:
+        variant["mp_env_kwargs"]["controller_configs"] = controller_configs
+    if debug:
+        algorithm_kwargs = variant["algorithm_kwargs"]
+        algorithm_kwargs["min_num_steps_before_training"] = max(
+            variant["max_path_length"], algorithm_kwargs["batch_size"]
+        )
+        algorithm_kwargs["num_epochs"] = 2
+        algorithm_kwargs["num_eval_steps_per_epoch"] = variant["max_path_length"]
+        algorithm_kwargs["num_expl_steps_per_train_loop"] = variant["max_path_length"]
+        algorithm_kwargs["num_trains_per_train_loop"] = 1
+        algorithm_kwargs["num_train_loops_per_epoch"] = 1
+    return variant
+
+
+def preprocess_variant_mp(variant, debug):
+    variant = preprocess_variant(variant, debug)
     variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
     if variant["plan_to_learned_goals"]:
         variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
@@ -14,7 +42,71 @@ def preprocess_variant(variant):
     return variant
 
 
-def teleport_video_func(algorithm, epoch):
+# Create gym-compatible envs
+def make_env_expl(variant):
+    from robosuite.wrappers import GymWrapper
+    import robosuite as suite
+    import gym
+    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+    from rlkit.envs.wrappers import NormalizedBoxEnv
+
+    gym.logger.set_level(40)  # resolves annoying bbox warning
+    expl_env = suite.make(
+        **variant["expl_environment_kwargs"],
+        has_renderer=False,
+        has_offscreen_renderer=False,
+        use_camera_obs=False,
+        # has_renderer=False,
+        # has_offscreen_renderer=True,
+        # use_camera_obs=False,
+        # camera_names="frontview",
+        # camera_heights=1024,
+        # camera_widths=1024,
+    )
+    if variant.get("mprl", False):
+        expl_env = MPEnv(
+            GymWrapper(expl_env),
+            **variant.get("mp_env_kwargs"),
+        )
+    else:
+        expl_env = RobosuiteEnv(
+            NormalizedBoxEnv(GymWrapper(expl_env)),
+            **variant.get("robosuite_env_kwargs"),
+        )
+    return expl_env
+
+
+def make_env_eval(variant):
+    from robosuite.wrappers import GymWrapper
+    import robosuite as suite
+    import gym
+    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+    from rlkit.envs.wrappers import NormalizedBoxEnv
+
+    gym.logger.set_level(40)  # resolves annoying bbox warning
+    eval_env = suite.make(
+        **variant["eval_environment_kwargs"],
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        use_camera_obs=False,
+        camera_names="frontview",
+        camera_heights=1024,
+        camera_widths=1024,
+    )
+    if variant.get("mprl", False):
+        eval_env = MPEnv(
+            GymWrapper(eval_env),
+            **variant.get("mp_env_kwargs"),
+        )
+    else:
+        eval_env = RobosuiteEnv(
+            NormalizedBoxEnv(GymWrapper(eval_env)),
+            **variant.get("robosuite_env_kwargs"),
+        )
+    return eval_env
+
+
+def video_func(algorithm, epoch):
     import copy
     import os
     import pickle
@@ -30,12 +122,13 @@ def teleport_video_func(algorithm, epoch):
         env = algorithm.eval_env.envs[0]
         num_rollouts = 5
         frames = []
+        success_rate = 0
         for _ in range(num_rollouts):
             policy.reset()
             o = env.reset()
             im = env.get_image()
             for path_length in range(max_path_length):
-                a, agent_info = policy.get_action(o)
+                a, _ = policy.get_action(o)
                 o, r, d, i = env.step(copy.deepcopy(a))
                 im = env.get_image()
                 if len(frames) > path_length:
@@ -50,15 +143,15 @@ def teleport_video_func(algorithm, epoch):
                 f"r:{r}, is grasped:{env.check_grasp()}, logged grasp: {i['grasped']}"
             )
             print(f"Success: {env._check_success()}")
+            success_rate += env._check_success()
         logdir = logger.get_snapshot_dir()
         make_video(frames, logdir, epoch)
         print("saved video for epoch {}".format(epoch))
+        print(f"Success rate: {success_rate / num_rollouts}")
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
 
 
-def video_func(algorithm, epoch):
-    from rlkit.torch.model_based.dreamer.visualization import add_text
-
+def mp_video_func(algorithm, epoch):
     import copy
     import os
     import pickle
@@ -66,7 +159,7 @@ def video_func(algorithm, epoch):
     import numpy as np
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.visualization import make_video
+    from rlkit.torch.model_based.dreamer.visualization import add_text, make_video
 
     if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         policy = algorithm.eval_data_collector._policy
@@ -187,8 +280,7 @@ def video_func(algorithm, epoch):
         pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
 
 
-def video_func_v4(algorithm, epoch):
-    from rlkit.torch.model_based.dreamer.visualization import add_text
+def mp_video_func_v4(algorithm, epoch):
     import copy
     import os
     import pickle
@@ -196,7 +288,7 @@ def video_func_v4(algorithm, epoch):
     import numpy as np
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.visualization import make_video
+    from rlkit.torch.model_based.dreamer.visualization import add_text, make_video
 
     if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         planner, policy = algorithm.eval_data_collector._policy
@@ -307,22 +399,14 @@ def load_policy(path):
 
 
 def experiment(variant):
-    from rlkit.samplers.rollout_functions import vec_rollout
-
+    import rlkit.torch.pytorch_util as ptu
+    from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
     from rlkit.envs.wrappers.mujoco_vec_wrappers import (
         DummyVecEnv,
         StableBaselinesVecEnv,
     )
-    from rlkit.samplers.rollout_functions import rollout_modular
-    import robosuite as suite
-    from robosuite.controllers import load_controller_config
-    from robosuite.wrappers import GymWrapper
-
-    import rlkit.torch.pytorch_util as ptu
-    from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
-    from rlkit.envs.wrappers import NormalizedBoxEnv
-    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
     from rlkit.samplers.data_collector import MdpPathCollector
+    from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.networks.mlp import ConcatMlp
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
@@ -331,65 +415,20 @@ def experiment(variant):
         TorchBatchRLAlgorithm,
     )
 
-    # Create gym-compatible envs
-    def make_env_expl():
-        controller = variant["expl_environment_kwargs"].pop("controller")
-        controller_config = load_controller_config(default_controller=controller)
-        expl_env = suite.make(
-            **variant["expl_environment_kwargs"],
-            has_renderer=False,
-            has_offscreen_renderer=False,
-            use_object_obs=True,
-            use_camera_obs=False,
-            reward_shaping=True,
-            controller_configs=controller_config,
-        )
-        if variant.get("mprl", False):
-            expl_env = MPEnv(
-                NormalizedBoxEnv(GymWrapper(expl_env)),
-                **variant.get("mp_env_kwargs"),
-            )
-        else:
-            expl_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(expl_env)))
-        return expl_env
-
-    def make_env_eval():
-        controller = variant["eval_environment_kwargs"].pop("controller")
-        controller_config = load_controller_config(default_controller=controller)
-        eval_env = suite.make(
-            **variant["eval_environment_kwargs"],
-            has_renderer=False,
-            has_offscreen_renderer=True,
-            use_object_obs=True,
-            use_camera_obs=False,
-            reward_shaping=True,
-            controller_configs=controller_config,
-            camera_names="frontview",
-            camera_heights=256,
-            camera_widths=256,
-        )
-        if variant.get("mprl", False):
-            eval_env = MPEnv(
-                NormalizedBoxEnv(GymWrapper(eval_env)),
-                **variant.get("mp_env_kwargs"),
-            )
-        else:
-            eval_env = RobosuiteEnv(NormalizedBoxEnv(GymWrapper(eval_env)))
-        return eval_env
-
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:
-        env_fns = [make_env_expl for _ in range(num_expl_envs)]
+        env_fns = [lambda: make_env_expl(variant) for _ in range(num_expl_envs)]
         expl_env = StableBaselinesVecEnv(
             env_fns=env_fns,
             start_method="fork",
         )
     else:
-        expl_envs = [make_env_expl()]
+        expl_envs = [make_env_expl(variant)]
         expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
 
-    eval_env = [make_env_eval()]
-    eval_env = DummyVecEnv(eval_env, pass_render_kwargs=False)
+    eval_env = expl_env
+    # eval_env = [make_env_eval()]
+    # eval_env = DummyVecEnv(eval_env, pass_render_kwargs=False)
 
     obs_dim = eval_env.observation_space.low.size
     action_dim = eval_env.action_space.low.size
@@ -515,30 +554,28 @@ def experiment(variant):
     algorithm.to(ptu.device)
     if variant.get("load_path", None):
         policy = pickle.load(open(os.path.join(variant["load_path"]), "rb"))
+        policy = MakeDeterministic(policy)
         algorithm.eval_data_collector._policy = policy
-        video_func(algorithm, -1)
-        exit()
-        for _ in range(10):
-            o = eval_env.reset()
-            policy.reset()
-            for _ in range(eval_env.envs[0].horizon):
-                a = policy.get_action(o)[0]
-                o, r, d, i = eval_env.step(a)
-                print(
-                    f"r:{r}, is grasped:{eval_env.envs[0].check_grasp()},logged grasp: {i['grasped']}"
-                )
-            print(f"Success: {eval_env.envs[0]._check_success()}")
-            # if eval_env.envs[0]._check_success():
-            #     exit()
+        if variant.get("mp_env_kwargs", None):
+            if variant["mp_env_kwargs"]["teleport_position"]:
+                func = video_func
+            else:
+                if variant["plan_to_learned_goals"]:
+                    func = mp_video_func_v4
+                else:
+                    func = mp_video_func
+            func(algorithm, -1)
     else:
         if variant.get("mp_env_kwargs", None):
             if variant["mp_env_kwargs"]["teleport_position"]:
-                func = teleport_video_func
+                func = video_func
             else:
                 if variant["plan_to_learned_goals"]:
-                    func = video_func_v4
+                    func = mp_video_func_v4
                 else:
-                    func = video_func
-            func(algorithm, -1)
-            algorithm.post_epoch_funcs.append(func)
+                    func = mp_video_func
+        else:
+            func = video_func
+        # func(algorithm, -1)
+        # algorithm.post_epoch_funcs.append(func)
         algorithm.train()

@@ -33,46 +33,30 @@ export MKL_THREADING_LAYER=GNU
 export D4RL_SUPPRESS_IMPORT_ERROR='1'
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/mdalal/.mujoco/mujoco210/bin
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-000
 ```
 
 Setup Directories:
 ```
 mkdir ~/research/<project_name>/
 cd ~/research/<project_name>/
-git clone git@github.com:mihdalal/d4rl.git
 git clone git@github.com:mihdalal/doodad.git
 git clone git@github.com:mihdalal/metaworld.git
-git clone git@github.com:mihdalal/rlkit.git
-git clone git@github.com:mihdalal/robosuite.git
+git clone -b mprl git@github.com:mihdalal/rlkit.git
+git clone -b mprl git@github.com:mihdalal/robosuite.git
 git clone git@github.com:mihdalal/viskit.git
 ```
 
 Install Ananconda environment
 ```
-conda create -n skill_learn python=3.8
-source activate skill_learn
+conda create -n mprl python=3.8.13
+source activate mprl
 ```
 
 Install packages
 ```
-cd d4rl
-git checkout skill_learn
-pip install -e .
-cd ../doodad
-pip install -r requirements.txt
-pip install -e .
-cd ../metaworld
-git checkout torque_mods
-pip install -e .
-cd ../robosuite
-pip install -r requirements-extra.txt
-pip install -e requirements.txt
-pip install -e .
-cd ../viskit
-pip install -e .
-cd ../rlkit
-pip install -r requirements.txt
-pip install -e .
+conda activate mprl
+./setup_script.sh mprl # arg is python env name
 ```
 
 3. (Optional) Copy `conf.py` to `conf_private.py` and edit to override defaults:
@@ -85,21 +69,24 @@ Debug:
 
 `python /path/to/experiment.py --debug`
 
-Replicate RAPS Kitchen results:
+Replicate SAC Lift results:
+```
+python experiments/mprl/lift/sac.py
+```
+Replicate SAC PickPlace results:
+```
+python experiments/mprl/pick_place/sac.py
+```
 
-`python experiments/ll_raps/dreamer_v2_single_task_primitives_kitchen.py -sk env_name -sv hinge_cabinet microwave kettle light_switch top_left_burner -st str --mode ssm --exp_prefix raps_kitchen_replicate --num_seeds 5`
+Replicate MPRL Lift results:
+```
+python experiments/mprl/lift/sac_mprl.py
+```
 
-Replicate RAPS Metaworld results:
-
-`python experiments/ll_raps/dreamer_v2_single_task_primitives.py -sk env_name -sv assembly-v2 disassemble-v2 soccer-v2 sweep-into-v2 -st str --mode ssm --exp_prefix raps_mw_replicate --num_seeds 5`
-
-LLRAPS Kitchen:
-
-`python experiments/ll_raps/dreamer_v2_single_task_low_level_primitives_kitchen_raps_params.py -sk env_name -sv microwave hinge_cabinet top_left_burner kettle light_switch -st str --num_seeds 5 --mode ssm --exp_prefix ll_raps_kitchen_replicate`
-
-LLRAPS Metaworld:
-
-`python experiments/ll_raps/dreamer_v2_single_task_low_level_primitives_raps_params.py -sk env_name -sv assembly-v2 disassemble-v2 soccer-v2 sweep-into-v2 -st str --num_seeds 5 --mode ssm --exp_prefix ll_raps_mw_refactor_replicate`
+Replicate MPRL PickPlace results:
+```
+python experiments/mprl/pick_place/sac_mprl.py
+```
 
 ## How to run sweeps from command line
 `python /path/to/experiment.py -sk key1 key2 key3 -sv v11 v12 ... -sv v21 v22 ... -sv v31 v32 ... -st k1type k2type k3type`
