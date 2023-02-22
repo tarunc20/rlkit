@@ -5,6 +5,7 @@ import cv2
 import imageio
 import numpy as np
 import torch
+import wandb
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.core import logger
@@ -394,12 +395,32 @@ def visualize_primitive_unsubsampled_rollout(
 
 
 def make_video(frames, logdir, epoch):
+<<<<<<< HEAD
     video_path = logdir + "/" + f"viz_{epoch}.mp4"
     video_writer = imageio.get_writer(video_path, fps=20)
     for frame in frames:
         video_writer.append_data(frame[:, :, ::-1])
     video_writer.close()
 
+=======
+    height, width, _ = frames[0].shape
+    size = (width, height)
+
+    out = cv2.VideoWriter(
+        logdir + "/" + f"viz_{epoch}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 60, size
+    )
+
+    for frame in frames:
+        out.write(frame)
+    try:
+        out.release()
+        frames = np.asarray(frames)
+        frames = frames.transpose((0, 3, 1, 2))
+        log_dict = {"eval_video":wandb.Video(frames, fps=60, format="mp4")}
+        wandb.log(log_dict)
+    except:
+        pass
+>>>>>>> mprl
 
 def post_epoch_visualize_func(algorithm, epoch):
     if epoch % 10 == 0:
