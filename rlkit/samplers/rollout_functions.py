@@ -217,20 +217,20 @@ def vec_rollout(
     if len(rewards.shape) == 1:
         rewards = rewards.reshape(-1, 1)
     terminals = np.array(terminals)
-    observations = [observations[:, i] for i in range(env.n_envs)]
-    next_observations = [next_observations[:, i] for i in range(env.n_envs)]
-    actions = [actions[:, i] for i in range(env.n_envs)]
-    rewards = [rewards[:, i] for i in range(env.n_envs)]
-    terminals = [terminals[:, i] for i in range(env.n_envs)]
+    observations = [observations[:, i] for i in range(env.num_envs)]
+    next_observations = [next_observations[:, i] for i in range(env.num_envs)]
+    actions = [actions[:, i] for i in range(env.num_envs)]
+    rewards = [rewards[:, i] for i in range(env.num_envs)]
+    terminals = [terminals[:, i] for i in range(env.num_envs)]
     env_infos = [
         [
             {key: env_infos[j][key][i] for key in env_infos[j]}
             for j in range(max_path_length)
         ]
-        for i in range(env.n_envs)
-    ]  # should be a list of list of dicts (length n_envs) (length of path)
+        for i in range(env.num_envs)
+    ]  # should be a list of list of dicts (length num_envs) (length of path)
     paths = []
-    for i in range(env.n_envs):
+    for i in range(env.num_envs):
         paths.append(
             dict(
                 observations=observations[i],
@@ -258,13 +258,13 @@ def rollout_modular(
     full_o_postprocess_func=None,
     reset_callback=None,
 ):
-    planner, policy = agent
     if render_kwargs is None:
         render_kwargs = {}
     if get_action_kwargs is None:
         get_action_kwargs = {}
     if preprocess_obs_for_policy_fn is None:
         preprocess_obs_for_policy_fn = lambda x: x
+
     raw_obs = []
     raw_next_obs = []
     observations = []
@@ -274,7 +274,6 @@ def rollout_modular(
     agent_infos = []
     env_infos = []
     next_observations = []
-
     planner_raw_obs = []
     planner_raw_next_obs = []
     planner_observations = []
@@ -286,50 +285,42 @@ def rollout_modular(
     planner_next_observations = []
 
     path_length = 0
-    planner.reset()
-    policy.reset()
+    agent.reset()
     o = env.reset()
     if render:
         env.render(**render_kwargs)
-    while path_length < max_path_length + 2:
-        if path_length == 0 or path_length == max_path_length + 1:
-            planner_raw_obs.append(o)
-            planner_o_for_agent = preprocess_obs_for_policy_fn(o)
-            planner_a, planner_info = planner.get_action(
-                planner_o_for_agent, **get_action_kwargs
-            )
-            planner_raw_next_obs.append(o)
-            planner_next_o, planner_r, planner_d, planner_env_info = env.step(
-                copy.deepcopy(planner_a)
-            )
-            planner_raw_next_obs.append(planner_next_o)
-            planner_observations.append(o)
-            planner_rewards.append(planner_r)
-            planner_terminals.append(planner_d)
-            planner_actions.append(planner_a)
-            planner_next_observations.append(planner_next_o)
-            planner_agent_infos.append(planner_info)
-            planner_env_infos.append(planner_env_info)
-            o = planner_next_o
-            path_length += 1
-        else:
-            raw_obs.append(o)
-            o_for_agent = preprocess_obs_for_policy_fn(o)
-            a, agent_info = policy.get_action(o_for_agent, **get_action_kwargs)
+    while path_length < max_path_length:
+        used_planner = agent.current_policy_str == "policy1"
+        raw_obs.append(o)
+        o_for_agent = preprocess_obs_for_policy_fn(o)
+        a, agent_info = agent.get_action(o_for_agent, **get_action_kwargs)
 
-            next_o, r, d, env_info = env.step(copy.deepcopy(a))
-            if render:
-                env.render(**render_kwargs)
+        if full_o_postprocess_func:
+            full_o_postprocess_func(env, agent, o)
+
+        next_o, r, d, env_info = env.step(copy.deepcopy(a))
+        path_length += 1
+
+        if used_planner:
+            planner_raw_obs.append(o)
+            planner_raw_next_obs.append(next_o)
+            planner_observations.append(o)
+            planner_rewards.append(r)
+            planner_terminals.append(d)
+            planner_actions.append(a)
+            planner_next_observations.append(next_o)
+            planner_agent_infos.append(agent_info)
+            planner_env_infos.append(env_info)
+        else:
             observations.append(o)
             rewards.append(r)
             terminals.append(d)
             actions.append(a)
             next_observations.append(next_o)
-            raw_next_obs.append(next_o)
             agent_infos.append(agent_info)
             env_infos.append(env_info)
-            path_length += 1
-            o = next_o
+
+        o = next_o
     actions = np.array(actions)
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
@@ -354,36 +345,37 @@ def rollout_modular(
     if len(planner_rewards.shape) == 1:
         planner_rewards = planner_rewards.reshape(-1, 1)
     terminals = np.array(terminals)
-    observations = [observations[:, i] for i in range(env.n_envs)]
-    next_observations = [next_observations[:, i] for i in range(env.n_envs)]
-    actions = [actions[:, i] for i in range(env.n_envs)]
-    rewards = [rewards[:, i] for i in range(env.n_envs)]
-    terminals = [terminals[:, i] for i in range(env.n_envs)]
+    observations = [observations[:, i] for i in range(env.num_envs)]
+    next_observations = [next_observations[:, i] for i in range(env.num_envs)]
+    actions = [actions[:, i] for i in range(env.num_envs)]
+    rewards = [rewards[:, i] for i in range(env.num_envs)]
+    terminals = [terminals[:, i] for i in range(env.num_envs)]
     env_infos = [
         [
             {key: env_infos[j][key][i] for key in env_infos[j]}
-            for j in range(max_path_length)
+            for j in range(len(env_infos))
         ]
-        for i in range(env.n_envs)
-    ]  # should be a list of list of dicts (length n_envs) (length of path)
+        for i in range(env.num_envs)
+    ]  # should be a list of list of dicts (length num_envs) (length of path)
 
     planner_terminals = np.array(planner_terminals)
-    planner_observations = [planner_observations[:, i] for i in range(env.n_envs)]
+    planner_observations = [planner_observations[:, i] for i in range(env.num_envs)]
     planner_next_observations = [
-        planner_next_observations[:, i] for i in range(env.n_envs)
+        planner_next_observations[:, i] for i in range(env.num_envs)
     ]
-    planner_actions = [planner_actions[:, i] for i in range(env.n_envs)]
-    planner_rewards = [planner_rewards[:, i] for i in range(env.n_envs)]
-    planner_terminals = [planner_terminals[:, i] for i in range(env.n_envs)]
+    planner_actions = [planner_actions[:, i] for i in range(env.num_envs)]
+    planner_rewards = [planner_rewards[:, i] for i in range(env.num_envs)]
+    planner_terminals = [planner_terminals[:, i] for i in range(env.num_envs)]
     planner_env_infos = [
         [
             {key: planner_env_infos[j][key][i] for key in planner_env_infos[j]}
-            for j in range(2)
+            for j in range(len(planner_env_infos))
         ]
-        for i in range(env.n_envs)
-    ]  # should be a list of list of dicts (length n_envs) (length of path)
+        for i in range(env.num_envs)
+    ]  # should be a list of list of dicts (length num_envs) (length of path)
     paths = []
-    for i in range(env.n_envs):
+    for i in range(env.num_envs):
+        # todo: verify this is correct
         planner_rewards[i][0] = planner_rewards[i][0] + rewards[i].sum()
         rewards[i][-1] = rewards[i][-1] + planner_rewards[i][-1]
         paths.append(

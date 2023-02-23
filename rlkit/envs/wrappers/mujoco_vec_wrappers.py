@@ -10,7 +10,7 @@ from stable_baselines3.common.vec_env import CloudpickleWrapper, SubprocVecEnv, 
 class DummyVecEnv(Env):
     def __init__(self, envs, pass_render_kwargs=True):
         self.envs = envs
-        self.n_envs = len(envs)
+        self.num_envs = len(envs)
         self.observation_space = envs[0].observation_space
         self.action_space = envs[0].action_space
         self.pass_render_kwargs = pass_render_kwargs
@@ -62,9 +62,9 @@ class DummyVecEnv(Env):
         return obs, rewards, done, new_info
 
     def reset(self):
-        obs = [None] * self.n_envs
-        promises = [self.envs[env_idx].reset() for env_idx in range(self.n_envs)]
-        for index, promise in zip(range(self.n_envs), promises):
+        obs = [None] * self.num_envs
+        promises = [self.envs[env_idx].reset() for env_idx in range(self.num_envs)]
+        for index, promise in zip(range(self.num_envs), promises):
             obs[index] = promise
         return np.array(obs)
 
@@ -76,6 +76,12 @@ class DummyVecEnv(Env):
 
     def load(self, path, suffix):
         return pickle.load(open(os.path.join(path, suffix), "rb"))
+
+    def env_method(self, method_name, *method_args, **method_kwargs):
+        return [
+            getattr(env, method_name)(*method_args, **method_kwargs)
+            for env in self.envs
+        ]
 
 
 def _worker(
@@ -122,8 +128,8 @@ class StableBaselinesVecEnv(SubprocVecEnv):
         self.waiting = False
         self.closed = False
         self.reload_state_args = reload_state_args
-        n_envs = len(env_fns)
-        self.n_envs = n_envs
+        num_envs = len(env_fns)
+        self.num_envs = num_envs
 
         if start_method is None:
             # Fork is not a thread safe method (see issue #217)
@@ -133,7 +139,7 @@ class StableBaselinesVecEnv(SubprocVecEnv):
             start_method = "forkserver" if forkserver_available else "spawn"
         ctx = mp.get_context("spawn")
 
-        self.remotes, self.work_remotes = zip(*[ctx.Pipe() for _ in range(n_envs)])
+        self.remotes, self.work_remotes = zip(*[ctx.Pipe() for _ in range(num_envs)])
         self.processes = []
         for work_remote, remote, env_fn in zip(
             self.work_remotes, self.remotes, env_fns
@@ -173,9 +179,9 @@ class StableBaselinesVecEnv(SubprocVecEnv):
         return obs, rewards, dones, new_info
 
     def save(self, path, suffix):
-        n_envs, make_env, make_env_args = self.reload_state_args
+        num_envs, make_env, make_env_args = self.reload_state_args
         reload_state_dict = dict()
-        reload_state_dict["n_envs"] = n_envs
+        reload_state_dict["num_envs"] = num_envs
         reload_state_dict["make_env"] = make_env
         reload_state_dict["make_env_args"] = make_env_args
         pickle.dump(reload_state_dict, open(os.path.join(path, suffix), "wb"))
@@ -187,11 +193,11 @@ class StableBaselinesVecEnv(SubprocVecEnv):
         """
         reload_state_dict = pickle.load(open(os.path.join(path, suffix), "rb"))
         make_env = reload_state_dict["make_env"]
-        n_envs = reload_state_dict["n_envs"]
+        num_envs = reload_state_dict["num_envs"]
         make_env_args = reload_state_dict["make_env_args"]
         del reload_state_dict["make_env"]
-        del reload_state_dict["n_envs"]
+        del reload_state_dict["num_envs"]
         del reload_state_dict["make_env_args"]
 
-        env_fns = [lambda: make_env(*make_env_args) for _ in range(n_envs)]
+        env_fns = [lambda: make_env(*make_env_args) for _ in range(num_envs)]
         return StableBaselinesVecEnv(env_fns=env_fns, start_method="fork")

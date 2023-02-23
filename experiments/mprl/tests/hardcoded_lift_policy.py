@@ -20,7 +20,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceCereal",
+        env_name="PickPlaceCan",
         horizon=100,
     )
     # OSC controller spec

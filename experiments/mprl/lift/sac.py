@@ -8,7 +8,6 @@ from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
 if __name__ == "__main__":
     # noinspection PyTypeChecker
     args = get_args()
-
     variant = dict(
         max_path_length=250,
         additional_reward_configs=dict(

@@ -1,6 +1,8 @@
 import os
 import pickle
 
+from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
+
 
 def preprocess_variant(variant, debug):
     variant["wandb"] = True
@@ -476,12 +478,20 @@ def experiment(variant):
 
         eval_path_collector = MdpPathCollector(
             eval_env,
-            (planner_eval_policy, eval_policy),
+            StepBasedSwitchingPolicy(
+                planner_eval_policy,
+                eval_policy,
+                policy2_path_length=variant.get("max_path_length"),
+            ),
             rollout_fn=rollout_modular,
         )
         expl_path_collector = MdpPathCollector(
             expl_env,
-            (planner_expl_policy, expl_policy),
+            StepBasedSwitchingPolicy(
+                planner_expl_policy,
+                expl_policy,
+                policy2_path_length=variant.get("max_path_length"),
+            ),
             rollout_fn=rollout_modular,
         )
 

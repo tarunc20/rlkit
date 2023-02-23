@@ -144,8 +144,8 @@ def set_robot_based_on_ee_pos(
     ik,
     qpos,
     qvel,
-    is_grasped=False,
-    default_controller_configs=None,
+    is_grasped,
+    default_controller_configs,
 ):
     """
     Set robot joint positions based on target ee pose. Uses IK to solve for joint positions.
@@ -242,14 +242,14 @@ def backtracking_search_from_goal(
     ori,
     qpos,
     qvel,
-    movement_fraction=0.001,
-    ee_to_object_translation=None,
-    is_grasped=False,
+    movement_fraction,
+    is_grasped,
+    default_controller_configs,
 ):
     # only search over the xyz position, orientation should be the same as commanded
     curr_pos = goal_pos.copy()
     set_robot_based_on_ee_pos(
-        env, curr_pos, ori, ik_ctrl, qpos, qvel, ee_to_object_translation, is_grasped
+        env, curr_pos, ori, ik_ctrl, qpos, qvel, is_grasped, default_controller_configs
     )
     collision = check_robot_collision(env, ignore_object_collision)
     iters = 0
@@ -263,8 +263,8 @@ def backtracking_search_from_goal(
             ik_ctrl,
             qpos,
             qvel,
-            ee_to_object_translation,
             is_grasped,
+            default_controller_configs,
         )
         collision = check_robot_collision(env, ignore_object_collision)
         iters += 1
@@ -341,14 +341,6 @@ def mp_to_point(
 
     og_eef_xpos = env._eef_xpos.copy()
     og_eef_xquat = env._eef_xquat.copy()
-    if env.name.endswith("Lift"):
-        ee_to_object_translation = (
-            env.sim.data.body_xpos[env.cube_body_id] - og_eef_xpos
-        )
-    else:
-        ee_to_object_translation = (
-            env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]] - og_eef_xpos
-        )
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -365,9 +357,7 @@ def mp_to_point(
             return True
         else:
             # TODO; if it was grasping before ik and not after automatically set to invalid
-            set_robot_based_on_ee_pos(
-                env, pos, quat, ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
-            )
+            set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl, qpos, qvel, grasp)
             valid = not check_robot_collision(
                 env, ignore_object_collision=ignore_object_collision
             )
@@ -415,7 +405,7 @@ def mp_to_point(
     goal().rotation().w = pos[6]
     goal_valid = isStateValid(goal())
     goal_error = set_robot_based_on_ee_pos(
-        env, pos[:3], pos[3:], ik_ctrl, qpos, qvel, ee_to_object_translation, grasp
+        env, pos[:3], pos[3:], ik_ctrl, qpos, qvel, grasp
     )
     print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {goal_error}")
@@ -430,7 +420,6 @@ def mp_to_point(
             pos[3:],
             qpos,
             qvel,
-            ee_to_object_translation=ee_to_object_translation,
             is_grasped=grasp,
             movement_fraction=backtrack_movement_fraction,
         )
@@ -447,7 +436,6 @@ def mp_to_point(
             ik_ctrl,
             qpos,
             qvel,
-            ee_to_object_translation,
             grasp,
         )
         goal_valid = isStateValid(goal())
@@ -482,7 +470,6 @@ def mp_to_point(
             ik_ctrl,
             qpos,
             qvel,
-            ee_to_object_translation,
             grasp,
         )
         set_robot_based_on_ee_pos(
@@ -492,7 +479,6 @@ def mp_to_point(
             ik_ctrl,
             qpos,
             qvel,
-            ee_to_object_translation,
             grasp,
         )
     intermediate_frames = []
@@ -519,7 +505,6 @@ def mp_to_point(
                     ik_ctrl,
                     qpos,
                     qvel,
-                    ee_to_object_translation,
                     grasp,
                 )
                 new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
@@ -715,13 +700,15 @@ class MPEnv(RobosuiteEnv):
         self.controller_configs = controller_configs
         self.verify_stable_grasp = verify_stable_grasp
         self.randomize_init_target_pos_range = randomize_init_target_pos_range
+        # for robot in self.robots:
+        #     robot.gripper.init_qpos = [0.04, -0.04]
 
     def get_init_target_pos(self):
         pos = get_object_pose(self)[:3]
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
-        # make gripper fully open at start
-        qpos[7] = 0.04
-        qpos[8] = -0.04
+        # # make gripper fully open at start
+        # qpos[7] = 0.04
+        # qpos[8] = -0.04
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
             # the orientation of the arm should not be changed
@@ -741,6 +728,7 @@ class MPEnv(RobosuiteEnv):
                     self.ik_ctrl,
                     qpos,
                     qvel,
+                    is_grasped=False,
                     default_controller_configs=self.controller_configs,
                 )
                 ori_cond = np.linalg.norm(self._eef_xquat - xquat) < 1e-6
@@ -763,6 +751,7 @@ class MPEnv(RobosuiteEnv):
                 self.ik_ctrl,
                 qpos,
                 qvel,
+                is_grasped=False,
                 default_controller_configs=self.controller_configs,
             )
         # teleporting the arm can break the controller
@@ -805,13 +794,11 @@ class MPEnv(RobosuiteEnv):
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
         self.initial_object_pos = get_object_pose(self)[:3].copy()
+        update_controller_config(self, self.ik_controller_config)
+        self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
+        self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
         if not self.plan_to_learned_goals:
             if self.teleport_position:
-                update_controller_config(self, self.ik_controller_config)
-                self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
-                self.ik_ctrl.update_base_pose(
-                    self.robots[0].base_pos, self.robots[0].base_ori
-                )
                 pos = self.get_init_target_pos()
                 obs = self.get_observation()
                 # self.num_steps += 100 #don't log this
@@ -940,22 +927,22 @@ class MPEnv(RobosuiteEnv):
                     quat = self._eef_xquat
                 is_grasped = self.check_grasp()
                 if self.teleport_position:
-                    set_robot_based_on_ee_pos(
+                    # make gripper fully open at start
+                    pos = backtracking_search_from_goal(
                         self,
-                        pos,
-                        quat,
-                        self.reset_ori,
                         self.ik_ctrl,
-                        self.reset_qpos,
-                        self.reset_qvel,
+                        ignore_object_collision=is_grasped,
+                        start_pos=self._eef_xpos,
+                        start_ori=self._eef_xquat,
+                        goal_pos=pos,
+                        ori=quat,
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        movement_fraction=0.01,
                         is_grasped=is_grasped,
                         default_controller_configs=self.controller_configs,
                     )
                     self.hasnt_teleported = False
-                    print(
-                        "distance to goal: ",
-                        np.linalg.norm(target_pos - self._eef_xpos),
-                    )
                     o = self._get_observations()
                 else:
                     o = mp_to_point(
@@ -971,7 +958,7 @@ class MPEnv(RobosuiteEnv):
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
-                o, r, d, i = self._flatten_obs(o), self.reward(action), {}, False
+                o, r, d, i = self._flatten_obs(o), self.reward(action), False, {}
             else:
                 o, r, d, i = self._wrapped_env.step(action)
                 self.num_steps += 1
