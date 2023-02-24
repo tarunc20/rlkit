@@ -10,3 +10,4 @@ MANIFEST
 data/
 __pycache__/
 MUJOCO_LOG.TXT
+rlkit/launchers/google_credentials.json

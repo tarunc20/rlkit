@@ -5,6 +5,8 @@ from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
 
 
 def preprocess_variant(variant, debug):
+    variant["sheet_name"] = "motion-planning-rl"
+    variant["project"] = "mprl"
     variant["wandb"] = True
     variant["root_dir"] = os.getcwd()[:-6]  # remove /rlkit
     variant["algorithm_kwargs"]["max_path_length"] = variant["max_path_length"]
@@ -24,6 +26,7 @@ def preprocess_variant(variant, debug):
     if "mp_env_kwargs" in variant:
         variant["mp_env_kwargs"]["controller_configs"] = controller_configs
     if debug:
+        variant["debug"] = True
         algorithm_kwargs = variant["algorithm_kwargs"]
         algorithm_kwargs["min_num_steps_before_training"] = max(
             variant["max_path_length"], algorithm_kwargs["batch_size"]

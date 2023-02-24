@@ -18,6 +18,8 @@ from doodad.slurm.slurm_util import SlurmConfig, SlurmConfigMatrix
 import rlkit.pythonplusplus as ppp
 from rlkit.core import logger
 from rlkit.launchers import conf
+import ml_runlog
+import rlkit
 
 GitInfo = namedtuple(
     "GitInfo",
@@ -154,8 +156,29 @@ def run_experiment_here(
         run = wandb.init(project=variant["project"], config=variant, group=group_name)
         run.name = experiment_uuid
         run.log_code(variant["root_dir"])
+        time_str = datetime.datetime.now(dateutil.tz.tzlocal()).isoformat()
         # save json file as well
         wandb.save(actual_log_dir + "variant.json")
+        rlkit_dir = os.path.dirname(rlkit.__file__)
+        if not variant.get("debug", False):
+            ml_runlog.init(
+                os.path.join(
+                    rlkit_dir, "launchers", "service_account_credentials.json"
+                ),
+                variant["sheet_name"],
+            )
+
+            ml_runlog.log_data(
+                datetime=time_str,
+                run_name=run.name,
+                run_url=run.get_url(),
+                machine=os.uname().nodename,
+                log_dir=actual_log_dir,
+                branch=git_infos[1][4],
+                commit_hash=git_infos[1][3],
+                cmdline_args=variant['command'],
+                comments=os.getenv("SHEET_COMMENTS", ""),
+            )
     set_seed(seed)
     from rlkit.torch.pytorch_util import set_gpu_mode
 
@@ -531,6 +554,15 @@ def run_experiment(
     global gpu_ec2_okayed
     global target_mount
     global first_sss_launch
+
+    import sys
+    # The first argument in the sys.argv list is the name of the script itself
+    script_name = sys.argv[0]
+    # The rest of the arguments are the command-line arguments used to launch the script
+    command_line_args = sys.argv[1:]
+    # Join the command-line arguments into a string
+    command = " ".join(("python", script_name, "", *command_line_args))
+    variant['command'] = command
 
     """
     Sanitize inputs as needed
