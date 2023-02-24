@@ -110,7 +110,7 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
                     if variant[key] == value:
                         comment_keys.append(key)
                         comment_values.append(value)
-        if len(comment_keys) > 0 and comment_values > 0:
+        if len(comment_keys) > 0 and len(comment_values) > 0:
             variant["comments"] = "Hyperparameters: " + ", ".join(
                 [f"{k}={v}" for k, v in zip(comment_keys, comment_values)]
             )
