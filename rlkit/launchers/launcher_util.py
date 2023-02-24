@@ -168,6 +168,28 @@ def run_experiment_here(
                 variant["sheet_name"],
             )
 
+            try:
+                import git
+
+                new_git_infos = []
+                directory = rlkit_dir[:-6]
+                repo = git.Repo(directory)
+                try:
+                    branch_name = repo.active_branch.name
+                except TypeError:
+                    branch_name = "[DETACHED]"
+                new_git_infos.append(
+                    GitInfo(
+                        directory=directory,
+                        code_diff=repo.git.diff(None),
+                        code_diff_staged=repo.git.diff("--staged"),
+                        commit_hash=repo.head.commit.hexsha,
+                        branch_name=branch_name,
+                    )
+                )
+            except git.exc.InvalidGitRepositoryError as e:
+                print("Not a valid git repo: {}".format(directory))
+
             ml_runlog.log_data(
                 datetime=time_str,
                 run_name=run.name,
