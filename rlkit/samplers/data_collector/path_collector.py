@@ -6,6 +6,7 @@ import numpy as np
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.samplers.data_collector.base import PathCollector
 from rlkit.samplers.rollout_functions import rollout
+from tqdm import tqdm
 
 
 class MdpPathCollector(PathCollector):
@@ -43,6 +44,7 @@ class MdpPathCollector(PathCollector):
         paths = []
         num_steps_collected = 0
         num_steps_logged = 0
+        pbar = tqdm(total=num_steps, desc="Collecting paths...")
         while num_steps_collected < num_steps:
             max_path_length_this_loop = min(  # Do not go over num_steps
                 max_path_length,
@@ -55,6 +57,7 @@ class MdpPathCollector(PathCollector):
                 render=self._render,
                 render_kwargs=self._render_kwargs,
             )
+            num_steps_logged_this_loop = 0
             for path in paths_collected:
                 path_len = len(path["actions"])
                 if (
@@ -62,10 +65,13 @@ class MdpPathCollector(PathCollector):
                     and not path["terminals"][-1]
                     and discard_incomplete_paths
                 ):
+                    print("Discarding path with length", path_len)
                     break
                 num_steps_logged += path["env_infos"][-1]["num_steps"].item()
                 num_steps_collected += path_len
+                num_steps_logged_this_loop += path_len
                 paths.append(path)
+            pbar.update(num_steps_logged_this_loop)
         self._num_paths_total += len(paths)
         self._num_steps_total += num_steps_logged
         self._epoch_paths.extend(paths)

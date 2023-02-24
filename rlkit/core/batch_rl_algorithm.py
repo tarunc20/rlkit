@@ -5,6 +5,7 @@ import gtimer as gt
 from rlkit.core.rl_algorithm import BaseRLAlgorithm
 from rlkit.data_management.replay_buffer import ReplayBuffer
 from rlkit.samplers.data_collector import PathCollector
+from tqdm import tqdm
 
 
 class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
@@ -52,9 +53,11 @@ class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):
             self.replay_buffer.add_paths(init_expl_paths)
             self.expl_data_collector.end_epoch(-1)
 
-        for epoch in gt.timed_for(
-            range(self._start_epoch, self.num_epochs),
-            save_itrs=True,
+        for epoch in tqdm(
+            gt.timed_for(
+                range(self._start_epoch, self.num_epochs),
+                save_itrs=True,
+            )
         ):
             self.eval_data_collector.collect_new_paths(
                 self.max_path_length,
@@ -157,7 +160,7 @@ class BatchModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta):
             self.eval_data_collector.collect_new_paths(
                 self.max_path_length,
                 self.num_eval_steps_per_epoch,
-                discard_incomplete_paths=True,
+                discard_incomplete_paths=False,  # NOTE: paths are necessarily shorter due to switches between planner and policy
             )
             gt.stamp("evaluation sampling")
 

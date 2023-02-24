@@ -176,8 +176,8 @@ def run_experiment_here(
                 log_dir=actual_log_dir,
                 branch=git_infos[1][4],
                 commit_hash=git_infos[1][3],
-                cmdline_args=variant['command'],
-                comments=os.getenv("SHEET_COMMENTS", ""),
+                cmdline_args=variant["command"],
+                comments=variant.get("comments", ""),
             )
     set_seed(seed)
     from rlkit.torch.pytorch_util import set_gpu_mode
@@ -556,13 +556,14 @@ def run_experiment(
     global first_sss_launch
 
     import sys
+
     # The first argument in the sys.argv list is the name of the script itself
     script_name = sys.argv[0]
     # The rest of the arguments are the command-line arguments used to launch the script
     command_line_args = sys.argv[1:]
     # Join the command-line arguments into a string
     command = " ".join(("python", script_name, "", *command_line_args))
-    variant['command'] = command
+    variant["command"] = command
 
     """
     Sanitize inputs as needed

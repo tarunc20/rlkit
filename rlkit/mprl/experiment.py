@@ -27,6 +27,7 @@ def preprocess_variant(variant, debug):
         variant["mp_env_kwargs"]["controller_configs"] = controller_configs
     if debug:
         variant["debug"] = True
+        variant["project"] = "test"
         algorithm_kwargs = variant["algorithm_kwargs"]
         algorithm_kwargs["min_num_steps_before_training"] = max(
             variant["max_path_length"], algorithm_kwargs["batch_size"]

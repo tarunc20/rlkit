@@ -3,6 +3,7 @@ from functools import partial
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 create_rollout_function = partial
 

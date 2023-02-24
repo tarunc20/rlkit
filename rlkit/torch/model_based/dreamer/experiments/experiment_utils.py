@@ -89,6 +89,7 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
 
     import rlkit.util.hyperparameter as hyp
     from rlkit.launchers.launcher_util import run_experiment
+    import rlkit.pythonplusplus as ppp
 
     search_space = {
         key: value for key, value in zip(args.search_keys, args.search_values)
@@ -98,6 +99,22 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
         default_parameters=variant,
     )
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
+        # figure out which hyperparameters are changed in this variant:
+        comment_keys = []
+        comment_values = []
+        # loop through search space and match it with the variant
+        for key, values in search_space.items():
+            for value in values:
+                ppp.dot_map_dict_to_nested_dict({key: value})
+                if key in variant:
+                    if variant[key] == value:
+                        comment_keys.append(key)
+                        comment_values.append(value)
+        if len(comment_keys) > 0 and comment_values > 0:
+            variant["comments"] = "Hyperparameters: " + ", ".join(
+                [f"{k}={v}" for k, v in zip(comment_keys, comment_values)]
+            )
+
         variant = preprocess_variant_fn(variant, debug=args.debug)
         for _ in range(args.num_seeds):
             seed = random.randint(0, 100000)
