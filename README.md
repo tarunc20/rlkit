@@ -134,3 +134,11 @@ run_experiment(
     mode='ssm',  # or 'ec2'
     variant={'learning_rate': 1e-3},
 )
+```
+
+## Using ML-Runlog to track results:
+- Follow instructions from https://pyshark.com/google-sheets-api-using-python/ to make a google cloud console account (non CMU id)
+- Use these instructions to make a service account + get credentials: https://docs.gspread.org/en/latest/oauth2.html#for-bots-using-service-account
+- Make the spreadsheet and share it to the client email in the service account credentials
+- `pip install ml_runlog`
+- Run ml_runlog
