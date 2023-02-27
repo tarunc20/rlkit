@@ -189,18 +189,18 @@ def run_experiment_here(
                 )
             except git.exc.InvalidGitRepositoryError as e:
                 print("Not a valid git repo: {}".format(directory))
-
             ml_runlog.log_data(
                 datetime=time_str,
                 run_name=run.name,
                 run_url=run.get_url(),
                 machine=os.uname().nodename,
                 log_dir=actual_log_dir,
-                branch=git_infos[1][4],
-                commit_hash=git_infos[1][3],
+                branch=git_infos[0][4],
+                commit_hash=git_infos[0][3],
                 cmdline_args=variant["command"],
                 comments=variant.get("comments", ""),
             )
+            print("Logged to ml_runlog")
     set_seed(seed)
     from rlkit.torch.pytorch_util import set_gpu_mode
 

@@ -1,3 +1,6 @@
+import time
+
+
 def preprocess_variant_p2exp(variant):
     variant = variant.copy()
     if variant["reward_type"] == "intrinsic":
@@ -105,16 +108,16 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
         # loop through search space and match it with the variant
         for key, values in search_space.items():
             for value in values:
-                ppp.dot_map_dict_to_nested_dict({key: value})
-                if key in variant:
-                    if variant[key] == value:
-                        comment_keys.append(key)
-                        comment_values.append(value)
+                nested_dict = ppp.nested_dict_to_dot_map_dict(variant)
+                if nested_dict[key] == value:
+                    comment_keys.append(key)
+                    comment_values.append(nested_dict[key])
 
         if len(comment_keys) > 0 and len(comment_values) > 0:
             variant["comments"] = "Hyperparameters: " + ", ".join(
                 [f"{k}={v}" for k, v in zip(comment_keys, comment_values)]
             )
+        print("Comments: ", variant["comments"])
 
         variant = preprocess_variant_fn(variant, debug=args.debug)
         for _ in range(args.num_seeds):
@@ -136,3 +139,4 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
                 exp_id=exp_id,
                 skip_wait=args.skip_wait,
             )
+            time.sleep(10)
