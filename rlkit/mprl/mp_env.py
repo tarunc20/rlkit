@@ -21,6 +21,7 @@ from robosuite.utils.transform_utils import (
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 from rlkit.torch.model_based.dreamer.visualization import add_text
+from rlkit.mprl import module
 
 try:
     from ompl import base as ob
@@ -642,27 +643,31 @@ class MPEnv(RobosuiteEnv):
     def __init__(
         self,
         env,
-        vertical_displacement=0.03,
-        teleport_instead_of_mp=True,
+        controller_configs=None,
+        recompute_reward_post_teleport=False,
+        #mp
         planning_time=1,
-        plan_to_learned_goals=False,
-        learn_residual=False,
         mp_bounds_low=None,
         mp_bounds_high=None,
         update_with_true_state=False,
         grip_ctrl_scale=1,
-        clamp_actions=False,
         backtrack_movement_fraction=0.001,
+        #teleport
+        vertical_displacement=0.03,
+        teleport_instead_of_mp=True,
+        plan_to_learned_goals=False,
+        learn_residual=False,
+        clamp_actions=False,
         randomize_init_target_pos=False,
+        randomize_init_target_pos_range=(0.04, 0.06),
         teleport_on_grasp=False,
+        #upstream env
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
+        #grasp checks
         check_com_grasp=False,
-        recompute_reward_post_teleport=False,
-        controller_configs=None,
         verify_stable_grasp=False,
-        randomize_init_target_pos_range=(0.04, 0.06),
     ):
         super().__init__(
             env,
@@ -684,8 +689,6 @@ class MPEnv(RobosuiteEnv):
         self.backtrack_movement_fraction = backtrack_movement_fraction
         self.randomize_init_target_pos = randomize_init_target_pos
         self.teleport_on_grasp = teleport_on_grasp
-        from rlkit.mprl import module
-
         self.mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
         with io.StringIO() as string:
             string.write(ET.tostring(self.model.root, encoding="unicode"))
