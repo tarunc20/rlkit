@@ -11,4 +11,5 @@ data/
 __pycache__/
 MUJOCO_LOG.TXT
 rlkit/launchers/google_credentials.json
+rlkit/launchers/service_account_credentials.json
 wandb/
