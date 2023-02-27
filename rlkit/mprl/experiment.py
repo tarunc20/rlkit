@@ -64,9 +64,6 @@ def make_env(variant):
         has_renderer=False,
         has_offscreen_renderer=True,
         use_camera_obs=False,
-        camera_names="frontview",
-        camera_heights=1024,
-        camera_widths=1024,
     )
     if variant.get("mprl", False):
         expl_env = MPEnv(
