@@ -643,10 +643,9 @@ class MPEnv(RobosuiteEnv):
         self,
         env,
         vertical_displacement=0.03,
-        teleport_position=True,
+        teleport_instead_of_mp=True,
         planning_time=1,
         plan_to_learned_goals=False,
-        execute_hardcoded_policy_to_goal=False,
         learn_residual=False,
         mp_bounds_low=None,
         mp_bounds_high=None,
@@ -673,10 +672,9 @@ class MPEnv(RobosuiteEnv):
         )
         self.num_steps = 0
         self.vertical_displacement = vertical_displacement
-        self.teleport_position = teleport_position
+        self.teleport_instead_of_mp = teleport_instead_of_mp
         self.planning_time = planning_time
         self.plan_to_learned_goals = plan_to_learned_goals
-        self.execute_hardcoded_policy_to_goal = execute_hardcoded_policy_to_goal
         self.learn_residual = learn_residual
         self.mp_bounds_low = mp_bounds_low
         self.mp_bounds_high = mp_bounds_high
@@ -793,7 +791,7 @@ class MPEnv(RobosuiteEnv):
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
         self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
         if not self.plan_to_learned_goals:
-            if self.teleport_position:
+            if self.teleport_instead_of_mp:
                 pos = self.get_init_target_pos()
                 obs = self.get_observation()
                 # self.num_steps += 100 #don't log this
@@ -921,7 +919,7 @@ class MPEnv(RobosuiteEnv):
                     # quat = quat / np.linalg.norm(quat)
                     quat = self._eef_xquat
                 is_grasped = self.check_grasp()
-                if self.teleport_position:
+                if self.teleport_instead_of_mp:
                     # make gripper fully open at start
                     pos = backtracking_search_from_goal(
                         self,
@@ -972,7 +970,7 @@ class MPEnv(RobosuiteEnv):
                 self.teleport_on_grasp and is_grasped
             ):
                 target_pos = self.get_target_pos()
-                if self.teleport_position:
+                if self.teleport_instead_of_mp:
                     set_robot_based_on_ee_pos(
                         self,
                         target_pos,
@@ -1008,7 +1006,7 @@ class MPEnv(RobosuiteEnv):
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
-        if not self.teleport_position:
+        if not self.teleport_instead_of_mp:
             # add in planner logs
             i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves

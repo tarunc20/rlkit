@@ -19,7 +19,7 @@ from rlkit.torch.model_based.dreamer.visualization import make_video
 if __name__ == "__main__":
     mp_env_kwargs = dict(
         vertical_displacement=0.08,
-        teleport_position=True,
+        teleport_instead_of_mp=True,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
         mp_bounds_high=(0.45, 0.85, 2.25),

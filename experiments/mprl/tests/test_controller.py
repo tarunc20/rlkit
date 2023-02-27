@@ -34,7 +34,7 @@ if __name__ == "__main__":
     )
     mp_env_kwargs = {
         "vertical_displacement": 0.04,
-        "teleport_position": False,
+        "teleport_instead_of_mp": False,
         "planning_time": 20,
         "mp_bounds_low": (-1.45, -1.25, 0.45),
         "mp_bounds_high": (0.45, 0.85, 2.25),

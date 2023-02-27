@@ -53,7 +53,7 @@ if __name__ == "__main__":
         "planning_time": 20,
         "randomize_init_target_pos": False,
         "teleport_on_grasp": True,
-        "teleport_position": True,
+        "teleport_instead_of_mp": True,
         "update_with_true_state": True,
         "vertical_displacement": 0.04,  # lift
         # "vertical_displacement": 0.06, # can/bread

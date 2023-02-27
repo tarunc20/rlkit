@@ -62,7 +62,7 @@ def make_env(variant):
     expl_env = suite.make(
         **variant["expl_environment_kwargs"],
         has_renderer=False,
-        has_offscreen_renderer=True,
+        has_offscreen_renderer=False,
         use_camera_obs=False,
     )
     if variant.get("mprl", False):
@@ -536,7 +536,7 @@ def experiment(variant):
         policy = MakeDeterministic(policy)
         algorithm.eval_data_collector._policy = policy
         if variant.get("mp_env_kwargs", None):
-            if variant["mp_env_kwargs"]["teleport_position"]:
+            if variant["mp_env_kwargs"]["teleport_instead_of_mp"]:
                 func = video_func
             else:
                 if variant["plan_to_learned_goals"]:
@@ -546,7 +546,7 @@ def experiment(variant):
             func(algorithm, -1)
     else:
         if variant.get("mp_env_kwargs", None):
-            if variant["mp_env_kwargs"]["teleport_position"]:
+            if variant["mp_env_kwargs"]["teleport_instead_of_mp"]:
                 func = video_func
             else:
                 if variant["plan_to_learned_goals"]:
@@ -555,6 +555,6 @@ def experiment(variant):
                     func = mp_video_func
         else:
             func = video_func
-        func(algorithm, -1)
-        algorithm.post_epoch_funcs.append(func)
+        # func(algorithm, -1)
+        # algorithm.post_epoch_funcs.append(func)
         algorithm.train()
