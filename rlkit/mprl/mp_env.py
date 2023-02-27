@@ -590,11 +590,12 @@ class RobosuiteEnv(ProxyEnv):
         return self._wrapped_env._flatten_obs(di)
 
     def add_cameras(self):
-        for (cam_name, cam_w, cam_h, cam_d) in zip(
+        for (cam_name, cam_w, cam_h, cam_d, cam_seg) in zip(
             self.camera_names,
             self.camera_widths,
             self.camera_heights,
             self.camera_depths,
+            self.camera_segmentations,
         ):
             # Add cameras associated to our arrays
             cam_sensors, _ = self._create_camera_sensors(
@@ -602,6 +603,7 @@ class RobosuiteEnv(ProxyEnv):
                 cam_w=cam_w,
                 cam_h=cam_h,
                 cam_d=cam_d,
+                cam_segs=cam_seg,
                 modality="image",
             )
             self.cam_sensor = cam_sensors
