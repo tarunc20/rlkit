@@ -84,7 +84,7 @@ if __name__ == "__main__":
         seed=129,
         version="normal",
         plan_to_learned_goals=False,
-        num_expl_envs=10,
+        num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),
         planner_num_trains_per_train_loop=1000,
     )
     setup_sweep_and_launch_exp(preprocess_variant_mp, variant, experiment, args)

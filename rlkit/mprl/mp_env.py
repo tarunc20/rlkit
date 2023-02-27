@@ -647,14 +647,14 @@ class MPEnv(RobosuiteEnv):
         env,
         controller_configs=None,
         recompute_reward_post_teleport=False,
-        #mp
+        # mp
         planning_time=1,
         mp_bounds_low=None,
         mp_bounds_high=None,
         update_with_true_state=False,
         grip_ctrl_scale=1,
         backtrack_movement_fraction=0.001,
-        #teleport
+        # teleport
         vertical_displacement=0.03,
         teleport_instead_of_mp=True,
         plan_to_learned_goals=False,
@@ -663,11 +663,11 @@ class MPEnv(RobosuiteEnv):
         randomize_init_target_pos=False,
         randomize_init_target_pos_range=(0.04, 0.06),
         teleport_on_grasp=False,
-        #upstream env
+        # upstream env
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
-        #grasp checks
+        # grasp checks
         check_com_grasp=False,
         verify_stable_grasp=False,
     ):

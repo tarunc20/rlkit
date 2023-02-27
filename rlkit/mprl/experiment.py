@@ -62,8 +62,9 @@ def make_env(variant):
     expl_env = suite.make(
         **variant["expl_environment_kwargs"],
         has_renderer=False,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=True,
         use_camera_obs=False,
+        camera_name="frontview",
     )
     if variant.get("mprl", False):
         expl_env = MPEnv(
@@ -555,6 +556,6 @@ def experiment(variant):
                     func = mp_video_func
         else:
             func = video_func
-        # func(algorithm, -1)
-        # algorithm.post_epoch_funcs.append(func)
+        func(algorithm, -1)
+        algorithm.post_epoch_funcs.append(func)
         algorithm.train()
