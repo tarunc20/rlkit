@@ -700,15 +700,10 @@ class MPEnv(RobosuiteEnv):
         self.controller_configs = controller_configs
         self.verify_stable_grasp = verify_stable_grasp
         self.randomize_init_target_pos_range = randomize_init_target_pos_range
-        # for robot in self.robots:
-        #     robot.gripper.init_qpos = [0.04, -0.04]
 
     def get_init_target_pos(self):
         pos = get_object_pose(self)[:3]
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
-        # # make gripper fully open at start
-        # qpos[7] = 0.04
-        # qpos[8] = -0.04
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
             # the orientation of the arm should not be changed
