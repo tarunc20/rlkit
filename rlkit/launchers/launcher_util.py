@@ -191,6 +191,7 @@ def run_experiment_here(
                 print("Not a valid git repo: {}".format(directory))
             ml_runlog.log_data(
                 datetime=time_str,
+                exp_prefix=exp_prefix,
                 run_name=run.name,
                 run_url=run.get_url(),
                 machine=os.uname().nodename,
