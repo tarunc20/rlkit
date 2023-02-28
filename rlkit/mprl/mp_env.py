@@ -647,6 +647,7 @@ class MPEnv(RobosuiteEnv):
         env,
         controller_configs=None,
         recompute_reward_post_teleport=False,
+        planner_command_orientation=False,
         # mp
         planning_time=1,
         mp_bounds_low=None,
@@ -703,6 +704,7 @@ class MPEnv(RobosuiteEnv):
         self.controller_configs = controller_configs
         self.verify_stable_grasp = verify_stable_grasp
         self.randomize_init_target_pos_range = randomize_init_target_pos_range
+        self.planner_command_orientation = planner_command_orientation
 
     def get_init_target_pos(self):
         pos = get_object_pose(self)[:3]
@@ -913,16 +915,24 @@ class MPEnv(RobosuiteEnv):
             if self.ep_step_ctr == 0 or self.ep_step_ctr == self.horizon + 1:
                 if self.learn_residual:
                     pos = action[:3] + self.get_init_target_pos()
-                    rot_delta = euler2mat(pos[3:6])
-                    quat = mat2quat(rot_delta @ quat2mat(self.reset_ori))
-                else:
                     if self.clamp_actions:
-                        action = self.clamp_planner_action_mp_space_bounds(action)
+                        pos = self.clamp_planner_action_mp_space_bounds(pos)
+                    if self.planner_command_orientation:
+                        rot_delta = euler2mat(action[3:6])
+                        quat = mat2quat(rot_delta @ quat2mat(self.reset_ori))
+                    else:
+                        quat = self.reset_ori
+                else:
+                    pos = action[:3] + self._eef_xpos
+                    if self.clamp_actions:
+                        pos = self.clamp_planner_action_mp_space_bounds(pos)
+                    if self.planner_command_orientation:
+                        rot_delta = euler2mat(action[3:6])
+                        quat = mat2quat(rot_delta @ quat2mat(self._eef_xquat))
+                    else:
+                        quat = self._eef_xquat
                     action = action.astype(np.float64)
-                    pos = action[:3]
-                    # quat = mat2quat(euler2mat(action[3:6])).astype(np.float64)
-                    # quat = quat / np.linalg.norm(quat)
-                    quat = self._eef_xquat
+                # quat = quat / np.linalg.norm(quat) # might be necessary for MP code?
                 is_grasped = self.check_grasp()
                 if self.teleport_instead_of_mp:
                     # make gripper fully open at start
