@@ -648,6 +648,7 @@ class MPEnv(RobosuiteEnv):
         controller_configs=None,
         recompute_reward_post_teleport=False,
         planner_command_orientation=False,
+        num_ll_actions_per_hl_action=25,
         # mp
         planning_time=1,
         mp_bounds_low=None,
@@ -705,6 +706,62 @@ class MPEnv(RobosuiteEnv):
         self.verify_stable_grasp = verify_stable_grasp
         self.randomize_init_target_pos_range = randomize_init_target_pos_range
         self.planner_command_orientation = planner_command_orientation
+        self.num_ll_actions_per_hl_action = num_ll_actions_per_hl_action
+        self.high_level_step = 0
+
+    def get_target_pos_list(self):
+        pos_list = []
+        # init target pos (object pos + vertical displacement)
+        pos = get_object_pose(self)[:3]
+        pos = pos + np.array([0, 0, self.vertical_displacement])
+        pos_list.append(pos)
+        # final target positions, depending on the task
+        if self.name.endswith("Lift"):
+            pos_list.append(np.array([0, 0, 0.1]) + self.initial_object_pos)
+        elif self.name.endswith("PickPlaceBread"):
+            pos_list.append(
+                np.array(
+                    [
+                        0.2,
+                        0.15,
+                        self.initial_object_pos[-1] + 0.1,
+                    ]
+                )
+            )
+        elif self.name.endswith("PickPlaceCan"):
+            pos_list.append(
+                np.array(
+                    [
+                        0.2,
+                        0.4,
+                        self.initial_object_pos[-1] + 0.1,
+                    ]
+                )
+            )
+        elif self.name.endswith("PickPlaceCereal"):
+            pos_list.append(
+                np.array(
+                    [
+                        0.0,
+                        0.4,
+                        self.initial_object_pos[-1] + 0.1,
+                    ]
+                )
+            )
+        elif self.name.endswith("PickPlaceMilk"):
+            pos_list.append(
+                np.array(
+                    [
+                        0.0,
+                        0.15,
+                        self.initial_object_pos[-1] + 0.1,
+                    ]
+                )
+            )
+        return pos_list
+
+    def get_target_pos(self):
+        return self.get_target_pos_list()[self.high_level_step]
 
     def get_init_target_pos(self):
         pos = get_object_pose(self)[:3]
@@ -787,6 +844,7 @@ class MPEnv(RobosuiteEnv):
             "ramp_ratio": 0.2,
         }
         self.ep_step_ctr = 0
+        self.high_level_step = 0
         self.num_failed_solves = 0
         self.num_steps = 0
         self.reset_pos = self._eef_xpos.copy()
@@ -867,11 +925,11 @@ class MPEnv(RobosuiteEnv):
             return True
         return False
 
-    def get_target_pos(
+    def get_target_pos_no_planner(
         self,
     ):
         if self.name.endswith("Lift"):
-            pose = np.array([0, 0, 0.1]) + self._eef_xpos
+            pose = np.array([0, 0, 0.1]) + self.initial_object_pos
         elif self.name.endswith("PickPlaceBread"):
             pose = np.array(
                 [
@@ -912,9 +970,12 @@ class MPEnv(RobosuiteEnv):
 
     def step(self, action, get_intermediate_frames=False):
         if self.plan_to_learned_goals:
-            if self.ep_step_ctr == 0 or self.ep_step_ctr == self.horizon + 1:
+            if (
+                self.ep_step_ctr - self.high_level_step
+            ) % self.num_ll_actions_per_hl_action == 0:
+                target_pos = self.get_target_pos()
                 if self.learn_residual:
-                    pos = action[:3] + self.get_init_target_pos()
+                    pos = action[:3] + target_pos
                     if self.clamp_actions:
                         pos = self.clamp_planner_action_mp_space_bounds(pos)
                     if self.planner_command_orientation:
@@ -969,6 +1030,12 @@ class MPEnv(RobosuiteEnv):
                 o, r, d, i = self._flatten_obs(o), self.reward(action), False, {}
             else:
                 o, r, d, i = self._wrapped_env.step(action)
+                if (
+                    self.ep_step_ctr - self.high_level_step
+                ) % self.num_ll_actions_per_hl_action == (
+                    self.num_ll_actions_per_hl_action - 1
+                ):
+                    self.high_level_step += 1
                 self.num_steps += 1
             self.ep_step_ctr += 1
         else:
@@ -984,7 +1051,7 @@ class MPEnv(RobosuiteEnv):
             if (self.ep_step_ctr == self.horizon and is_grasped) or (
                 self.teleport_on_grasp and is_grasped
             ):
-                target_pos = self.get_target_pos()
+                target_pos = self.get_target_pos_no_planner()
                 if self.teleport_instead_of_mp:
                     set_robot_based_on_ee_pos(
                         self,

@@ -1,4 +1,6 @@
 import os
+import numpy as np
+
 from rlkit.mprl.experiment import experiment, preprocess_variant_mp
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 from rlkit.torch.model_based.dreamer.experiments.experiment_utils import (
@@ -79,9 +81,10 @@ if __name__ == "__main__":
         ),
         mprl=True,
         algorithm="MPRL-SAC",
-        max_path_length=25,
-        replay_buffer_size=int(5e6),
-        seed=129,
+        num_ll_actions_per_hl_action=25,
+        num_hl_actions_total=1,
+        replay_buffer_size=int(1e7),
+        seed=np.random.randint(0, 1000000),
         version="normal",
         plan_to_learned_goals=False,
         num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),

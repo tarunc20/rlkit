@@ -20,8 +20,8 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceCan",
-        horizon=100,
+        env_name="Lift",
+        horizon=25,
     )
     # OSC controller spec
     controller_configs = dict(
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         "update_with_true_state": True,
         "vertical_displacement": 0.04,  # lift
         # "vertical_displacement": 0.06, # can/bread
-        "vertical_displacement": 0.08,  # cereal/milk
+        # "vertical_displacement": 0.08,  # cereal/milk
         "controller_configs": controller_configs,
         "verify_stable_grasp": True,
     }
@@ -100,15 +100,15 @@ if __name__ == "__main__":
             )
             o, r, d, info = env.step(a)
             frames.append(env.get_image())
-        for i in tqdm(range(10)):
-            a = np.concatenate(
-                (
-                    [0, 0, 0],
-                    [0, 0, 0, -1],
-                )
-            )
-            o, r, d, info = env.step(a)
-            frames.append(env.get_image())
+        # for i in tqdm(range(10)):
+        #     a = np.concatenate(
+        #         (
+        #             [0, 0, 0],
+        #             [0, 0, 0, -1],
+        #         )
+        #     )
+        #     o, r, d, info = env.step(a)
+        #     frames.append(env.get_image())
         # for i in tqdm(range(10)):
         #     a = np.concatenate(
         #         (
@@ -118,8 +118,6 @@ if __name__ == "__main__":
         #     )
         #     o, r, d, info = env.step(a)
 
-        # save final image to disk
-        imageio.imwrite(f"final_{s}.png", env.get_image()[:, :, ::-1])
         print(env._check_success())
         success_rate += env._check_success()
     print(f"Success Rate: {success_rate/num_episodes}")

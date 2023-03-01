@@ -41,6 +41,16 @@ def preprocess_variant(variant, debug):
 
 
 def preprocess_variant_mp(variant, debug):
+    if variant["plan_to_learned_goals"]:
+        variant["max_path_length"] = (
+            variant["num_hl_actions_total"] * variant["num_ll_actions_per_hl_action"]
+            + variant["num_hl_actions_total"]
+        )
+        variant["mp_env_kwargs"]["num_ll_actions_per_hl_action"] = variant[
+            "num_ll_actions_per_hl_action"
+        ]
+    else:
+        variant["max_path_length"] = variant["num_ll_actions_per_hl_action"]
     variant = preprocess_variant(variant, debug)
     variant["mp_env_kwargs"]["plan_to_learned_goals"] = variant["plan_to_learned_goals"]
     if variant["plan_to_learned_goals"]:
