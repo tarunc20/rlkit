@@ -117,7 +117,7 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
             variant["comments"] = "Hyperparameters: " + ", ".join(
                 [f"{k}={v}" for k, v in zip(comment_keys, comment_values)]
             )
-        print("Comments: ", variant["comments"])
+            print("Comments: ", variant["comments"])
 
         variant = preprocess_variant_fn(variant, debug=args.debug)
         for _ in range(args.num_seeds):
