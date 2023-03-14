@@ -290,9 +290,14 @@ def rollout_modular(
     o = env.reset()
     if render:
         env.render(**render_kwargs)
+    current_low_level_rewards = []
     while path_length < max_path_length:
-        used_planner = agent.current_policy_str == "policy1"
-        raw_obs.append(o)
+        use_planner = agent.current_policy_str == "policy1"
+        if use_planner and len(observations) > 0:
+            # planner next obs should come after the low level policy finishes executing
+            planner_next_observations.append(next_o)
+            planner_raw_next_obs.append(next_o)
+            planner_rewards[-1] += current_low_level_rewards.sum()
         o_for_agent = preprocess_obs_for_policy_fn(o)
         a, agent_info = agent.get_action(o_for_agent, **get_action_kwargs)
 
@@ -302,26 +307,41 @@ def rollout_modular(
         next_o, r, d, env_info = env.step(copy.deepcopy(a))
         path_length += 1
 
-        if used_planner:
+        if use_planner:
+            current_low_level_rewards = []
             planner_raw_obs.append(o)
-            planner_raw_next_obs.append(next_o)
             planner_observations.append(o)
             planner_rewards.append(r)
             planner_terminals.append(d)
             planner_actions.append(a)
-            planner_next_observations.append(next_o)
             planner_agent_infos.append(agent_info)
             planner_env_infos.append(env_info)
+
+            # low level policy next obs should come after planner policy executes
+            # only add to next obs if there is a low level policy execution already, planner usually comes first
+            if len(observations) > 0:
+                next_observations[-1] = next_o
+                raw_next_obs[-1] = next_o
+                rewards[-1] += r  # add planner reward to low level policy reward
         else:
+            raw_obs.append(o)
             observations.append(o)
             rewards.append(r)
             terminals.append(d)
             actions.append(a)
-            next_observations.append(next_o)
             agent_infos.append(agent_info)
             env_infos.append(env_info)
+            current_low_level_rewards.append(r)
+            next_observations.append(next_o)
+            raw_next_obs.append(next_o)
 
         o = next_o
+    # planner next obs should come after the low level policy finishes executing
+    # TODO: do this more cleanly, currently this code assumes we end on a low level policy execution
+    planner_next_observations.append(next_o)
+    planner_raw_next_obs.append(next_o)
+    planner_rewards[-1] += sum(current_low_level_rewards)
+
     actions = np.array(actions)
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
@@ -376,9 +396,8 @@ def rollout_modular(
     ]  # should be a list of list of dicts (length num_envs) (length of path)
     paths = []
     for i in range(env.num_envs):
-        # todo: verify this is correct
-        planner_rewards[i][0] = planner_rewards[i][0] + rewards[i].sum()
-        rewards[i][-1] = rewards[i][-1] + planner_rewards[i][-1]
+        terminals[i][-1] = True
+        planner_terminals[i][-1] = True
         paths.append(
             dict(
                 observations=observations[i],
