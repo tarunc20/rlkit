@@ -521,14 +521,10 @@ def experiment(variant):
         )
     else:
         eval_path_collector = MdpPathCollector(
-            eval_env,
-            eval_policy,
-            rollout_fn=vec_rollout,
+            eval_env, eval_policy, rollout_fn=vec_rollout
         )
         expl_path_collector = MdpPathCollector(
-            expl_env,
-            expl_policy,
-            rollout_fn=vec_rollout,
+            expl_env, expl_policy, rollout_fn=vec_rollout
         )
 
         # Define algorithm

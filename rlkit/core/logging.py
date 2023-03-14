@@ -199,12 +199,13 @@ class Logger(object):
 
     def record_tabular(self, key, val):
         self._tabular.append((self._tabular_prefix_str + str(key), str(val)))
-
-    def record_dict(self, d, prefix=None):
+        print(self._tabular_prefix_str + str(key), str(val))
         try:
-            wandb.log(d)
+            wandb.log({self._tabular_prefix_str + str(key): val})
         except:
             pass
+
+    def record_dict(self, d, prefix=None):
         if prefix is not None:
             self.push_tabular_prefix(prefix)
         for k, v in d.items():
