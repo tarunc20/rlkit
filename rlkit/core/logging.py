@@ -199,7 +199,6 @@ class Logger(object):
 
     def record_tabular(self, key, val):
         self._tabular.append((self._tabular_prefix_str + str(key), str(val)))
-        print(self._tabular_prefix_str + str(key), str(val))
         try:
             wandb.log({self._tabular_prefix_str + str(key): val})
         except:

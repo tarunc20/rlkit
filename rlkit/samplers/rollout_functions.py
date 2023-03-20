@@ -259,6 +259,8 @@ def rollout_modular(
     full_o_postprocess_func=None,
     reset_callback=None,
 ):
+    from torchvision.utils import save_image
+
     if render_kwargs is None:
         render_kwargs = {}
     if get_action_kwargs is None:
@@ -291,16 +293,21 @@ def rollout_modular(
     if render:
         env.render(**render_kwargs)
     current_low_level_rewards = []
+    episode_breaks = []
     while path_length < max_path_length:
         use_planner = agent.current_policy_str == "policy1"
         if use_planner and len(observations) > 0:
-            # planner next obs should come after the low level policy finishes executing
-            planner_next_observations.append(next_o)
-            planner_raw_next_obs.append(next_o)
-            planner_rewards[-1] += current_low_level_rewards.sum()
+            episode_breaks.append(len(observations))
+        #     # planner next obs should come after the low level policy finishes executing
+        #     planner_next_observations.append(next_o)
+        #     planner_raw_next_obs.append(next_o)
+        #     if len(current_low_level_rewards) > 0:
+        #         planner_rewards[-1] += current_low_level_rewards.sum() / len(
+        #             current_low_level_rewards
+        #         )
         o_for_agent = preprocess_obs_for_policy_fn(o)
         a, agent_info = agent.get_action(o_for_agent, **get_action_kwargs)
-
+        # save_image(torch.tensor(np.array(env.env_method("get_image"))).permute(0, 3, 1, 2) / 255., f"{path_length}.png", nrow=4)
         if full_o_postprocess_func:
             full_o_postprocess_func(env, agent, o)
 
@@ -317,12 +324,16 @@ def rollout_modular(
             planner_agent_infos.append(agent_info)
             planner_env_infos.append(env_info)
 
+            # TODO: testing back to the old setup
+            planner_next_observations.append(next_o)
+            planner_raw_next_obs.append(next_o)
+
             # low level policy next obs should come after planner policy executes
             # only add to next obs if there is a low level policy execution already, planner usually comes first
-            if len(observations) > 0:
-                next_observations[-1] = next_o
-                raw_next_obs[-1] = next_o
-                rewards[-1] += r  # add planner reward to low level policy reward
+            # if len(observations) > 0:
+            #     next_observations[-1] = next_o
+            #     raw_next_obs[-1] = next_o
+            #     rewards[-1] += r  # add planner reward to low level policy reward
         else:
             raw_obs.append(o)
             observations.append(o)
@@ -338,10 +349,12 @@ def rollout_modular(
         o = next_o
     # planner next obs should come after the low level policy finishes executing
     # TODO: do this more cleanly, currently this code assumes we end on a low level policy execution
-    planner_next_observations.append(next_o)
-    planner_raw_next_obs.append(next_o)
-    planner_rewards[-1] += sum(current_low_level_rewards)
-
+    # planner_next_observations.append(next_o)
+    # planner_raw_next_obs.append(next_o)
+    # if len(current_low_level_rewards) > 0:
+    #     planner_rewards[-1] += sum(current_low_level_rewards) / len(
+    #         current_low_level_rewards
+    #     )  # want to re-scale rewards to be in the same range as the high level policy
     actions = np.array(actions)
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
@@ -396,26 +409,72 @@ def rollout_modular(
     ]  # should be a list of list of dicts (length num_envs) (length of path)
     paths = []
     for i in range(env.num_envs):
-        terminals[i][-1] = True
-        planner_terminals[i][-1] = True
-        paths.append(
-            dict(
-                observations=observations[i],
-                actions=actions[i],
-                rewards=rewards[i],
-                next_observations=next_observations[i],
-                terminals=terminals[i],
-                agent_infos=agent_infos,
-                env_infos=env_infos[i],
-                planner_observations=planner_observations[i],
-                planner_next_observations=planner_next_observations[i],
-                planner_actions=planner_actions[i],
-                planner_rewards=planner_rewards[i],
-                planner_terminals=planner_terminals[i],
-                planner_agent_infos=planner_agent_infos,
-                planner_env_infos=planner_env_infos[i],
+        # TODO: this might be the cause of the learning issues?
+        # terminals[i][-1] = True
+        # planner_terminals[i][-1] = True
+        if agent.use_episode_breaks:
+            prev_episode_break = 0
+            for idx, episode_break in enumerate(episode_breaks):
+                paths.append(
+                    dict(
+                        observations=observations[i][prev_episode_break:episode_break],
+                        actions=actions[i][prev_episode_break:episode_break],
+                        rewards=rewards[i][prev_episode_break:episode_break],
+                        next_observations=next_observations[i][
+                            prev_episode_break:episode_break
+                        ],
+                        terminals=terminals[i][prev_episode_break:episode_break],
+                        agent_infos=agent_infos,
+                        env_infos=env_infos[i][prev_episode_break:episode_break],
+                        planner_observations=planner_observations[i][idx : idx + 1],
+                        planner_next_observations=planner_next_observations[i][
+                            idx : idx + 1
+                        ],
+                        planner_actions=planner_actions[i][idx : idx + 1],
+                        planner_rewards=planner_rewards[i][idx : idx + 1],
+                        planner_terminals=planner_terminals[i][idx : idx + 1],
+                        planner_agent_infos=planner_agent_infos,
+                        planner_env_infos=planner_env_infos[i][idx : idx + 1],
+                    )
+                )
+                prev_episode_break = episode_break
+            paths.append(
+                dict(
+                    observations=observations[i][prev_episode_break:],
+                    actions=actions[i][prev_episode_break:],
+                    rewards=rewards[i][prev_episode_break:],
+                    next_observations=next_observations[i][prev_episode_break:],
+                    terminals=terminals[i][prev_episode_break:],
+                    agent_infos=agent_infos,
+                    env_infos=env_infos[i][prev_episode_break:],
+                    planner_observations=planner_observations[i][-1:],
+                    planner_next_observations=planner_next_observations[i][-1:],
+                    planner_actions=planner_actions[i][-1:],
+                    planner_rewards=planner_rewards[i][-1:],
+                    planner_terminals=planner_terminals[i][-1:],
+                    planner_agent_infos=planner_agent_infos,
+                    planner_env_infos=planner_env_infos[i][-1:],
+                )
             )
-        )
+        else:
+            paths.append(
+                dict(
+                    observations=observations[i],
+                    actions=actions[i],
+                    rewards=rewards[i],
+                    next_observations=next_observations[i],
+                    terminals=terminals[i],
+                    agent_infos=agent_infos,
+                    env_infos=env_infos[i],
+                    planner_observations=planner_observations[i],
+                    planner_next_observations=planner_next_observations[i],
+                    planner_actions=planner_actions[i],
+                    planner_rewards=planner_rewards[i],
+                    planner_terminals=planner_terminals[i],
+                    planner_agent_infos=planner_agent_infos,
+                    planner_env_infos=planner_env_infos[i],
+                )
+            )
     return paths
 
 

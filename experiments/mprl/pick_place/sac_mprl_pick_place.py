@@ -82,6 +82,8 @@ if __name__ == "__main__":
         mprl=True,
         algorithm="MPRL-SAC",
         max_path_length=25,
+        num_ll_actions_per_hl_action=25,
+        num_hl_actions_total=2,
         replay_buffer_size=int(1e7),
         seed=np.random.randint(0, 1000000),
         version="normal",

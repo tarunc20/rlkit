@@ -383,6 +383,9 @@ def load_policy(path):
 
 
 def experiment(variant):
+    import torch
+
+    torch.set_float32_matmul_precision("medium")
     import rlkit.torch.pytorch_util as ptu
     from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
     from rlkit.envs.wrappers.mujoco_vec_wrappers import (
@@ -392,6 +395,7 @@ def experiment(variant):
     from rlkit.samplers.data_collector import MdpPathCollector
     from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.networks.mlp import ConcatMlp
+    from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
     from rlkit.torch.torch_rl_algorithm import (
@@ -436,6 +440,13 @@ def experiment(variant):
     )
     eval_policy = MakeDeterministic(expl_policy)
 
+    import torch
+
+    qf1 = torch.compile(qf1)
+    qf2 = torch.compile(qf2)
+    target_qf1 = torch.compile(target_qf1)
+    target_qf2 = torch.compile(target_qf2)
+    expl_policy = torch.compile(expl_policy)
     trainer = SACTrainer(
         env=eval_env,
         policy=expl_policy,
@@ -493,7 +504,10 @@ def experiment(variant):
             StepBasedSwitchingPolicy(
                 planner_eval_policy,
                 eval_policy,
-                policy2_path_length=variant.get("max_path_length"),
+                policy2_steps_per_policy1_step=variant.get(
+                    "num_ll_actions_per_hl_action"
+                ),
+                use_episode_breaks=variant.get("use_episode_breaks", False),
             ),
             rollout_fn=rollout_modular,
         )
@@ -502,7 +516,10 @@ def experiment(variant):
             StepBasedSwitchingPolicy(
                 planner_expl_policy,
                 expl_policy,
-                policy2_path_length=variant.get("max_path_length"),
+                policy2_steps_per_policy1_step=variant.get(
+                    "num_ll_actions_per_hl_action"
+                ),
+                use_episode_breaks=variant.get("use_episode_breaks", False),
             ),
             rollout_fn=rollout_modular,
         )

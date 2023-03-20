@@ -649,6 +649,7 @@ class MPEnv(RobosuiteEnv):
         recompute_reward_post_teleport=False,
         planner_command_orientation=False,
         num_ll_actions_per_hl_action=25,
+        planner_only_actions=False,
         # mp
         planning_time=1,
         mp_bounds_low=None,
@@ -707,7 +708,9 @@ class MPEnv(RobosuiteEnv):
         self.randomize_init_target_pos_range = randomize_init_target_pos_range
         self.planner_command_orientation = planner_command_orientation
         self.num_ll_actions_per_hl_action = num_ll_actions_per_hl_action
-        self.high_level_step = 0
+        self.planner_only_actions = planner_only_actions
+        self.take_planner_step = True
+        self.current_ll_policy_steps = 0
 
     def get_target_pos_list(self):
         pos_list = []
@@ -855,7 +858,7 @@ class MPEnv(RobosuiteEnv):
         update_controller_config(self, self.ik_controller_config)
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
         self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
-        if not self.plan_to_learned_goals:
+        if not self.plan_to_learned_goals and not self.planner_only_actions:
             if self.teleport_instead_of_mp:
                 pos = self.get_init_target_pos()
                 obs = self.get_observation()
@@ -969,10 +972,8 @@ class MPEnv(RobosuiteEnv):
         return action
 
     def step(self, action, get_intermediate_frames=False):
-        if self.plan_to_learned_goals:
-            if (
-                self.ep_step_ctr - self.high_level_step
-            ) % self.num_ll_actions_per_hl_action == 0:
+        if self.plan_to_learned_goals or self.planner_only_actions:
+            if self.take_planner_step:
                 target_pos = self.get_target_pos()
                 if self.learn_residual:
                     pos = action[:3] + target_pos
@@ -1028,14 +1029,16 @@ class MPEnv(RobosuiteEnv):
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
                 o, r, d, i = self._flatten_obs(o), self.reward(action), False, {}
+                self.take_planner_step = False
             else:
                 o, r, d, i = self._wrapped_env.step(action)
+                self.current_ll_policy_steps += 1
                 if (
-                    self.ep_step_ctr - self.high_level_step
-                ) % self.num_ll_actions_per_hl_action == (
-                    self.num_ll_actions_per_hl_action - 1
+                    self.current_ll_policy_steps
+                    == self.num_ll_actions_per_hl_action
                 ):
-                    self.high_level_step += 1
+                    self.take_planner_step = True
+                    self.current_ll_policy_steps = 0
                 self.num_steps += 1
             self.ep_step_ctr += 1
         else:
