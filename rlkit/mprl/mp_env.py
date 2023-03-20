@@ -1040,6 +1040,7 @@ class MPEnv(RobosuiteEnv):
                     self.take_planner_step = True
                     self.current_ll_policy_steps = 0
                 self.num_steps += 1
+            # print(self.take_planner_step, self.ep_step_ctr)
             self.ep_step_ctr += 1
         else:
             o, r, d, i = self._wrapped_env.step(action)

@@ -295,9 +295,6 @@ def rollout_modular(
     current_low_level_rewards = []
     episode_breaks = []
     while path_length < max_path_length:
-        use_planner = agent.current_policy_str == "policy1"
-        if use_planner and len(observations) > 0:
-            episode_breaks.append(len(observations))
         #     # planner next obs should come after the low level policy finishes executing
         #     planner_next_observations.append(next_o)
         #     planner_raw_next_obs.append(next_o)
@@ -307,6 +304,10 @@ def rollout_modular(
         #         )
         o_for_agent = preprocess_obs_for_policy_fn(o)
         a, agent_info = agent.get_action(o_for_agent, **get_action_kwargs)
+        # use_planner is updated after get_action call
+        use_planner = agent.current_policy_str == "policy1"
+        if use_planner and len(observations) > 0:
+            episode_breaks.append(len(observations))
         # save_image(torch.tensor(np.array(env.env_method("get_image"))).permute(0, 3, 1, 2) / 255., f"{path_length}.png", nrow=4)
         if full_o_postprocess_func:
             full_o_postprocess_func(env, agent, o)
