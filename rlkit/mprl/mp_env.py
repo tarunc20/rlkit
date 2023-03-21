@@ -990,9 +990,9 @@ class MPEnv(RobosuiteEnv):
                         pos = self.clamp_planner_action_mp_space_bounds(pos)
                     if self.planner_command_orientation:
                         rot_delta = euler2mat(action[3:6])
-                        quat = mat2quat(rot_delta @ quat2mat(self._eef_xquat))
+                        quat = mat2quat(rot_delta @ quat2mat(self.reset_ori))
                     else:
-                        quat = self._eef_xquat
+                        quat = self.reset_ori
                     action = action.astype(np.float64)
                 # quat = quat / np.linalg.norm(quat) # might be necessary for MP code?
                 is_grasped = self.check_grasp()

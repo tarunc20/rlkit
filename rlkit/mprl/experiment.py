@@ -507,7 +507,7 @@ def experiment(variant):
                 policy2_steps_per_policy1_step=variant.get(
                     "num_ll_actions_per_hl_action"
                 ),
-                use_episode_breaks=variant.get("use_episode_breaks", False),
+                use_episode_breaks=False, # eval should not use episode breaks
             ),
             rollout_fn=rollout_modular,
         )

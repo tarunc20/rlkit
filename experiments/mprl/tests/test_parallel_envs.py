@@ -2,7 +2,7 @@ import os
 import time
 
 import numpy as np
-from rlkit.mprl.experiment import make_env_expl
+from rlkit.mprl.experiment import make_env
 import robosuite as suite
 import torch
 from matplotlib import pyplot as plt
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         ramp_ratio=0.2,
     )
     robosuite_args["controller_configs"] = controller_args
-    mp_env_kwargs["controller_args"] = controller_args
+    mp_env_kwargs["controller_configs"] = controller_args
 
     variant = dict(
         mp_env_kwargs=mp_env_kwargs,
@@ -69,7 +69,8 @@ if __name__ == "__main__":
     )
 
     num_envs = int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count()))
-    env_fns = [lambda: make_env_expl(variant) for _ in range(num_envs)]
+    # num_envs = 25
+    env_fns = [lambda: make_env(variant) for _ in range(num_envs)]
     env = StableBaselinesVecEnv(
         env_fns=env_fns,
         start_method="fork",
@@ -77,7 +78,7 @@ if __name__ == "__main__":
     obs = env.reset()
 
     # time vec envs:
-    num_steps = 1000
+    num_steps = 10000
     num_steps_taken = 0
     start = time.time()
     for _ in tqdm(range(num_steps // num_envs)):
@@ -89,4 +90,3 @@ if __name__ == "__main__":
         f"Num Envs: {num_envs}, Frames per second: ",
         1 / ((end - start) / num_steps_taken),
     )
-    env.close()
