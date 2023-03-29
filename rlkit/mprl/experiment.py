@@ -76,6 +76,7 @@ def make_env(variant):
         has_offscreen_renderer=True,
         use_camera_obs=False,
         camera_names="frontview",
+        hard_reset=False,
     )
     if variant.get("mprl", False):
         expl_env = MPEnv(
