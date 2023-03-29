@@ -20,8 +20,8 @@ from robosuite.utils.transform_utils import (
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
-from rlkit.torch.model_based.dreamer.visualization import add_text
 from rlkit.mprl import module
+from rlkit.torch.model_based.dreamer.visualization import add_text
 
 try:
     from ompl import base as ob
@@ -1033,10 +1033,7 @@ class MPEnv(RobosuiteEnv):
             else:
                 o, r, d, i = self._wrapped_env.step(action)
                 self.current_ll_policy_steps += 1
-                if (
-                    self.current_ll_policy_steps
-                    == self.num_ll_actions_per_hl_action
-                ):
+                if self.current_ll_policy_steps == self.num_ll_actions_per_hl_action:
                     self.take_planner_step = True
                     self.current_ll_policy_steps = 0
                 self.num_steps += 1

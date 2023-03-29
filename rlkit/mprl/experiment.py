@@ -62,11 +62,12 @@ def preprocess_variant_mp(variant, debug):
 
 # Create gym-compatible envs
 def make_env(variant):
-    from robosuite.wrappers import GymWrapper
-    import robosuite as suite
     import gym
-    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+    import robosuite as suite
+    from robosuite.wrappers import GymWrapper
+
     from rlkit.envs.wrappers import NormalizedBoxEnv
+    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
 
     gym.logger.set_level(40)  # resolves annoying bbox warning
     expl_env = suite.make(
@@ -396,7 +397,6 @@ def experiment(variant):
     from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.networks.mlp import ConcatMlp
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
-    from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
     from rlkit.torch.torch_rl_algorithm import (
         TorchBatchModularRLAlgorithm,
@@ -507,7 +507,7 @@ def experiment(variant):
                 policy2_steps_per_policy1_step=variant.get(
                     "num_ll_actions_per_hl_action"
                 ),
-                use_episode_breaks=False, # eval should not use episode breaks
+                use_episode_breaks=False,  # eval should not use episode breaks
             ),
             rollout_fn=rollout_modular,
         )

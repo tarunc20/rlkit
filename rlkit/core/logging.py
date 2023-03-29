@@ -14,10 +14,10 @@ import sys
 from collections import OrderedDict
 from contextlib import contextmanager
 from enum import Enum
-import wandb
 
 import dateutil.tz
 import numpy as np
+import wandb
 
 from rlkit.core.tabulate import tabulate
 

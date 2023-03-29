@@ -6,20 +6,20 @@ import pickle
 import random
 import sys
 import time
-import wandb
 from collections import namedtuple
 
 import __main__ as main
 import dateutil.tz
+import ml_runlog
 import numpy as np
 import torch
+import wandb
 from doodad.slurm.slurm_util import SlurmConfig, SlurmConfigMatrix
 
+import rlkit
 import rlkit.pythonplusplus as ppp
 from rlkit.core import logger
 from rlkit.launchers import conf
-import ml_runlog
-import rlkit
 
 GitInfo = namedtuple(
     "GitInfo",

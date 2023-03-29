@@ -1,11 +1,11 @@
 import abc
 
 import gtimer as gt
+from tqdm import tqdm
 
 from rlkit.core.rl_algorithm import BaseRLAlgorithm
 from rlkit.data_management.replay_buffer import ReplayBuffer
 from rlkit.samplers.data_collector import PathCollector
-from tqdm import tqdm
 
 
 class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):

@@ -2,7 +2,6 @@ import os
 import time
 
 import numpy as np
-from rlkit.mprl.experiment import make_env
 import robosuite as suite
 import torch
 from matplotlib import pyplot as plt
@@ -13,6 +12,7 @@ from tqdm import tqdm
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.envs.wrappers.mujoco_vec_wrappers import StableBaselinesVecEnv
+from rlkit.mprl.experiment import make_env
 from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
 from rlkit.torch.model_based.dreamer.visualization import make_video
 

@@ -2,11 +2,11 @@ from collections import OrderedDict, deque
 from functools import partial
 
 import numpy as np
+from tqdm import tqdm
 
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.samplers.data_collector.base import PathCollector
 from rlkit.samplers.rollout_functions import rollout
-from tqdm import tqdm
 
 
 class MdpPathCollector(PathCollector):

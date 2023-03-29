@@ -90,9 +90,9 @@ def setup_sweep_and_launch_exp(preprocess_variant_fn, variant, experiment_fn, ar
     import random
     import subprocess
 
+    import rlkit.pythonplusplus as ppp
     import rlkit.util.hyperparameter as hyp
     from rlkit.launchers.launcher_util import run_experiment
-    import rlkit.pythonplusplus as ppp
 
     search_space = {
         key: value for key, value in zip(args.search_keys, args.search_values)
