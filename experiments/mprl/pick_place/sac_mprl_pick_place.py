@@ -91,5 +91,6 @@ if __name__ == "__main__":
         plan_to_learned_goals=False,
         num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),
         planner_num_trains_per_train_loop=1000,
+        # policy_path='/home/mdalal/research/mprl/rlkit/data/03-29-sac-mprl-pick-place-replicate-v4/03-29-sac_mprl_pick_place_replicate_v4_2023_03_29_03_31_18_0000--s-72445/policy_4550.pkl',
     )
     setup_sweep_and_launch_exp(preprocess_variant_mp, variant, experiment, args)

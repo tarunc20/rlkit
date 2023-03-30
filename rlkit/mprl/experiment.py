@@ -114,7 +114,7 @@ def video_func(algorithm, epoch):
         images = eval_env.env_method("get_image")
         for i in range(num_envs):
             frames[i].append(images[i])
-        for _ in range(max_path_length):
+        for step in range(max_path_length):
             actions, _ = policy.get_action(obs)
             obs, rewards, dones, infos = eval_env.step(copy.deepcopy(actions))
             images = eval_env.env_method("get_image")
@@ -403,6 +403,7 @@ def experiment(variant):
         TorchBatchModularRLAlgorithm,
         TorchBatchRLAlgorithm,
     )
+    import numpy as np
 
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:
@@ -500,30 +501,52 @@ def experiment(variant):
             expl_env,
         )
 
-        eval_path_collector = MdpPathCollector(
-            eval_env,
-            StepBasedSwitchingPolicy(
+        if variant.get("policy_path", None) is not None:
+            hierarchical_eval_policy = pickle.load(open(variant["policy_path"], "rb"))
+            planner_eval_policy, eval_policy = (
+                hierarchical_eval_policy.policy1,
+                hierarchical_eval_policy.policy2,
+            )
+            planner_expl_policy, expl_policy = (
+                planner_eval_policy._action_distribution_generator,
+                eval_policy._action_distribution_generator,
+            )
+            hierarchical_expl_policy = StepBasedSwitchingPolicy(
+                planner_expl_policy,
+                expl_policy,
+                policy2_steps_per_policy1_step=variant.get(
+                    "num_ll_actions_per_hl_action"
+                ),
+                use_episode_breaks=False,  # eval should not use episode breaks
+            )
+        else:
+            hierarchical_eval_policy = StepBasedSwitchingPolicy(
                 planner_eval_policy,
                 eval_policy,
                 policy2_steps_per_policy1_step=variant.get(
                     "num_ll_actions_per_hl_action"
                 ),
                 use_episode_breaks=False,  # eval should not use episode breaks
-            ),
-            rollout_fn=rollout_modular,
-        )
-        expl_path_collector = MdpPathCollector(
-            expl_env,
-            StepBasedSwitchingPolicy(
+            )
+            hierarchical_expl_policy = StepBasedSwitchingPolicy(
                 planner_expl_policy,
                 expl_policy,
                 policy2_steps_per_policy1_step=variant.get(
                     "num_ll_actions_per_hl_action"
                 ),
                 use_episode_breaks=variant.get("use_episode_breaks", False),
-            ),
+            )
+        eval_path_collector = MdpPathCollector(
+            eval_env,
+            hierarchical_eval_policy,
             rollout_fn=rollout_modular,
         )
+        expl_path_collector = MdpPathCollector(
+            expl_env,
+            hierarchical_expl_policy,
+            rollout_fn=rollout_modular,
+        )
+
 
         # Define algorithm
         algorithm = TorchBatchModularRLAlgorithm(
