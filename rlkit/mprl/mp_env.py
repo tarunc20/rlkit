@@ -995,7 +995,7 @@ class MPEnv(RobosuiteEnv):
                         quat = self.reset_ori
                     action = action.astype(np.float64)
                 # quat = quat / np.linalg.norm(quat) # might be necessary for MP code?
-                is_grasped = self.check_grasp()
+                is_grasped = self.check_grasp(verify_stable_grasp=True and self.verify_stable_grasp)
                 if self.teleport_instead_of_mp:
                     # make gripper fully open at start
                     pos = backtracking_search_from_goal(
@@ -1089,7 +1089,7 @@ class MPEnv(RobosuiteEnv):
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
         i["success"] = float(self._check_success())
-        i["grasped"] = float(self.check_grasp())
+        i["grasped"] = float(self.check_grasp(verify_stable_grasp=True and self.verify_stable_grasp))
         i["num_steps"] = self.num_steps
         if not self.teleport_instead_of_mp:
             # add in planner logs
