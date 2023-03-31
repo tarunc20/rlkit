@@ -100,6 +100,7 @@ def video_func(algorithm, epoch):
 
     from rlkit.core import logger
     from rlkit.torch.model_based.dreamer.visualization import make_video
+    from rlkit.core.batch_rl_algorithm import BatchModularRLAlgorithm
 
     if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         eval_collector = algorithm.eval_data_collector
@@ -134,7 +135,19 @@ def video_func(algorithm, epoch):
         make_video(flattened_frames, logdir, epoch)
         print(f"Saved video for epoch {epoch}")
         print(f"Success rate: {np.mean(success_rate)}")
-        pickle.dump(policy, open(os.path.join(logdir, f"policy_{epoch}.pkl"), "wb"))
+        env = algorithm.trainer.env
+        algorithm.trainer.env = None
+        pickle.dump(
+            algorithm.trainer, open(os.path.join(logdir, f"control_{epoch}.pkl"), "wb")
+        )
+        algorithm.trainer.env = env
+        if isinstance(algorithm, BatchModularRLAlgorithm):
+            algorithm.planner_trainer.env = None
+            pickle.dump(
+                algorithm.planner_trainer,
+                open(os.path.join(logdir, f"planner_{epoch}.pkl"), "wb"),
+            )
+            algorithm.planner_trainer.env = env
 
 
 def mp_video_func(algorithm, epoch):
@@ -444,11 +457,6 @@ def experiment(variant):
 
     import torch
 
-    qf1 = torch.compile(qf1)
-    qf2 = torch.compile(qf2)
-    target_qf1 = torch.compile(target_qf1)
-    target_qf2 = torch.compile(target_qf2)
-    expl_policy = torch.compile(expl_policy)
     trainer = SACTrainer(
         env=eval_env,
         policy=expl_policy,
@@ -501,19 +509,29 @@ def experiment(variant):
             expl_env,
         )
 
-        if variant.get("policy_path", None) is not None:
-            hierarchical_eval_policy = pickle.load(open(variant["policy_path"], "rb"))
-            planner_eval_policy, eval_policy = (
-                hierarchical_eval_policy.policy1,
-                hierarchical_eval_policy.policy2,
-            )
-            planner_expl_policy, expl_policy = (
-                planner_eval_policy._action_distribution_generator,
-                eval_policy._action_distribution_generator,
-            )
+        if (
+            variant.get("control_path", None) is not None
+            and variant.get("planner_path", None) is not None
+        ):
+            trainer = pickle.load(open(variant["control_path"], "rb"))
+            planner_trainer = pickle.load(open(variant["planner_path"], "rb"))
+            trainer.env = eval_env
+            planner_trainer.env = eval_env
+            expl_policy = trainer.policy
+            eval_policy = MakeDeterministic(expl_policy)
+            planner_expl_policy = planner_trainer.policy
+            planner_eval_policy = MakeDeterministic(planner_expl_policy)
             hierarchical_expl_policy = StepBasedSwitchingPolicy(
                 planner_expl_policy,
                 expl_policy,
+                policy2_steps_per_policy1_step=variant.get(
+                    "num_ll_actions_per_hl_action"
+                ),
+                use_episode_breaks=False,  # eval should not use episode breaks
+            )
+            hierarchical_eval_policy = StepBasedSwitchingPolicy(
+                planner_eval_policy,
+                eval_policy,
                 policy2_steps_per_policy1_step=variant.get(
                     "num_ll_actions_per_hl_action"
                 ),
@@ -546,7 +564,6 @@ def experiment(variant):
             hierarchical_expl_policy,
             rollout_fn=rollout_modular,
         )
-
 
         # Define algorithm
         algorithm = TorchBatchModularRLAlgorithm(

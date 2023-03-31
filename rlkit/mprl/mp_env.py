@@ -1005,6 +1005,7 @@ class MPEnv(RobosuiteEnv):
                         start_pos=self._eef_xpos,
                         start_ori=self._eef_xquat,
                         goal_pos=pos,
+                        # goal_pos=target_pos,
                         ori=quat,
                         qpos=self.reset_qpos,
                         qvel=self.reset_qvel,
@@ -1030,6 +1031,7 @@ class MPEnv(RobosuiteEnv):
                     )
                 o, r, d, i = self._flatten_obs(o), self.reward(action), False, {}
                 self.take_planner_step = False
+                self.high_level_step += 1
             else:
                 o, r, d, i = self._wrapped_env.step(action)
                 self.current_ll_policy_steps += 1
