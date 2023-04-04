@@ -1046,9 +1046,7 @@ class MPEnv(RobosuiteEnv):
             self.num_steps += 1
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
-                is_grasped = self.check_grasp(
-                    verify_stable_grasp=True and self.verify_stable_grasp
-                )
+                is_grasped = self.check_grasp()
             else:
                 is_grasped = False
             if (self.ep_step_ctr == self.horizon and is_grasped) or (
@@ -1089,7 +1087,7 @@ class MPEnv(RobosuiteEnv):
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
         i["success"] = float(self._check_success())
-        i["grasped"] = float(self.check_grasp(verify_stable_grasp=True and self.verify_stable_grasp))
+        i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_instead_of_mp:
             # add in planner logs
