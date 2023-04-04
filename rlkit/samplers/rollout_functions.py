@@ -4,6 +4,7 @@ from functools import partial
 import numpy as np
 import torch
 from tqdm import tqdm
+import traceback
 
 create_rollout_function = partial
 
@@ -243,7 +244,7 @@ def vec_rollout(
                 env_infos=env_infos[i],
             )
         )
-    return paths
+    return paths, paths
 
 
 @torch.no_grad()
@@ -277,6 +278,7 @@ def rollout_modular(
     agent_infos = []
     env_infos = []
     next_observations = []
+
     planner_raw_obs = []
     planner_raw_next_obs = []
     planner_observations = []
@@ -287,6 +289,16 @@ def rollout_modular(
     planner_env_infos = []
     planner_next_observations = []
 
+    merged_raw_obs = []
+    merged_raw_next_obs = []
+    merged_observations = []
+    merged_actions = []
+    merged_rewards = []
+    merged_terminals = []
+    merged_agent_infos = []
+    merged_env_infos = []
+    merged_next_observations = []
+
     path_length = 0
     agent.reset()
     o = env.reset()
@@ -294,6 +306,7 @@ def rollout_modular(
         env.render(**render_kwargs)
     current_low_level_rewards = []
     episode_breaks = []
+
     while path_length < max_path_length:
         #     # planner next obs should come after the low level policy finishes executing
         #     planner_next_observations.append(next_o)
@@ -346,6 +359,17 @@ def rollout_modular(
             current_low_level_rewards.append(r)
             next_observations.append(next_o)
             raw_next_obs.append(next_o)
+
+        # merged:
+        merged_raw_obs.append(o)
+        merged_observations.append(o)
+        merged_rewards.append(r)
+        merged_terminals.append(d)
+        merged_actions.append(a)
+        merged_agent_infos.append(agent_info)
+        merged_env_infos.append(env_info)
+        merged_next_observations.append(next_o)
+        merged_raw_next_obs.append(next_o)
 
         o = next_o
     # planner next obs should come after the low level policy finishes executing
@@ -408,16 +432,58 @@ def rollout_modular(
         ]
         for i in range(env.num_envs)
     ]  # should be a list of list of dicts (length num_envs) (length of path)
+
+    # merged:
+    merged_actions = np.array(merged_actions)
+    if len(merged_actions.shape) == 1:
+        merged_actions = np.expand_dims(merged_actions, 1)
+
+    merged_raw_obs = np.array(merged_raw_obs)
+    merged_observations = np.array(merged_observations)
+    merged_next_observations = np.array(merged_next_observations)
+    if return_dict_obs:
+        merged_observations = merged_raw_obs
+        merged_next_observations = merged_raw_next_obs
+    merged_rewards = np.array(merged_rewards)
+    if len(merged_rewards.shape) == 1:
+        merged_rewards = merged_rewards.reshape(-1, 1)
+    merged_terminals = np.array(merged_terminals)
+    merged_observations = [merged_observations[:, i] for i in range(env.num_envs)]
+    merged_next_observations = [
+        merged_next_observations[:, i] for i in range(env.num_envs)
+    ]
+    merged_actions = [merged_actions[:, i] for i in range(env.num_envs)]
+    merged_rewards = [merged_rewards[:, i] for i in range(env.num_envs)]
+    merged_terminals = [merged_terminals[:, i] for i in range(env.num_envs)]
+    merged_env_infos = [
+        [
+            {key: merged_env_infos[j][key][i] for key in merged_env_infos[j]}
+            for j in range(len(merged_env_infos))
+        ]
+        for i in range(env.num_envs)
+    ]  # should be a list of list of dicts (length num_envs) (length of path)
+
     paths = []
+    merged_paths = []
     for i in range(env.num_envs):
-        # TODO: this might be the cause of the learning issues?
-        # terminals[i][-1] = True
-        # planner_terminals[i][-1] = True
+        merged_paths.append(
+            dict(
+                type="merged",
+                observations=merged_observations[i],
+                actions=merged_actions[i],
+                rewards=merged_rewards[i],
+                next_observations=merged_next_observations[i],
+                terminals=merged_terminals[i],
+                agent_infos=agent_infos,
+                env_infos=merged_env_infos[i],
+            )
+        )
         if agent.use_episode_breaks:
             prev_episode_break = 0
             for idx, episode_break in enumerate(episode_breaks):
                 paths.append(
                     dict(
+                        type="control",
                         observations=observations[i][prev_episode_break:episode_break],
                         actions=actions[i][prev_episode_break:episode_break],
                         rewards=rewards[i][prev_episode_break:episode_break],
@@ -427,20 +493,24 @@ def rollout_modular(
                         terminals=terminals[i][prev_episode_break:episode_break],
                         agent_infos=agent_infos,
                         env_infos=env_infos[i][prev_episode_break:episode_break],
-                        planner_observations=planner_observations[i][idx : idx + 1],
-                        planner_next_observations=planner_next_observations[i][
-                            idx : idx + 1
-                        ],
-                        planner_actions=planner_actions[i][idx : idx + 1],
-                        planner_rewards=planner_rewards[i][idx : idx + 1],
-                        planner_terminals=planner_terminals[i][idx : idx + 1],
-                        planner_agent_infos=planner_agent_infos,
-                        planner_env_infos=planner_env_infos[i][idx : idx + 1],
+                    )
+                )
+                paths.append(
+                    dict(
+                        type="planner",
+                        observations=planner_observations[i][idx : idx + 1],
+                        next_observations=planner_next_observations[i][idx : idx + 1],
+                        actions=planner_actions[i][idx : idx + 1],
+                        rewards=planner_rewards[i][idx : idx + 1],
+                        terminals=planner_terminals[i][idx : idx + 1],
+                        agent_infos=planner_agent_infos,
+                        env_infos=planner_env_infos[i][idx : idx + 1],
                     )
                 )
                 prev_episode_break = episode_break
             paths.append(
                 dict(
+                    type="control",
                     observations=observations[i][prev_episode_break:],
                     actions=actions[i][prev_episode_break:],
                     rewards=rewards[i][prev_episode_break:],
@@ -448,18 +518,24 @@ def rollout_modular(
                     terminals=terminals[i][prev_episode_break:],
                     agent_infos=agent_infos,
                     env_infos=env_infos[i][prev_episode_break:],
-                    planner_observations=planner_observations[i][-1:],
-                    planner_next_observations=planner_next_observations[i][-1:],
-                    planner_actions=planner_actions[i][-1:],
-                    planner_rewards=planner_rewards[i][-1:],
-                    planner_terminals=planner_terminals[i][-1:],
-                    planner_agent_infos=planner_agent_infos,
-                    planner_env_infos=planner_env_infos[i][-1:],
+                )
+            )
+            paths.append(
+                dict(
+                    type="planner",
+                    observations=planner_observations[i][-1:],
+                    next_observations=planner_next_observations[i][-1:],
+                    actions=planner_actions[i][-1:],
+                    rewards=planner_rewards[i][-1:],
+                    terminals=planner_terminals[i][-1:],
+                    agent_infos=planner_agent_infos,
+                    env_infos=planner_env_infos[i][-1:],
                 )
             )
         else:
             paths.append(
                 dict(
+                    type="control",
                     observations=observations[i],
                     actions=actions[i],
                     rewards=rewards[i],
@@ -467,16 +543,21 @@ def rollout_modular(
                     terminals=terminals[i],
                     agent_infos=agent_infos,
                     env_infos=env_infos[i],
-                    planner_observations=planner_observations[i],
-                    planner_next_observations=planner_next_observations[i],
-                    planner_actions=planner_actions[i],
-                    planner_rewards=planner_rewards[i],
-                    planner_terminals=planner_terminals[i],
-                    planner_agent_infos=planner_agent_infos,
-                    planner_env_infos=planner_env_infos[i],
                 )
             )
-    return paths
+            paths.append(
+                dict(
+                    type="planner",
+                    observations=planner_observations[i],
+                    next_observations=planner_next_observations[i],
+                    actions=planner_actions[i],
+                    rewards=planner_rewards[i],
+                    terminals=planner_terminals[i],
+                    agent_infos=planner_agent_infos,
+                    env_infos=planner_env_infos[i],
+                )
+            )
+    return paths, merged_paths
 
 
 def deprecated_rollout(

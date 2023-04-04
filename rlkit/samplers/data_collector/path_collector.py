@@ -42,18 +42,15 @@ class MdpPathCollector(PathCollector):
         discard_incomplete_paths,
     ):
         paths = []
+        logging_paths = []
         num_steps_collected = 0
         num_steps_logged = 0
         pbar = tqdm(total=num_steps, desc="Collecting paths...")
         while num_steps_collected < num_steps:
-            max_path_length_this_loop = min(  # Do not go over num_steps
-                max_path_length,
-                num_steps - num_steps_collected,
-            )
-            paths_collected = self._rollout_fn(
+            paths_collected, merged_paths = self._rollout_fn(
                 self._env,
                 self._policy,
-                max_path_length=max_path_length_this_loop,
+                max_path_length=max_path_length,
                 render=self._render,
                 render_kwargs=self._render_kwargs,
             )
@@ -67,14 +64,24 @@ class MdpPathCollector(PathCollector):
                 ):
                     print("Discarding path with length", path_len)
                     break
-                num_steps_logged += path["env_infos"][-1]["num_steps"].item()
-                num_steps_collected += path_len
-                num_steps_logged_this_loop += path_len
                 paths.append(path)
+            for path in merged_paths:
+                path_len = len(path["actions"])
+                if (
+                    path_len != max_path_length
+                    and not path["terminals"][-1]
+                    and discard_incomplete_paths
+                ):
+                    print("Discarding path with length", path_len)
+                    break
+                num_steps_logged += path["env_infos"][-1]["num_steps"].item()
+                num_steps_logged_this_loop += path_len
+                num_steps_collected += path_len
+                logging_paths.append(path)
             pbar.update(num_steps_logged_this_loop)
-        self._num_paths_total += len(paths)
+        self._num_paths_total += len(merged_paths)
         self._num_steps_total += num_steps_logged
-        self._epoch_paths.extend(paths)
+        self._epoch_paths.extend(logging_paths)
         return paths
 
     def get_epoch_paths(self):
