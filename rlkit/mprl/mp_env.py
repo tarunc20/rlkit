@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import robosuite.utils.transform_utils as T
 from gym import spaces
+import gym
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
@@ -39,6 +40,37 @@ except ImportError:
     from ompl import util as ou
 
 
+def get_object_pos(env):
+    """
+    Note this is only used for computing the target for MP
+    this is NOT the true object pose
+    """
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
+        object_pos = env.sim.data.qpos[9:12].copy()
+    elif name.startswith("PickPlaceMilk"):
+        object_pos = env.sim.data.qpos[9:12].copy()
+    elif name.startswith("PickPlaceBread"):
+        object_pos = env.sim.data.qpos[16:19].copy()
+    elif name.startswith("PickPlaceCereal"):
+        object_pos = env.sim.data.qpos[23:26].copy()
+    elif name.startswith("PickPlaceCan"):
+        object_pos = env.sim.data.qpos[30:33].copy()
+    elif name.startswith("Door"):
+        object_pos = env.sim.data.site_xpos[env.door_handle_site_id]
+    elif name.startswith("Wipe"):
+        object_pos = np.zeros(3)
+    elif "NutAssembly" in name:
+        if name.endswith("Square"):
+            nut = env.nuts[0]
+        elif name.endswith("Round"):
+            nut = env.nuts[1]
+        object_pos = env.sim.data.get_site_xpos(nut.important_sites["handle"])
+    else:
+        raise NotImplementedError()
+    return object_pos
+
+
 def get_object_pose(env):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
@@ -56,7 +88,26 @@ def get_object_pose(env):
     elif name.startswith("PickPlaceCan"):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
-
+    elif name.startswith("Door"):
+        object_pos = env.sim.data.qpos[
+            env.hinge_qpos_addr
+        ]  # this is not what they are, but they will be decoded properly
+        object_quat = env.sim.data.qpos[
+            env.handle_qpos_addr
+        ]  # this is not what they are, but they will be decoded properly
+    elif name.startswith("Wipe"):
+        object_pos = np.zeros(3)
+        object_quat = np.zeros(4)
+    elif "NutAssembly" in name:
+        if name.endswith("Square"):
+            nut = env.nuts[0]
+        elif name.endswith("Round"):
+            nut = env.nuts[1]
+        nut_name = nut.name
+        object_pos = np.array(env.sim.data.body_xpos[env.obj_body_id[nut_name]])
+        object_quat = T.convert_quat(
+            env.sim.data.body_xquat[env.obj_body_id[nut_name]], to="xyzw"
+        )
     else:
         raise NotImplementedError()
     return np.concatenate((object_pos, object_quat))
@@ -89,6 +140,20 @@ def set_object_pose(env, object_pos, object_quat):
     elif name.startswith("PickPlaceCan"):
         env.sim.data.qpos[30:33] = object_pos
         env.sim.data.qpos[33:37] = object_quat
+    elif name.startswith("Door"):
+        env.sim.data.qpos[env.hinge_qpos_addr] = object_pos
+        env.sim.data.qpos[env.handle_qpos_addr] = object_quat
+    elif name.startswith("Wipe"):
+        pass
+    elif "NutAssembly" in name:
+        if name.endswith("Square"):
+            nut = env.nuts[0]
+        elif name.endswith("Round"):
+            nut = env.nuts[1]
+        env.sim.data.set_joint_qpos(
+            nut.joints[0],
+            np.concatenate([np.array(object_pos), np.array(object_quat)]),
+        )
     else:
         raise NotImplementedError()
 
@@ -106,6 +171,12 @@ def get_object_string(env):
             obj_string = "Milk"
         elif name.endswith("Cereal"):
             obj_string = "Cereal"
+    elif name.endswith("Door"):
+        obj_string = "latch"
+    elif name.endswith("Wipe"):
+        obj_string = ""
+    elif "NutAssembly" in name:
+        obj_string = env.nuts[0].name
     else:
         raise NotImplementedError()
     return obj_string
@@ -133,6 +204,13 @@ def check_object_grasp(env):
             gripper=env.robots[0].gripper,
             object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
         )
+    elif name.endswith("Door"):
+        is_grasped = env._check_grasp(  # this is not going to work well, but likely won't be used anyways
+            gripper=env.robots[0].gripper,
+            object_geoms=[env.door],
+        )
+    elif name.endswith("Wipe"):
+        is_grasped = False
     else:
         raise NotImplementedError()
     return is_grasped
@@ -650,6 +728,7 @@ class MPEnv(RobosuiteEnv):
         planner_command_orientation=False,
         num_ll_actions_per_hl_action=25,
         planner_only_actions=False,
+        add_grasped_to_obs=False,
         # mp
         planning_time=1,
         mp_bounds_low=None,
@@ -666,6 +745,7 @@ class MPEnv(RobosuiteEnv):
         randomize_init_target_pos=False,
         randomize_init_target_pos_range=(0.04, 0.06),
         teleport_on_grasp=False,
+        use_teleports_in_step=True,
         # upstream env
         slack_reward=0,
         predict_done_actions=False,
@@ -709,13 +789,23 @@ class MPEnv(RobosuiteEnv):
         self.planner_command_orientation = planner_command_orientation
         self.num_ll_actions_per_hl_action = num_ll_actions_per_hl_action
         self.planner_only_actions = planner_only_actions
+        self.add_grasped_to_obs = add_grasped_to_obs
+        self.use_teleports_in_step = use_teleports_in_step
         self.take_planner_step = True
         self.current_ll_policy_steps = 0
+
+        if self.add_grasped_to_obs:
+            # update observation space
+            self.observation_space = gym.spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(self.observation_space.shape[0] + 1,),
+            )
 
     def get_target_pos_list(self):
         pos_list = []
         # init target pos (object pos + vertical displacement)
-        pos = get_object_pose(self)[:3]
+        pos = get_object_pos(self)
         pos = pos + np.array([0, 0, self.vertical_displacement])
         pos_list.append(pos)
         # final target positions, depending on the task
@@ -761,13 +851,20 @@ class MPEnv(RobosuiteEnv):
                     ]
                 )
             )
+        elif "NutAssembly" in self.name:
+            if self.name.endswith("Round"):
+                peg_pos = np.array(self.sim.data.body_xpos[self.peg2_body_id])
+            elif self.name.endswith("Square"):
+                peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
+            peg_pos[2] += 0.15
+            pos_list.append(peg_pos)
         return pos_list
 
     def get_target_pos(self):
         return self.get_target_pos_list()[self.high_level_step]
 
     def get_init_target_pos(self):
-        pos = get_object_pose(self)[:3]
+        pos = get_object_pos(self)
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         if self.randomize_init_target_pos:
             # sample a random position in a sphere around the target (not in collision)
@@ -854,7 +951,7 @@ class MPEnv(RobosuiteEnv):
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
-        self.initial_object_pos = get_object_pose(self)[:3].copy()
+        self.initial_object_pos = get_object_pos(self).copy()
         update_controller_config(self, self.ik_controller_config)
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
         self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
@@ -880,9 +977,13 @@ class MPEnv(RobosuiteEnv):
                 )
                 obs = self._flatten_obs(obs)
         self.hasnt_teleported = True
+        if self.add_grasped_to_obs:
+            obs = np.concatenate((obs, np.array([0])))
         return obs
 
     def check_grasp(self, verify_stable_grasp=False):
+        qpos = self.sim.data.qpos.copy()
+        qvel = self.sim.data.qvel.copy()
         is_grasped = super().check_grasp()
 
         if is_grasped and verify_stable_grasp:
@@ -892,6 +993,9 @@ class MPEnv(RobosuiteEnv):
                 action[-1] = 1.0
                 self._wrapped_env.step(action)
             is_grasped = super().check_grasp()
+            self.sim.data.qpos[:] = qpos
+            self.sim.data.qvel[:] = qvel
+            self.sim.forward()
 
         if is_grasped and self.check_com_grasp:
             # check if left gripper pad is left of the com of object, right gripper pad is right of the com of object
@@ -916,7 +1020,7 @@ class MPEnv(RobosuiteEnv):
                     "geom", self.robots[0].gripper.important_geoms["right_fingerpad"][0]
                 )
             ]
-            object_pos = get_object_pose(self)[:3]
+            object_pos = get_object_pos(self)
             below_com_grasp = (left_pos[-1] - object_pos[-1] - 0.025) < 0 and (
                 right_pos[-1] - object_pos[-1] - 0.025
             ) < 0
@@ -924,9 +1028,7 @@ class MPEnv(RobosuiteEnv):
                 return True
             else:
                 return False
-        elif is_grasped and not self.check_com_grasp:
-            return True
-        return False
+        return is_grasped and not self.check_com_grasp
 
     def get_target_pos_no_planner(
         self,
@@ -965,6 +1067,12 @@ class MPEnv(RobosuiteEnv):
                     self.initial_object_pos[-1] + 0.1,
                 ]
             )
+        elif "NutAssembly" in self.name:
+            if self.name.endswith("Round"):
+                pose = np.array(self.sim.data.body_xpos[self.peg2_body_id])
+            elif self.name.endswith("Square"):
+                pose = np.array(self.sim.data.body_xpos[self.peg1_body_id])
+            pose[2] += 0.15
         return pose
 
     def clamp_planner_action_mp_space_bounds(self, action):
@@ -979,21 +1087,16 @@ class MPEnv(RobosuiteEnv):
                     pos = action[:3] + target_pos
                     if self.clamp_actions:
                         pos = self.clamp_planner_action_mp_space_bounds(pos)
-                    if self.planner_command_orientation:
-                        rot_delta = euler2mat(action[3:6])
-                        quat = mat2quat(rot_delta @ quat2mat(self.reset_ori))
-                    else:
-                        quat = self.reset_ori
                 else:
                     pos = action[:3] + self._eef_xpos
                     if self.clamp_actions:
                         pos = self.clamp_planner_action_mp_space_bounds(pos)
-                    if self.planner_command_orientation:
-                        rot_delta = euler2mat(action[3:6])
-                        quat = mat2quat(rot_delta @ quat2mat(self.reset_ori))
-                    else:
-                        quat = self.reset_ori
-                    action = action.astype(np.float64)
+                if self.planner_command_orientation:
+                    rot_delta = euler2mat(action[3:6])
+                    quat = mat2quat(rot_delta @ quat2mat(self.reset_ori))
+                else:
+                    quat = self.reset_ori
+                action = action.astype(np.float64)
                 # quat = quat / np.linalg.norm(quat) # might be necessary for MP code?
                 is_grasped = self.check_grasp()
                 if self.teleport_instead_of_mp:
@@ -1005,7 +1108,6 @@ class MPEnv(RobosuiteEnv):
                         start_pos=self._eef_xpos,
                         start_ori=self._eef_xquat,
                         goal_pos=pos,
-                        # goal_pos=target_pos,
                         ori=quat,
                         qpos=self.reset_qpos,
                         qvel=self.reset_qvel,
@@ -1047,12 +1149,14 @@ class MPEnv(RobosuiteEnv):
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
                 is_grasped = self.check_grasp(
-                    verify_stable_grasp=True and self.verify_stable_grasp
+                    verify_stable_grasp=self.verify_stable_grasp
                 )
             else:
                 is_grasped = False
-            if (self.ep_step_ctr == self.horizon and is_grasped) or (
-                self.teleport_on_grasp and is_grasped
+            if (
+                (self.ep_step_ctr == self.horizon and is_grasped)
+                or (self.teleport_on_grasp and is_grasped)
+                and self.use_teleports_in_step
             ):
                 target_pos = self.get_target_pos_no_planner()
                 if self.teleport_instead_of_mp:
@@ -1096,6 +1200,8 @@ class MPEnv(RobosuiteEnv):
             i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves
             i["goal_error"] = self.goal_error
+        if self.add_grasped_to_obs:
+            o = np.concatenate((o, np.array([i["grasped"]])))
         r += self.slack_reward
         if self.predict_done_actions:
             d = action[-1] > 0
