@@ -89,12 +89,12 @@ def get_object_pose(env):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
     elif name.startswith("Door"):
-        object_pos = env.sim.data.qpos[
+        object_pos = np.array([env.sim.data.qpos[
             env.hinge_qpos_addr
-        ]  # this is not what they are, but they will be decoded properly
-        object_quat = env.sim.data.qpos[
+        ]])  # this is not what they are, but they will be decoded properly
+        object_quat = np.array([env.sim.data.qpos[
             env.handle_qpos_addr
-        ]  # this is not what they are, but they will be decoded properly
+        ]])  # this is not what they are, but they will be decoded properly
     elif name.startswith("Wipe"):
         object_pos = np.zeros(3)
         object_quat = np.zeros(4)
