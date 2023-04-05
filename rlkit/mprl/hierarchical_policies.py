@@ -7,7 +7,13 @@ class StepBasedSwitchingPolicy(Policy):
     """
 
     def __init__(
-        self, policy1, policy2, policy2_steps_per_policy1_step, use_episode_breaks=False
+        self,
+        policy1,
+        policy2,
+        policy2_steps_per_policy1_step,
+        use_episode_breaks=False,
+        only_keep_trajs_after_grasp_success=False,
+        only_keep_trajs_stagewise=False,
     ):
         """
         Initializes a new instance of the StepBasedSwitchingPolicy class.
@@ -16,6 +22,10 @@ class StepBasedSwitchingPolicy(Policy):
             policy1 (Policy): The first underlying policy.
             policy2 (Policy): The second underlying policy.
             policy2_path_length (int): The number of steps to take before switching to policy1.
+            use_episode_breaks (bool): Whether or not to use episode breaks when switching policies.
+            only_keep_trajs_after_grasp_success (bool): Whether or not to only keep trajectories
+                after a grasp success.
+            only_keep_trajs_stagewise (bool): Whether or not to only keep stages of trajectories.
         """
         self.policy1 = policy1
         self.policy2 = policy2
@@ -26,6 +36,8 @@ class StepBasedSwitchingPolicy(Policy):
         self.current_policy2_steps = 0
         self.take_policy1_step = True
         self.use_episode_breaks = use_episode_breaks
+        self.only_keep_trajs_after_grasp_success = only_keep_trajs_after_grasp_success
+        self.only_keep_trajs_stagewise = only_keep_trajs_stagewise
 
     def get_action(self, observation):
         """

@@ -527,7 +527,13 @@ def experiment(variant):
                 policy2_steps_per_policy1_step=variant.get(
                     "num_ll_actions_per_hl_action"
                 ),
-                use_episode_breaks=False,  # eval should not use episode breaks
+                use_episode_breaks=variant.get("use_episode_breaks", False),
+                only_keep_trajs_after_grasp_success=variant.get(
+                    "only_keep_trajs_after_grasp_success", False
+                ),
+                only_keep_trajs_stagewise=variant.get(
+                    "only_keep_trajs_stagewise", False
+                ),
             )
             hierarchical_eval_policy = StepBasedSwitchingPolicy(
                 planner_eval_policy,
@@ -553,6 +559,12 @@ def experiment(variant):
                     "num_ll_actions_per_hl_action"
                 ),
                 use_episode_breaks=variant.get("use_episode_breaks", False),
+                only_keep_trajs_after_grasp_success=variant.get(
+                    "only_keep_trajs_after_grasp_success", False
+                ),
+                only_keep_trajs_stagewise=variant.get(
+                    "only_keep_trajs_stagewise", False
+                ),
             )
         eval_path_collector = MdpPathCollector(
             eval_env,

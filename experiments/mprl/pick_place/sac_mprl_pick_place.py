@@ -15,7 +15,7 @@ if __name__ == "__main__":
         algorithm_kwargs=dict(
             batch_size=128,
             min_num_steps_before_training=3300,
-            num_epochs=5000,
+            num_epochs=1000000,
             num_eval_steps_per_epoch=2500,
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
