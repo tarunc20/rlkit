@@ -465,7 +465,12 @@ def rollout_modular(
 
     paths = []
     merged_paths = []
+    only_keep_trajs_after_grasp_success = (
+        agent.only_keep_trajs_after_grasp_success  # do NOT use episode breaks if we are only keeping trajs after grasp success
+    )
+    only_keep_trajs_stagewise = agent.only_keep_trajs_stagewise
     for i in range(env.num_envs):
+
         merged_paths.append(
             dict(
                 type="merged",
@@ -533,30 +538,155 @@ def rollout_modular(
                 )
             )
         else:
-            paths.append(
-                dict(
-                    type="control",
-                    observations=observations[i],
-                    actions=actions[i],
-                    rewards=rewards[i],
-                    next_observations=next_observations[i],
-                    terminals=terminals[i],
-                    agent_infos=agent_infos,
-                    env_infos=env_infos[i],
+            if only_keep_trajs_after_grasp_success and not env_infos[i][25]["grasped"]:
+                paths.append(
+                    dict(
+                        type="control",
+                        observations=observations[i][: episode_breaks[0]],
+                        actions=actions[i][: episode_breaks[0]],
+                        rewards=rewards[i][: episode_breaks[0]],
+                        next_observations=next_observations[i][: episode_breaks[0]],
+                        terminals=terminals[i][: episode_breaks[0]],
+                        agent_infos=agent_infos,
+                        env_infos=env_infos[i][: episode_breaks[0]],
+                    )
                 )
-            )
-            paths.append(
-                dict(
-                    type="planner",
-                    observations=planner_observations[i],
-                    next_observations=planner_next_observations[i],
-                    actions=planner_actions[i],
-                    rewards=planner_rewards[i],
-                    terminals=planner_terminals[i],
-                    agent_infos=planner_agent_infos,
-                    env_infos=planner_env_infos[i],
+                paths.append(
+                    dict(
+                        type="planner",
+                        observations=planner_observations[i][:1],
+                        next_observations=planner_next_observations[i][:1],
+                        actions=planner_actions[i][:1],
+                        rewards=planner_rewards[i][:1],
+                        terminals=planner_terminals[i][:1],
+                        agent_infos=planner_agent_infos,
+                        env_infos=planner_env_infos[i][:1],
+                    )
                 )
-            )
+            elif only_keep_trajs_stagewise:
+                if planner_rewards[i][0] > 0.06:
+                    if rewards[i][: episode_breaks[0]][-1] > 0.3:
+                        if planner_rewards[i][1] > 0.6:
+                            # add full traj
+                            paths.append(
+                                dict(
+                                    type="control",
+                                    observations=observations[i],
+                                    actions=actions[i],
+                                    rewards=rewards[i],
+                                    next_observations=next_observations[i],
+                                    terminals=terminals[i],
+                                    agent_infos=agent_infos,
+                                    env_infos=env_infos[i],
+                                )
+                            )
+                            paths.append(
+                                dict(
+                                    type="planner",
+                                    observations=planner_observations[i],
+                                    next_observations=planner_next_observations[i],
+                                    actions=planner_actions[i],
+                                    rewards=planner_rewards[i],
+                                    terminals=planner_terminals[i],
+                                    agent_infos=planner_agent_infos,
+                                    env_infos=planner_env_infos[i],
+                                )
+                            )
+                        else:
+                            # only add second planner action, not second control traj
+                            paths.append(
+                                dict(
+                                    type="control",
+                                    observations=observations[i][: episode_breaks[0]],
+                                    actions=actions[i][: episode_breaks[0]],
+                                    rewards=rewards[i][: episode_breaks[0]],
+                                    next_observations=next_observations[i][
+                                        : episode_breaks[0]
+                                    ],
+                                    terminals=terminals[i][: episode_breaks[0]],
+                                    agent_infos=agent_infos,
+                                    env_infos=env_infos[i][: episode_breaks[0]],
+                                )
+                            )
+                            paths.append(
+                                dict(
+                                    type="planner",
+                                    observations=planner_observations[i],
+                                    next_observations=planner_next_observations[i],
+                                    actions=planner_actions[i],
+                                    rewards=planner_rewards[i],
+                                    terminals=planner_terminals[i],
+                                    agent_infos=planner_agent_infos,
+                                    env_infos=planner_env_infos[i],
+                                )
+                            )
+                    else:
+                        # add first planner action, first control traj
+                        paths.append(
+                            dict(
+                                type="control",
+                                observations=observations[i][: episode_breaks[0]],
+                                actions=actions[i][: episode_breaks[0]],
+                                rewards=rewards[i][: episode_breaks[0]],
+                                next_observations=next_observations[i][
+                                    : episode_breaks[0]
+                                ],
+                                terminals=terminals[i][: episode_breaks[0]],
+                                agent_infos=agent_infos,
+                                env_infos=env_infos[i][: episode_breaks[0]],
+                            )
+                        )
+                        paths.append(
+                            dict(
+                                type="planner",
+                                observations=planner_observations[i][:1],
+                                next_observations=planner_next_observations[i][:1],
+                                actions=planner_actions[i][:1],
+                                rewards=planner_rewards[i][:1],
+                                terminals=planner_terminals[i][:1],
+                                agent_infos=planner_agent_infos,
+                                env_infos=planner_env_infos[i][:1],
+                            )
+                        )
+                else:
+                    # add first planner action only
+                    paths.append(
+                        dict(
+                            type="planner",
+                            observations=planner_observations[i][:1],
+                            next_observations=planner_next_observations[i][:1],
+                            actions=planner_actions[i][:1],
+                            rewards=planner_rewards[i][:1],
+                            terminals=planner_terminals[i][:1],
+                            agent_infos=planner_agent_infos,
+                            env_infos=planner_env_infos[i][:1],
+                        )
+                    )
+            else:
+                paths.append(
+                    dict(
+                        type="control",
+                        observations=observations[i],
+                        actions=actions[i],
+                        rewards=rewards[i],
+                        next_observations=next_observations[i],
+                        terminals=terminals[i],
+                        agent_infos=agent_infos,
+                        env_infos=env_infos[i],
+                    )
+                )
+                paths.append(
+                    dict(
+                        type="planner",
+                        observations=planner_observations[i],
+                        next_observations=planner_next_observations[i],
+                        actions=planner_actions[i],
+                        rewards=planner_rewards[i],
+                        terminals=planner_terminals[i],
+                        agent_infos=planner_agent_infos,
+                        env_infos=planner_env_infos[i],
+                    )
+                )
     return paths, merged_paths
 
 
