@@ -662,10 +662,14 @@ class RobosuiteEnv(ProxyEnv):
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(3+4+2+1+self._wrapped_env._get_observations(force_update=True)['object-state'].shape[0],)
+        )
 
     def get_observation(self):
         di = self._wrapped_env._get_observations(force_update=True)
-        return self._wrapped_env._flatten_obs(di)
+        # return self._wrapped_env._flatten_obs(di)
+        return np.concatenate((di['robot0_eef_pos'], di['robot0_eef_quat'], di['robot0_gripper_qpos'], [self.check_grasp()], di['object-state']))
 
     def add_cameras(self):
         for (cam_name, cam_w, cam_h, cam_d, cam_seg) in zip(
@@ -977,6 +981,7 @@ class MPEnv(RobosuiteEnv):
                 )
                 obs = self._flatten_obs(obs)
         self.hasnt_teleported = True
+        obs = self.get_observation()
         if self.add_grasped_to_obs:
             obs = np.concatenate((obs, np.array([0])))
         return obs
@@ -1200,6 +1205,7 @@ class MPEnv(RobosuiteEnv):
             i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves
             i["goal_error"] = self.goal_error
+        o = self.get_observation()
         if self.add_grasped_to_obs:
             o = np.concatenate((o, np.array([i["grasped"]])))
         r += self.slack_reward
