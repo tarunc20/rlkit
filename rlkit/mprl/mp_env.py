@@ -663,13 +663,13 @@ class RobosuiteEnv(ProxyEnv):
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(3+4+2+1+self._wrapped_env._get_observations(force_update=True)['object-state'].shape[0],)
+            low=-np.inf, high=np.inf, shape=(3+4+2+self._wrapped_env._get_observations(force_update=True)['object-state'].shape[0],)
         )
 
     def get_observation(self):
         di = self._wrapped_env._get_observations(force_update=True)
         # return self._wrapped_env._flatten_obs(di)
-        return np.concatenate((di['robot0_eef_pos'], di['robot0_eef_quat'], di['robot0_gripper_qpos'], [self.check_grasp()], di['object-state']))
+        return np.concatenate((di['robot0_eef_pos'], di['robot0_eef_quat'], di['robot0_gripper_qpos'], di['object-state']))
 
     def add_cameras(self):
         for (cam_name, cam_w, cam_h, cam_d, cam_seg) in zip(
