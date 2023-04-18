@@ -89,12 +89,12 @@ def get_object_pose(env):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
     elif name.startswith("Door"):
-        object_pos = np.array([env.sim.data.qpos[
-            env.hinge_qpos_addr
-        ]])  # this is not what they are, but they will be decoded properly
-        object_quat = np.array([env.sim.data.qpos[
-            env.handle_qpos_addr
-        ]])  # this is not what they are, but they will be decoded properly
+        object_pos = np.array(
+            [env.sim.data.qpos[env.hinge_qpos_addr]]
+        )  # this is not what they are, but they will be decoded properly
+        object_quat = np.array(
+            [env.sim.data.qpos[env.handle_qpos_addr]]
+        )  # this is not what they are, but they will be decoded properly
     elif name.startswith("Wipe"):
         object_pos = np.zeros(3)
         object_quat = np.zeros(4)
@@ -650,6 +650,7 @@ class RobosuiteEnv(ProxyEnv):
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
+        terminate_on_drop=False,
     ):
         super().__init__(env)
         self.add_cameras()
@@ -657,19 +658,16 @@ class RobosuiteEnv(ProxyEnv):
         self.slack_reward = slack_reward
         self.predict_done_actions = predict_done_actions
         self.terminate_on_success = terminate_on_success
+        self.terminate_on_drop = terminate_on_drop
         if self.predict_done_actions:
             self.action_space = spaces.Box(
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(3+4+2+self._wrapped_env._get_observations(force_update=True)['object-state'].shape[0],)
-        )
 
     def get_observation(self):
         di = self._wrapped_env._get_observations(force_update=True)
-        # return self._wrapped_env._flatten_obs(di)
-        return np.concatenate((di['robot0_eef_pos'], di['robot0_eef_quat'], di['robot0_gripper_qpos'], di['object-state']))
+        return self._wrapped_env._flatten_obs(di)
 
     def add_cameras(self):
         for (cam_name, cam_w, cam_h, cam_d, cam_seg) in zip(
@@ -697,12 +695,32 @@ class RobosuiteEnv(ProxyEnv):
 
     def reset(self, **kwargs):
         self.num_steps = 0
+        self.was_in_hand = False
+        self.has_succeeded = False
+        self.terminal = False
         return super().reset(**kwargs)
 
     def check_grasp(
         self,
     ):
         return check_object_grasp(self)
+
+    def update_done_info_based_on_termination(self, i, d):
+        if self.terminal:
+            # if we've already terminated, don't let the agent get any more reward
+            i["bad_mask"] = 1
+        else:
+            i["bad_mask"] = 0
+        if i["grasped"] and not self.was_in_hand:
+            self.was_in_hand = True
+        if self.was_in_hand and not i["grasped"] and self.terminate_on_drop:
+            # if we've dropped the object, terminate
+            self.terminal = True
+        if i["success"] and self.terminate_on_success:
+            self.has_succeeded = True
+            self.terminal = True
+        d = d or self.terminal
+        return d
 
     def step(self, action):
         if self.predict_done_actions:
@@ -716,10 +734,10 @@ class RobosuiteEnv(ProxyEnv):
         r += self.slack_reward
         if self.predict_done_actions:
             d = old_action[-1] > 0
-        if self.terminate_on_success:
-            d = float(self._check_success())
         if self.num_steps == self.horizon:
+            # TODO: remove this
             d = True
+        d = self.update_done_info_based_on_termination(i, d)
         return o, r, d, i
 
 
@@ -754,15 +772,18 @@ class MPEnv(RobosuiteEnv):
         slack_reward=0,
         predict_done_actions=False,
         terminate_on_success=False,
+        terminate_on_drop=False,
         # grasp checks
         check_com_grasp=False,
         verify_stable_grasp=False,
+        reset_at_grasped_state=False,
     ):
         super().__init__(
             env,
             slack_reward=slack_reward,
             predict_done_actions=predict_done_actions,
             terminate_on_success=terminate_on_success,
+            terminate_on_drop=terminate_on_drop,
         )
         self.num_steps = 0
         self.vertical_displacement = vertical_displacement
@@ -797,6 +818,7 @@ class MPEnv(RobosuiteEnv):
         self.use_teleports_in_step = use_teleports_in_step
         self.take_planner_step = True
         self.current_ll_policy_steps = 0
+        self.reset_at_grasped_state = reset_at_grasped_state
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -865,6 +887,9 @@ class MPEnv(RobosuiteEnv):
         return pos_list
 
     def get_target_pos(self):
+        target_pos_list = self.get_target_pos_list()
+        if self.high_level_step > len(target_pos_list) - 1:
+            return target_pos_list[-1]
         return self.get_target_pos_list()[self.high_level_step]
 
     def get_init_target_pos(self):
@@ -959,6 +984,9 @@ class MPEnv(RobosuiteEnv):
         update_controller_config(self, self.ik_controller_config)
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
         self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
+        self.was_in_hand = False
+        self.has_succeeded = False
+        self.terminal = False
         if not self.plan_to_learned_goals and not self.planner_only_actions:
             if self.teleport_instead_of_mp:
                 pos = self.get_init_target_pos()
@@ -980,8 +1008,18 @@ class MPEnv(RobosuiteEnv):
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
                 obs = self._flatten_obs(obs)
+        if self.reset_at_grasped_state:
+            pos = self.get_init_target_pos()
+            for i in range(15):
+                a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+                o, r, d, info = self._wrapped_env.step(a)
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+                o, r, d, info = self._wrapped_env.step(a)
+            if not self.check_grasp():
+                print("Grasp failed, resetting")
+                self.reset()
         self.hasnt_teleported = True
-        obs = self.get_observation()
         if self.add_grasped_to_obs:
             obs = np.concatenate((obs, np.array([0])))
         return obs
@@ -992,9 +1030,10 @@ class MPEnv(RobosuiteEnv):
         is_grasped = super().check_grasp()
 
         if is_grasped and verify_stable_grasp:
-            # verify grasp is stable by shaking the arm and seeing if still in contact with object
+            # verify grasp is stable by lifting the arm and seeing if still in contact with object
             for i in range(10):
-                action = np.random.uniform(-1, 1, 7)
+                action = np.zeros(7)
+                action[2] = 0.1
                 action[-1] = 1.0
                 self._wrapped_env.step(action)
             is_grasped = super().check_grasp()
@@ -1205,12 +1244,10 @@ class MPEnv(RobosuiteEnv):
             i["mp_mse"] = self.mp_mse
             i["num_failed_solves"] = self.num_failed_solves
             i["goal_error"] = self.goal_error
-        o = self.get_observation()
         if self.add_grasped_to_obs:
             o = np.concatenate((o, np.array([i["grasped"]])))
         r += self.slack_reward
         if self.predict_done_actions:
             d = action[-1] > 0
-        if self.terminate_on_success:
-            d = float(self._check_success())
+        d = self.update_done_info_based_on_termination(i, d)
         return o, r, d, i

@@ -76,7 +76,7 @@ def make_env(variant):
         has_offscreen_renderer=True,
         use_camera_obs=False,
         camera_names="frontview",
-        hard_reset=False,
+        hard_reset=True,
     )
     if variant.get("mprl", False):
         expl_env = MPEnv(
@@ -534,6 +534,7 @@ def experiment(variant):
                 only_keep_trajs_stagewise=variant.get(
                     "only_keep_trajs_stagewise", False
                 ),
+                terminate_each_stage=variant.get("terminate_each_stage", False),
             )
             hierarchical_eval_policy = StepBasedSwitchingPolicy(
                 planner_eval_policy,
@@ -565,6 +566,7 @@ def experiment(variant):
                 only_keep_trajs_stagewise=variant.get(
                     "only_keep_trajs_stagewise", False
                 ),
+                terminate_each_stage=variant.get("terminate_each_stage", False),
             )
         eval_path_collector = MdpPathCollector(
             eval_env,

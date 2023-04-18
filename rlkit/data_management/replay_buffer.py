@@ -53,6 +53,7 @@ class ReplayBuffer(object, metaclass=abc.ABCMeta):
                 terminal,
                 agent_info,
                 env_info,
+                bad_masks,
             ),
         ) in enumerate(
             zip(
@@ -63,6 +64,7 @@ class ReplayBuffer(object, metaclass=abc.ABCMeta):
                 path["terminals"],
                 path["agent_infos"],
                 path["env_infos"],
+                path.get("bad_masks", [0] * len(path["terminals"])),
             )
         ):
             self.add_sample(
@@ -73,6 +75,7 @@ class ReplayBuffer(object, metaclass=abc.ABCMeta):
                 terminal=terminal,
                 agent_info=agent_info,
                 env_info=env_info,
+                bad_masks=bad_masks,
             )
         self.terminate_episode()
 

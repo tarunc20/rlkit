@@ -179,6 +179,7 @@ def vec_rollout(
     agent_infos = []
     env_infos = []
     next_observations = []
+    bad_masks = []
     path_length = 0
     agent.reset()
     o = env.reset()
@@ -205,8 +206,10 @@ def vec_rollout(
         raw_next_obs.append(next_o)
         agent_infos.append(agent_info)
         env_infos.append(env_info)
+        bad_masks.append(env_info["bad_mask"])
         path_length += 1
         o = next_o
+
     actions = np.array(actions)
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
@@ -219,11 +222,13 @@ def vec_rollout(
     if len(rewards.shape) == 1:
         rewards = rewards.reshape(-1, 1)
     terminals = np.array(terminals)
+    bad_masks = np.array(bad_masks)
     observations = [observations[:, i] for i in range(env.num_envs)]
     next_observations = [next_observations[:, i] for i in range(env.num_envs)]
     actions = [actions[:, i] for i in range(env.num_envs)]
     rewards = [rewards[:, i] for i in range(env.num_envs)]
     terminals = [terminals[:, i] for i in range(env.num_envs)]
+    bad_masks = [bad_masks[:, i][:, 0, 0] for i in range(env.num_envs)]
     env_infos = [
         [
             {key: env_infos[j][key][i] for key in env_infos[j]}
@@ -231,6 +236,24 @@ def vec_rollout(
         ]
         for i in range(env.num_envs)
     ]  # should be a list of list of dicts (length num_envs) (length of path)
+
+    # convert all arrays to masked arrays
+    for i in range(env.num_envs):
+        mask = bad_masks[i]
+        observations[i] = np.ma.array(
+            observations[i],
+            mask=mask.reshape(-1, 1).repeat(observations[i].shape[1], axis=1),
+        )
+        next_observations[i] = np.ma.array(
+            next_observations[i],
+            mask=mask.reshape(-1, 1).repeat(next_observations[i].shape[1], axis=1),
+        )
+        actions[i] = np.ma.array(
+            actions[i], mask=mask.reshape(-1, 1).repeat(actions[i].shape[1], axis=1)
+        )
+        rewards[i] = np.ma.array(rewards[i], mask=mask)
+        terminals[i] = np.ma.array(terminals[i], mask=mask)
+        # NOTE: adding masks to env_infos does not work, because masking a scalar just makes it a null value
     paths = []
     for i in range(env.num_envs):
         paths.append(
@@ -242,6 +265,7 @@ def vec_rollout(
                 terminals=terminals[i],
                 agent_infos=agent_infos,
                 env_infos=env_infos[i],
+                bad_masks=bad_masks[i],
             )
         )
     return paths, paths
@@ -278,6 +302,7 @@ def rollout_modular(
     agent_infos = []
     env_infos = []
     next_observations = []
+    bad_masks = []
 
     planner_raw_obs = []
     planner_raw_next_obs = []
@@ -288,6 +313,7 @@ def rollout_modular(
     planner_agent_infos = []
     planner_env_infos = []
     planner_next_observations = []
+    planner_bad_masks = []
 
     merged_raw_obs = []
     merged_raw_next_obs = []
@@ -298,6 +324,7 @@ def rollout_modular(
     merged_agent_infos = []
     merged_env_infos = []
     merged_next_observations = []
+    merged_bad_masks = []
 
     path_length = 0
     agent.reset()
@@ -306,7 +333,7 @@ def rollout_modular(
         env.render(**render_kwargs)
     current_low_level_rewards = []
     episode_breaks = []
-
+    terminate_each_stage = agent.terminate_each_stage
     while path_length < max_path_length:
         #     # planner next obs should come after the low level policy finishes executing
         #     planner_next_observations.append(next_o)
@@ -329,6 +356,8 @@ def rollout_modular(
         path_length += 1
 
         if use_planner:
+            if terminate_each_stage and len(observations) > 0:
+                terminals[-1] = np.array([True] * env.num_envs)
             current_low_level_rewards = []
             planner_raw_obs.append(o)
             planner_observations.append(o)
@@ -341,6 +370,9 @@ def rollout_modular(
             # TODO: testing back to the old setup
             planner_next_observations.append(next_o)
             planner_raw_next_obs.append(next_o)
+            planner_bad_masks.append(env_info["bad_mask"])
+            if terminate_each_stage:
+                planner_terminals[-1] = np.array([True] * env.num_envs)
 
             # low level policy next obs should come after planner policy executes
             # only add to next obs if there is a low level policy execution already, planner usually comes first
@@ -359,6 +391,7 @@ def rollout_modular(
             current_low_level_rewards.append(r)
             next_observations.append(next_o)
             raw_next_obs.append(next_o)
+            bad_masks.append(env_info["bad_mask"])
 
         # merged:
         merged_raw_obs.append(o)
@@ -370,8 +403,11 @@ def rollout_modular(
         merged_env_infos.append(env_info)
         merged_next_observations.append(next_o)
         merged_raw_next_obs.append(next_o)
+        merged_bad_masks.append(env_info["bad_mask"])
 
         o = next_o
+    if terminate_each_stage and len(observations) > 0:
+        terminals[-1] = np.array([True] * env.num_envs)
     # planner next obs should come after the low level policy finishes executing
     # TODO: do this more cleanly, currently this code assumes we end on a low level policy execution
     # planner_next_observations.append(next_o)
@@ -391,6 +427,7 @@ def rollout_modular(
     rewards = np.array(rewards)
     if len(rewards.shape) == 1:
         rewards = rewards.reshape(-1, 1)
+    bad_masks = np.array(bad_masks)
 
     planner_actions = np.array(planner_actions)
     if len(planner_actions.shape) == 1:
@@ -403,12 +440,15 @@ def rollout_modular(
     planner_rewards = np.array(planner_rewards)
     if len(planner_rewards.shape) == 1:
         planner_rewards = planner_rewards.reshape(-1, 1)
+    planner_bad_masks = np.array(planner_bad_masks)
+
     terminals = np.array(terminals)
     observations = [observations[:, i] for i in range(env.num_envs)]
     next_observations = [next_observations[:, i] for i in range(env.num_envs)]
     actions = [actions[:, i] for i in range(env.num_envs)]
     rewards = [rewards[:, i] for i in range(env.num_envs)]
     terminals = [terminals[:, i] for i in range(env.num_envs)]
+    bad_masks = [bad_masks[:, i] for i in range(env.num_envs)]
     env_infos = [
         [
             {key: env_infos[j][key][i] for key in env_infos[j]}
@@ -425,6 +465,7 @@ def rollout_modular(
     planner_actions = [planner_actions[:, i] for i in range(env.num_envs)]
     planner_rewards = [planner_rewards[:, i] for i in range(env.num_envs)]
     planner_terminals = [planner_terminals[:, i] for i in range(env.num_envs)]
+    planner_bad_masks = [planner_bad_masks[:, i] for i in range(env.num_envs)]
     planner_env_infos = [
         [
             {key: planner_env_infos[j][key][i] for key in planner_env_infos[j]}
@@ -447,6 +488,8 @@ def rollout_modular(
     merged_rewards = np.array(merged_rewards)
     if len(merged_rewards.shape) == 1:
         merged_rewards = merged_rewards.reshape(-1, 1)
+    merged_bad_masks = np.array(merged_bad_masks)
+
     merged_terminals = np.array(merged_terminals)
     merged_observations = [merged_observations[:, i] for i in range(env.num_envs)]
     merged_next_observations = [
@@ -455,6 +498,7 @@ def rollout_modular(
     merged_actions = [merged_actions[:, i] for i in range(env.num_envs)]
     merged_rewards = [merged_rewards[:, i] for i in range(env.num_envs)]
     merged_terminals = [merged_terminals[:, i] for i in range(env.num_envs)]
+    merged_bad_masks = [merged_bad_masks[:, i] for i in range(env.num_envs)]
     merged_env_infos = [
         [
             {key: merged_env_infos[j][key][i] for key in merged_env_infos[j]}
@@ -469,8 +513,62 @@ def rollout_modular(
         agent.only_keep_trajs_after_grasp_success  # do NOT use episode breaks if we are only keeping trajs after grasp success
     )
     only_keep_trajs_stagewise = agent.only_keep_trajs_stagewise
-    for i in range(env.num_envs):
 
+    # convert all arrays to masked arrays
+    for i in range(env.num_envs):
+        mask = bad_masks[i]
+        observations[i] = np.ma.array(
+            observations[i],
+            mask=mask.reshape(-1, 1).repeat(observations[i].shape[1], axis=1),
+        )
+        next_observations[i] = np.ma.array(
+            next_observations[i],
+            mask=mask.reshape(-1, 1).repeat(next_observations[i].shape[1], axis=1),
+        )
+        actions[i] = np.ma.array(
+            actions[i], mask=mask.reshape(-1, 1).repeat(actions[i].shape[1], axis=1)
+        )
+        rewards[i] = np.ma.array(rewards[i], mask=mask)
+        terminals[i] = np.ma.array(terminals[i], mask=mask)
+        # NOTE: adding masks to env_infos does not work, because masking a scalar just makes it a null value
+
+        mask = merged_bad_masks[i]
+        merged_observations[i] = np.ma.array(
+            merged_observations[i],
+            mask=mask.reshape(-1, 1).repeat(merged_observations[i].shape[1], axis=1),
+        )
+        merged_next_observations[i] = np.ma.array(
+            merged_next_observations[i],
+            mask=mask.reshape(-1, 1).repeat(
+                merged_next_observations[i].shape[1], axis=1
+            ),
+        )
+        merged_actions[i] = np.ma.array(
+            merged_actions[i],
+            mask=mask.reshape(-1, 1).repeat(merged_actions[i].shape[1], axis=1),
+        )
+        merged_rewards[i] = np.ma.array(merged_rewards[i], mask=mask)
+        merged_terminals[i] = np.ma.array(merged_terminals[i], mask=mask)
+
+        mask = planner_bad_masks[i]
+        planner_observations[i] = np.ma.array(
+            planner_observations[i],
+            mask=mask.reshape(-1, 1).repeat(planner_observations[i].shape[1], axis=1),
+        )
+        planner_next_observations[i] = np.ma.array(
+            planner_next_observations[i],
+            mask=mask.reshape(-1, 1).repeat(
+                planner_next_observations[i].shape[1], axis=1
+            ),
+        )
+        planner_actions[i] = np.ma.array(
+            planner_actions[i],
+            mask=mask.reshape(-1, 1).repeat(planner_actions[i].shape[1], axis=1),
+        )
+        planner_rewards[i] = np.ma.array(planner_rewards[i], mask=mask)
+        planner_terminals[i] = np.ma.array(planner_terminals[i], mask=mask)
+
+    for i in range(env.num_envs):
         merged_paths.append(
             dict(
                 type="merged",
@@ -481,6 +579,7 @@ def rollout_modular(
                 terminals=merged_terminals[i],
                 agent_infos=agent_infos,
                 env_infos=merged_env_infos[i],
+                bad_masks=merged_bad_masks[i],
             )
         )
         if agent.use_episode_breaks:
@@ -498,6 +597,7 @@ def rollout_modular(
                         terminals=terminals[i][prev_episode_break:episode_break],
                         agent_infos=agent_infos,
                         env_infos=env_infos[i][prev_episode_break:episode_break],
+                        bad_masks=bad_masks[i][prev_episode_break:episode_break],
                     )
                 )
                 paths.append(
@@ -510,6 +610,7 @@ def rollout_modular(
                         terminals=planner_terminals[i][idx : idx + 1],
                         agent_infos=planner_agent_infos,
                         env_infos=planner_env_infos[i][idx : idx + 1],
+                        bad_masks=planner_bad_masks[i][idx : idx + 1],
                     )
                 )
                 prev_episode_break = episode_break
@@ -523,6 +624,7 @@ def rollout_modular(
                     terminals=terminals[i][prev_episode_break:],
                     agent_infos=agent_infos,
                     env_infos=env_infos[i][prev_episode_break:],
+                    bad_masks=bad_masks[i][prev_episode_break:],
                 )
             )
             paths.append(
@@ -535,6 +637,7 @@ def rollout_modular(
                     terminals=planner_terminals[i][-1:],
                     agent_infos=planner_agent_infos,
                     env_infos=planner_env_infos[i][-1:],
+                    bad_masks=planner_bad_masks[i][-1:],
                 )
             )
         else:
@@ -549,6 +652,7 @@ def rollout_modular(
                         terminals=terminals[i][: episode_breaks[0]],
                         agent_infos=agent_infos,
                         env_infos=env_infos[i][: episode_breaks[0]],
+                        bad_masks=bad_masks[i][: episode_breaks[0]],
                     )
                 )
                 paths.append(
@@ -561,6 +665,7 @@ def rollout_modular(
                         terminals=planner_terminals[i][:1],
                         agent_infos=planner_agent_infos,
                         env_infos=planner_env_infos[i][:1],
+                        bad_masks=planner_bad_masks[i][:1],
                     )
                 )
             elif only_keep_trajs_stagewise:
@@ -578,6 +683,7 @@ def rollout_modular(
                                     terminals=terminals[i],
                                     agent_infos=agent_infos,
                                     env_infos=env_infos[i],
+                                    bad_masks=bad_masks[i],
                                 )
                             )
                             paths.append(
@@ -590,6 +696,7 @@ def rollout_modular(
                                     terminals=planner_terminals[i],
                                     agent_infos=planner_agent_infos,
                                     env_infos=planner_env_infos[i],
+                                    bad_masks=planner_bad_masks[i],
                                 )
                             )
                         else:
@@ -606,6 +713,7 @@ def rollout_modular(
                                     terminals=terminals[i][: episode_breaks[0]],
                                     agent_infos=agent_infos,
                                     env_infos=env_infos[i][: episode_breaks[0]],
+                                    bad_masks=bad_masks[i][: episode_breaks[0]],
                                 )
                             )
                             paths.append(
@@ -618,6 +726,7 @@ def rollout_modular(
                                     terminals=planner_terminals[i],
                                     agent_infos=planner_agent_infos,
                                     env_infos=planner_env_infos[i],
+                                    bad_masks=planner_bad_masks[i],
                                 )
                             )
                     else:
@@ -634,6 +743,7 @@ def rollout_modular(
                                 terminals=terminals[i][: episode_breaks[0]],
                                 agent_infos=agent_infos,
                                 env_infos=env_infos[i][: episode_breaks[0]],
+                                bad_masks=bad_masks[i][: episode_breaks[0]],
                             )
                         )
                         paths.append(
@@ -646,6 +756,7 @@ def rollout_modular(
                                 terminals=planner_terminals[i][:1],
                                 agent_infos=planner_agent_infos,
                                 env_infos=planner_env_infos[i][:1],
+                                bad_masks=planner_bad_masks[i][:1],
                             )
                         )
                 else:
@@ -660,6 +771,7 @@ def rollout_modular(
                             terminals=planner_terminals[i][:1],
                             agent_infos=planner_agent_infos,
                             env_infos=planner_env_infos[i][:1],
+                            bad_masks=planner_bad_masks[i][:1],
                         )
                     )
             else:
@@ -673,6 +785,7 @@ def rollout_modular(
                         terminals=terminals[i],
                         agent_infos=agent_infos,
                         env_infos=env_infos[i],
+                        bad_masks=bad_masks[i],
                     )
                 )
                 paths.append(
@@ -685,6 +798,7 @@ def rollout_modular(
                         terminals=planner_terminals[i],
                         agent_infos=planner_agent_infos,
                         env_infos=planner_env_infos[i],
+                        bad_masks=planner_bad_masks[i],
                     )
                 )
     return paths, merged_paths

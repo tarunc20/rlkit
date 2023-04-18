@@ -14,6 +14,7 @@ class StepBasedSwitchingPolicy(Policy):
         use_episode_breaks=False,
         only_keep_trajs_after_grasp_success=False,
         only_keep_trajs_stagewise=False,
+        terminate_each_stage=False,
     ):
         """
         Initializes a new instance of the StepBasedSwitchingPolicy class.
@@ -38,6 +39,7 @@ class StepBasedSwitchingPolicy(Policy):
         self.use_episode_breaks = use_episode_breaks
         self.only_keep_trajs_after_grasp_success = only_keep_trajs_after_grasp_success
         self.only_keep_trajs_stagewise = only_keep_trajs_stagewise
+        self.terminate_each_stage = terminate_each_stage
 
     def get_action(self, observation):
         """

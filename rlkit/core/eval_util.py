@@ -15,9 +15,14 @@ def get_generic_path_information(paths, stat_prefix=""):
     Get an OrderedDict with a bunch of statistic names and values.
     """
     statistics = OrderedDict()
-    returns = [sum(path["rewards"]) for path in paths]
 
-    rewards = np.vstack([path["rewards"] for path in paths])
+    returns = [np.sum(path["rewards"]) for path in paths]
+
+    rewards = np.ma.vstack([path["rewards"] for path in paths])
+    try:
+        masks = rewards.mask
+    except:
+        masks = np.zeros_like(rewards)
     statistics.update(
         create_stats_ordered_dict("Rewards", rewards, stat_prefix=stat_prefix)
     )
@@ -26,9 +31,9 @@ def get_generic_path_information(paths, stat_prefix=""):
     )
     actions = [path["actions"] for path in paths]
     if len(actions[0].shape) == 1:
-        actions = np.hstack([path["actions"] for path in paths])
+        actions = np.ma.hstack([path["actions"] for path in paths])
     else:
-        actions = np.vstack([path["actions"] for path in paths])
+        actions = np.ma.vstack([path["actions"] for path in paths])
     statistics.update(
         create_stats_ordered_dict("Actions", actions, stat_prefix=stat_prefix)
     )
@@ -46,14 +51,30 @@ def get_generic_path_information(paths, stat_prefix=""):
                     if key not in running_keys:
                         running_keys.append(key)
             for k in running_keys:
-                final_ks = np.array(
-                    [info[k][-1] for info in all_env_infos if k in info.keys()]
+                # final ks should be computed based on the last mask that is valid
+                first_valid_mask_idx = []
+                for i in range(masks.shape[0]):
+                    idx = (
+                        np.argmax(masks[i]) - 1
+                    )  # should give the first idx that is True (so go 1 less)
+                    first_valid_mask_idx.append(idx)
+                final_ks = np.ma.array(
+                    [
+                        info[k][first_valid_mask_idx[j]]
+                        for j, info in enumerate(all_env_infos)
+                        if k in info.keys()
+                    ],
                 )
-                first_ks = np.array(
-                    [info[k][0] for info in all_env_infos if k in info.keys()]
+                first_ks = np.ma.array(
+                    [info[k][0] for info in all_env_infos if k in info.keys()],
                 )
-                all_ks = np.concatenate(
-                    [info[k] for info in all_env_infos if k in info.keys()]
+                all_ks = np.ma.concatenate(
+                    [info[k] for info in all_env_infos if k in info.keys()],
+                )
+                all_ks.mask = (
+                    masks.reshape(-1)
+                    if k != "bad_masks"
+                    else np.zeros_like(masks.reshape(-1))
                 )
                 statistics.update(
                     create_stats_ordered_dict(
@@ -81,7 +102,7 @@ def get_generic_path_information(paths, stat_prefix=""):
 
 
 def get_average_returns(paths):
-    returns = [sum(path["rewards"]) for path in paths]
+    returns = [np.sum(path["rewards"]) for path in paths]
     return np.mean(returns)
 
 

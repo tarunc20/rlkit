@@ -29,6 +29,7 @@ class SimpleReplayBuffer(ReplayBuffer):
         self._rewards = np.zeros((max_replay_buffer_size, 1))
         # self._terminals[i] = a terminal was received at time i
         self._terminals = np.zeros((max_replay_buffer_size, 1), dtype="uint8")
+        self._bad_masks = np.zeros((max_replay_buffer_size, 1), dtype="uint8")
         # Define self._env_infos[key][i] to be the return value of env_info[key]
         # at time i
         self._env_infos = {}
@@ -56,6 +57,7 @@ class SimpleReplayBuffer(ReplayBuffer):
         self._rewards[self._top] = reward
         self._terminals[self._top] = terminal
         self._next_obs[self._top] = next_observation
+        self._bad_masks[self._top] = kwargs["bad_masks"]
 
         for key in self._env_info_keys:
             self._env_infos[key][self._top] = env_info[key]
@@ -85,6 +87,7 @@ class SimpleReplayBuffer(ReplayBuffer):
             rewards=self._rewards[indices],
             terminals=self._terminals[indices],
             next_observations=self._next_obs[indices],
+            bad_masks=self._bad_masks[indices],
         )
         for key in self._env_info_keys:
             assert key not in batch.keys()

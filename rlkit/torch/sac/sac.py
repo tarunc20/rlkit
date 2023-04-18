@@ -66,7 +66,7 @@ class SACTrainer(TorchTrainer, LossFunction):
         self.plotter = plotter
         self.render_eval_paths = render_eval_paths
 
-        self.qf_criterion = nn.MSELoss()
+        self.qf_criterion = nn.MSELoss(reduction="none")
         self.vf_criterion = nn.MSELoss()
 
         self.policy_optimizer = optimizer_class(
@@ -141,6 +141,8 @@ class SACTrainer(TorchTrainer, LossFunction):
         obs = batch["observations"]
         actions = batch["actions"]
         next_obs = batch["next_observations"]
+        # bad_masks = 1 - batch.get("bad_masks", torch.zeros_like(terminals))
+        bad_masks = 1 - batch.get("bad_masks")
 
         """
         Policy and Alpha Loss
@@ -150,7 +152,7 @@ class SACTrainer(TorchTrainer, LossFunction):
         log_pi = log_pi.unsqueeze(-1)
         if self.use_automatic_entropy_tuning:
             alpha_loss = -(
-                self.log_alpha * (log_pi + self.target_entropy).detach()
+                self.log_alpha * (log_pi + self.target_entropy).detach() * bad_masks
             ).mean()
             alpha = self.log_alpha.exp()
         else:
@@ -161,7 +163,7 @@ class SACTrainer(TorchTrainer, LossFunction):
             self.qf1(obs, new_obs_actions),
             self.qf2(obs, new_obs_actions),
         )
-        policy_loss = (alpha * log_pi - q_new_actions).mean()
+        policy_loss = ((alpha * log_pi - q_new_actions) * bad_masks).mean()
 
         """
         QF Loss
@@ -183,8 +185,8 @@ class SACTrainer(TorchTrainer, LossFunction):
             self.reward_scale * rewards
             + (1.0 - terminals) * self.discount * target_q_values
         )
-        qf1_loss = self.qf_criterion(q1_pred, q_target.detach())
-        qf2_loss = self.qf_criterion(q2_pred, q_target.detach())
+        qf1_loss = (self.qf_criterion(q1_pred, q_target.detach()) * bad_masks).mean()
+        qf2_loss = (self.qf_criterion(q2_pred, q_target.detach()) * bad_masks).mean()
 
         """
         Save some statistics for eval
