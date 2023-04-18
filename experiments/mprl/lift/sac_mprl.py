@@ -12,6 +12,12 @@ if __name__ == "__main__":
     # noinspection PyTypeChecker
     args = get_args()
     variant = dict(
+        additional_reward_configs=dict(
+            use_distance_reduced_to_object_reward=False,
+            use_min_prev_distance=False,
+            dist_reduced_reward_scale=1,
+            first_grasp_reward=False,
+        ),
         algorithm_kwargs=dict(
             batch_size=128,
             min_num_steps_before_training=3300,

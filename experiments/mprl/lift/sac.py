@@ -14,13 +14,13 @@ if __name__ == "__main__":
         additional_reward_configs=dict(
             use_distance_reduced_to_object_reward=False,
             use_min_prev_distance=False,
-            dist_reduced_reward_scale=225,
+            dist_reduced_reward_scale=1,
             first_grasp_reward=False,
         ),
         algorithm_kwargs=dict(
-            batch_size=128,
+            batch_size=256,
             min_num_steps_before_training=3300,
-            num_epochs=500,
+            num_epochs=5000000,
             num_eval_steps_per_epoch=2500,
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,

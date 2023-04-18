@@ -31,9 +31,10 @@ if __name__ == "__main__":
         use_object_obs=True,
         env_name="Lift",
         horizon=50,
-        use_distance_reduced_to_object_reward=False,
+        use_distance_reduced_to_object_reward=True,
         use_min_prev_distance=False,
         dist_reduced_reward_scale=1,
+        first_grasp_reward=True,
     )
     # OSC controller spec
     controller_args = dict(
@@ -64,11 +65,13 @@ if __name__ == "__main__":
         camera_heights=1024,
         camera_widths=1024,
     )
-    env = RobosuiteEnv(GymWrapper(env))
+    env = RobosuiteEnv(GymWrapper(env), terminate_on_success=True)
     num_episodes = 1
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0
+    cumsum = 0
+    cumsums = []
     for s in tqdm(range(num_episodes)):
         o = env.reset()
         rs = []
@@ -81,28 +84,41 @@ if __name__ == "__main__":
             )
             o, r, d, info = env.step(a)
             rs.append(r)
+            cumsum += r
+            cumsums.append(cumsum)
             # env.render()
             cube_pos = env.sim.data.body_xpos[env.cube_body_id]
             gripper_site_pos = env.sim.data.site_xpos[env.robots[0].eef_site_id]
             dist = np.linalg.norm(gripper_site_pos - cube_pos)
-            print(r, dist)
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, -0.1], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     env.render()
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     # rs.append(r)
-        #     env.render()
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, .1], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     # rs.append(r)
-        #     env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, -0.1], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            cumsum += r
+            cumsums.append(cumsum)
+            # env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            cumsum += r
+            cumsums.append(cumsum)
+            # env.render()
+        for i in range(50):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            cumsum += r
+            cumsums.append(cumsum)
+            if d:
+                break
+            # env.render()
         print(env._check_success())
         plt.plot(rs)
-        plt.show()
+        plt.savefig("rs.png")
+        plt.clf()
+        plt.plot(cumsums)
+        plt.savefig("cumsums.png")
+        plt.clf()
         success_rate += env._check_success()
     print(f"Success Rate: {success_rate/num_episodes}")

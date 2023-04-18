@@ -7,7 +7,7 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
 
 import rlkit.torch.pytorch_util as ptu
-from rlkit.mprl.mp_env import MPEnv
+from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
 from rlkit.torch.model_based.dreamer.visualization import make_video
 
 if __name__ == "__main__":
@@ -23,8 +23,11 @@ if __name__ == "__main__":
         grip_ctrl_scale=0.0025,
         planning_time=20,
         teleport_on_grasp=True,
-        check_com_grasp=True,
-        terminate_on_success=False,
+        check_com_grasp=False,
+        terminate_on_success=True,
+        plan_to_learned_goals=False,
+        reset_at_grasped_state=False,
+        verify_stable_grasp=True,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -32,10 +35,28 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceBread",
+        env_name="PickPlaceCan",
     )
     # OSC controller spec
-    controller_args = dict(
+    # controller_args = dict(
+    #     type="OSC_POSE",
+    #     input_max=1,
+    #     input_min=-1,
+    #     output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
+    #     output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
+    #     kp=150,
+    #     damping=1,
+    #     impedance_mode="fixed",
+    #     kp_limits=[0, 300],
+    #     damping_limits=[0, 10],
+    #     position_limits=None,
+    #     orientation_limits=None,
+    #     uncouple_pos_ori=True,
+    #     control_delta=True,
+    #     interpolation=None,
+    #     ramp_ratio=0.2,
+    # )
+    controller_configs = dict(
         type="OSC_POSE",
         input_max=1,
         input_min=-1,
@@ -53,19 +74,23 @@ if __name__ == "__main__":
         interpolation=None,
         ramp_ratio=0.2,
     )
-    robosuite_args["controller_configs"] = controller_args
+    robosuite_args["controller_configs"] = controller_configs
+    mp_env_kwargs["controller_configs"] = controller_configs
     env = suite.make(
         **robosuite_args,
-        has_renderer=True,
-        has_offscreen_renderer=False,
+        has_renderer=False,
+        has_offscreen_renderer=True,
         use_camera_obs=False,
         camera_names="frontview",
         camera_heights=1024,
         camera_widths=1024,
+        hard_reset=False,
+        custom_reward_fn=True,
     )
     np.random.seed(0)
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
-    num_episodes = 10
+    # env = RobosuiteEnv(GymWrapper(env), terminate_on_success=True)
+    num_episodes = 1
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0
@@ -73,56 +98,76 @@ if __name__ == "__main__":
     target_pos = np.array(
         [
             0.2,
-            0.15,
+            0.4,
             env.sim.data.qpos[18] + 0.1,
         ]
     )
+
     for s in tqdm(range(num_episodes)):
         o = env.reset()
         rs = []
         # for i in range(300):
         #     a = np.concatenate(
         #         (
-        #             env.sim.data.qpos[16:19] + np.array([0, 0, 0.1]) - env._eef_xpos,
+        #             env.sim.data.qpos[30:33] + np.array([0, 0, 0.1]) - env._eef_xpos,
         #             [0, 0, 0, -1],
         #         )
         #     )
         #     o, r, d, info = env.step(a)
         #     rs.append(r)
         #     env.render()
-        for i in range(50):
+        for i in range(15):
             a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
-            o, r, d, info = env.step(a)
+            o, r, d, info = env._wrapped_env.step(a)
             rs.append(r)
-            env.render()
-        for i in range(50):
+            print(r)
+            # env.render()
+        for i in range(10):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-            o, r, d, info = env.step(a)
+            o, r, d, info = env._wrapped_env.step(a)
             rs.append(r)
-            env.render()
+            print(r)
+        # env.render()
         #     if d:
         #         break
         # if d:
         #     continue
-        # for i in range(50):
-        #     a = np.concatenate(([0, 0, 0.2], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     env.render()
+        # im = env.get_image()
+        # import cv2
+
+        # cv2.imwrite(f"test_{s}.png", im)
+        for i in range(15):
+            a = np.concatenate(([0, 0, -0.2], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            print(r)
+            # env.render()
         # for i in range(200):
         #     a = np.concatenate((target_pos - env._eef_xpos, [0, 0, 0, 1]))
         #     o, r, d, info = env.step(a)
         #     rs.append(r)
-        #     env.render()
-        for i in range(50):
+        # env.render()
+        im = env.get_image()
+        import cv2
+
+        cv2.imwrite(f"test_{s}.png", im)
+        for i in range(10):
             a = np.concatenate(([0, 0, -0.0], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
+            print(r)
             rs.append(r)
-            env.render()
-
-        print(env._check_success())
-        # plt.plot(rs)
+            if d:
+                break
+        # env.render()
+        # grasp = env.check_grasp(verify_stable_grasp=True)
+        plt.plot(rs)
+        plt.savefig(f"test_{s}.png")
+        plt.clf()
+        cumsum = np.cumsum(rs)
+        plt.plot(cumsum)
+        plt.savefig(f"test_{s}_cumsum.png")
         # plt.show()
         success_rate += env._check_success()
+        print(env._check_success())
         # make_video(frames, "test", 0)
     print(f"Success Rate: {success_rate/num_episodes}")
