@@ -141,8 +141,7 @@ class SACTrainer(TorchTrainer, LossFunction):
         obs = batch["observations"]
         actions = batch["actions"]
         next_obs = batch["next_observations"]
-        # bad_masks = 1 - batch.get("bad_masks", torch.zeros_like(terminals))
-        bad_masks = 1 - batch.get("bad_masks")
+        bad_masks = 1 - batch.get("bad_masks", torch.zeros_like(terminals))
 
         """
         Policy and Alpha Loss

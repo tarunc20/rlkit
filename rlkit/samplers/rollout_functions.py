@@ -677,17 +677,13 @@ def rollout_multi_stage_modular(
         env.render(**render_kwargs)
     episode_breaks = []
     terminate_each_stage = False
-    num_stages = 2  # TODO: make this a parameter
-    planner_indices = [[] for _ in range(num_stages)]
-    control_indices = [[] for _ in range(num_stages)]
-    stage = 0
+    planner_indices = []
+    control_indices = []
     stage_indices = [0]
     while path_length < max_path_length:
         if agent.active_policy.take_policy1_step and len(observations) > 0:
             episode_breaks.append(path_length)
-            agent.increment_stage()
             stage_indices.append(path_length)
-            stage += 1
         o_for_agent = preprocess_obs_for_policy_fn(o)
         a, agent_info = agent.get_action(o_for_agent, **get_action_kwargs)
         # use_planner is updated after get_action call
@@ -698,7 +694,8 @@ def rollout_multi_stage_modular(
         next_o, r, d, env_info = env.step(copy.deepcopy(a))
 
         if use_planner:
-            planner_indices[stage].append(path_length)
+            planner_indices.append([])
+            planner_indices[agent.stage].append(path_length)
             if terminate_each_stage and len(observations) > 0:
                 # assumption is that the previous stage was control policy execution if len(obs) > 0 and use_planner is True
                 terminals[-1] = np.array([True] * env.num_envs)
@@ -721,7 +718,7 @@ def rollout_multi_stage_modular(
         path_length += 1
     if terminate_each_stage and len(observations) > 0:
         terminals[-1] = np.array([True] * env.num_envs)
-    stage_indices.append(path_length - 1)
+    stage_indices.append(path_length)
     actions = np.array(actions)
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
@@ -770,9 +767,10 @@ def rollout_multi_stage_modular(
         rewards[i] = np.ma.array(rewards[i], mask=mask)
         terminals[i] = np.ma.array(terminals[i], mask=mask)
         # NOTE: adding masks to env_infos does not work, because masking a scalar just makes it a null value
-
+    num_stages = len(stage_indices) - 1
     # control indices should be all indices in range(0, max_path_length) that are not in planner_indices
     for stage in range(1, num_stages + 1):
+        control_indices.append([])
         control_indices[stage - 1] = list(
             set(range(stage_indices[stage - 1], stage_indices[stage]))
             - set(planner_indices[stage - 1])

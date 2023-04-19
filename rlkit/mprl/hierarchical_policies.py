@@ -84,14 +84,16 @@ class MultiStageStepBasedSwitchingPolicy(Policy):
         self.active_policy_idx = 0
 
     def increment_stage(self):
-        self.active_policy_idx += 1
-        self.active_policy = self.policies[self.active_policy_idx]
+        self.stage += 1
+        self.active_policy = self.policies[self.stage]
 
     def get_action(self, observation):
+        if self.active_policy.take_policy1_step and self.active_policy.num_steps > 0:
+            self.increment_stage()
         return self.active_policy.get_action(observation)
 
     def reset(self):
-        self.active_policy_idx = 0
+        self.stage = 0
         self.active_policy = self.policies[0]
         for policy in self.policies:
             policy.reset()
