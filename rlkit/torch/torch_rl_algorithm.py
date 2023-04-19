@@ -4,7 +4,11 @@ from typing import Iterable
 
 from torch import nn as nn
 
-from rlkit.core.batch_rl_algorithm import BatchModularRLAlgorithm, BatchRLAlgorithm
+from rlkit.core.batch_rl_algorithm import (
+    BatchModularRLAlgorithm,
+    BatchMultiStageModularRLAlgorithm,
+    BatchRLAlgorithm,
+)
 from rlkit.core.online_rl_algorithm import OnlineRLAlgorithm
 from rlkit.core.trainer import Trainer
 from rlkit.torch.core import np_to_pytorch_batch
@@ -42,6 +46,22 @@ class TorchBatchModularRLAlgorithm(BatchModularRLAlgorithm):
             net.train(mode)
         for net in self.planner_trainer.networks:
             net.train(mode)
+
+
+class TorchBatchMultiStageModularRLAlgorithm(BatchMultiStageModularRLAlgorithm):
+    def to(self, device):
+        for stage in range(self.num_stages):
+            for net in self.trainers[stage].networks:
+                net.to(device)
+            for net in self.planner_trainers[stage].networks:
+                net.to(device)
+
+    def training_mode(self, mode):
+        for stage in range(self.num_stages):
+            for net in self.trainers[stage].networks:
+                net.train(mode)
+            for net in self.planner_trainers[stage].networks:
+                net.train(mode)
 
 
 class TorchTrainer(Trainer, metaclass=abc.ABCMeta):

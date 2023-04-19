@@ -1,8 +1,6 @@
 import os
 import pickle
 
-from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
-
 
 def preprocess_variant(variant, debug):
     variant["sheet_name"] = "motion-planning-rl"
@@ -135,19 +133,19 @@ def video_func(algorithm, epoch):
         make_video(flattened_frames, logdir, epoch)
         print(f"Saved video for epoch {epoch}")
         print(f"Success rate: {np.mean(success_rate)}")
-        env = algorithm.trainer.env
-        algorithm.trainer.env = None
-        pickle.dump(
-            algorithm.trainer, open(os.path.join(logdir, f"control_{epoch}.pkl"), "wb")
-        )
-        algorithm.trainer.env = env
-        if isinstance(algorithm, BatchModularRLAlgorithm):
-            algorithm.planner_trainer.env = None
-            pickle.dump(
-                algorithm.planner_trainer,
-                open(os.path.join(logdir, f"planner_{epoch}.pkl"), "wb"),
-            )
-            algorithm.planner_trainer.env = env
+        # env = algorithm.trainer.env
+        # algorithm.trainer.env = None
+        # pickle.dump(
+        #     algorithm.trainer, open(os.path.join(logdir, f"control_{epoch}.pkl"), "wb")
+        # )
+        # algorithm.trainer.env = env
+        # if isinstance(algorithm, BatchModularRLAlgorithm):
+        #     algorithm.planner_trainer.env = None
+        #     pickle.dump(
+        #         algorithm.planner_trainer,
+        #         open(os.path.join(logdir, f"planner_{epoch}.pkl"), "wb"),
+        #     )
+        #     algorithm.planner_trainer.env = env
 
 
 def mp_video_func(algorithm, epoch):
@@ -397,42 +395,13 @@ def load_policy(path):
     return pickle.load(open(path, "rb"))
 
 
-def experiment(variant):
+def get_trainer(variant, obs_dim, action_dim, eval_env, trainer_kwargs):
     import torch
 
     torch.set_float32_matmul_precision("medium")
-    import rlkit.torch.pytorch_util as ptu
-    from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
-    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
-        DummyVecEnv,
-        StableBaselinesVecEnv,
-    )
-    from rlkit.samplers.data_collector import MdpPathCollector
-    from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.networks.mlp import ConcatMlp
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
-    from rlkit.torch.torch_rl_algorithm import (
-        TorchBatchModularRLAlgorithm,
-        TorchBatchRLAlgorithm,
-    )
-    import numpy as np
-
-    num_expl_envs = variant.get("num_expl_envs", 1)
-    if num_expl_envs > 1:
-        env_fns = [lambda: make_env(variant) for _ in range(num_expl_envs)]
-        expl_env = StableBaselinesVecEnv(
-            env_fns=env_fns,
-            start_method="fork",
-        )
-    else:
-        expl_envs = [make_env(variant)]
-        expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
-
-    eval_env = expl_env
-
-    obs_dim = eval_env.observation_space.low.size
-    action_dim = eval_env.action_space.low.size
 
     qf1 = ConcatMlp(
         input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
@@ -455,8 +424,6 @@ def experiment(variant):
     )
     eval_policy = MakeDeterministic(expl_policy)
 
-    import torch
-
     trainer = SACTrainer(
         env=eval_env,
         policy=expl_policy,
@@ -464,7 +431,48 @@ def experiment(variant):
         qf2=qf2,
         target_qf1=target_qf1,
         target_qf2=target_qf2,
-        **variant["trainer_kwargs"],
+        **trainer_kwargs,
+    )
+    return trainer, expl_policy, eval_policy
+
+
+def experiment(variant):
+    import torch
+
+    torch.set_float32_matmul_precision("medium")
+    import rlkit.torch.pytorch_util as ptu
+    from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
+    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
+        DummyVecEnv,
+        StableBaselinesVecEnv,
+    )
+    from rlkit.samplers.data_collector import MdpPathCollector
+    from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
+    from rlkit.torch.sac.policies import MakeDeterministic
+    from rlkit.torch.torch_rl_algorithm import (
+        TorchBatchModularRLAlgorithm,
+        TorchBatchRLAlgorithm,
+    )
+    from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
+
+    num_expl_envs = variant.get("num_expl_envs", 1)
+    if num_expl_envs > 1:
+        env_fns = [lambda: make_env(variant) for _ in range(num_expl_envs)]
+        expl_env = StableBaselinesVecEnv(
+            env_fns=env_fns,
+            start_method="fork",
+        )
+    else:
+        expl_envs = [make_env(variant)]
+        expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
+
+    eval_env = expl_env
+
+    obs_dim = eval_env.observation_space.low.size
+    action_dim = eval_env.action_space.low.size
+
+    trainer, expl_policy, eval_policy = get_trainer(
+        variant, obs_dim, action_dim, eval_env, variant["trainer_kwargs"]
     )
 
     replay_buffer = EnvReplayBuffer(
@@ -473,35 +481,8 @@ def experiment(variant):
     )
 
     if variant["plan_to_learned_goals"]:
-        planner_qf1 = ConcatMlp(
-            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
-        )
-        planner_qf2 = ConcatMlp(
-            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
-        )
-        planner_target_qf1 = ConcatMlp(
-            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
-        )
-        planner_target_qf2 = ConcatMlp(
-            input_size=obs_dim + action_dim, output_size=1, **variant["qf_kwargs"]
-        )
-
-        # Instantiate trainer with appropriate agent
-        planner_expl_policy = TanhGaussianPolicy(
-            obs_dim=obs_dim,
-            action_dim=action_dim,
-            **variant["policy_kwargs"],
-        )
-        planner_eval_policy = MakeDeterministic(planner_expl_policy)
-
-        planner_trainer = SACTrainer(
-            env=eval_env,
-            policy=planner_expl_policy,
-            qf1=planner_qf1,
-            qf2=planner_qf2,
-            target_qf1=planner_target_qf1,
-            target_qf2=planner_target_qf2,
-            **variant["planner_trainer_kwargs"],
+        planner_trainer, planner_expl_policy, planner_eval_policy = get_trainer(
+            variant, obs_dim, action_dim, eval_env, variant["planner_trainer_kwargs"]
         )
 
         planner_replay_buffer = EnvReplayBuffer(
@@ -521,53 +502,24 @@ def experiment(variant):
             eval_policy = MakeDeterministic(expl_policy)
             planner_expl_policy = planner_trainer.policy
             planner_eval_policy = MakeDeterministic(planner_expl_policy)
-            hierarchical_expl_policy = StepBasedSwitchingPolicy(
-                planner_expl_policy,
-                expl_policy,
-                policy2_steps_per_policy1_step=variant.get(
-                    "num_ll_actions_per_hl_action"
-                ),
-                use_episode_breaks=variant.get("use_episode_breaks", False),
-                only_keep_trajs_after_grasp_success=variant.get(
-                    "only_keep_trajs_after_grasp_success", False
-                ),
-                only_keep_trajs_stagewise=variant.get(
-                    "only_keep_trajs_stagewise", False
-                ),
-                terminate_each_stage=variant.get("terminate_each_stage", False),
-            )
-            hierarchical_eval_policy = StepBasedSwitchingPolicy(
-                planner_eval_policy,
-                eval_policy,
-                policy2_steps_per_policy1_step=variant.get(
-                    "num_ll_actions_per_hl_action"
-                ),
-                use_episode_breaks=False,  # eval should not use episode breaks
-            )
-        else:
-            hierarchical_eval_policy = StepBasedSwitchingPolicy(
-                planner_eval_policy,
-                eval_policy,
-                policy2_steps_per_policy1_step=variant.get(
-                    "num_ll_actions_per_hl_action"
-                ),
-                use_episode_breaks=False,  # eval should not use episode breaks
-            )
-            hierarchical_expl_policy = StepBasedSwitchingPolicy(
-                planner_expl_policy,
-                expl_policy,
-                policy2_steps_per_policy1_step=variant.get(
-                    "num_ll_actions_per_hl_action"
-                ),
-                use_episode_breaks=variant.get("use_episode_breaks", False),
-                only_keep_trajs_after_grasp_success=variant.get(
-                    "only_keep_trajs_after_grasp_success", False
-                ),
-                only_keep_trajs_stagewise=variant.get(
-                    "only_keep_trajs_stagewise", False
-                ),
-                terminate_each_stage=variant.get("terminate_each_stage", False),
-            )
+
+        hierarchical_eval_policy = StepBasedSwitchingPolicy(
+            planner_eval_policy,
+            eval_policy,
+            policy2_steps_per_policy1_step=variant.get("num_ll_actions_per_hl_action"),
+            use_episode_breaks=False,  # eval should not use episode breaks
+        )
+        hierarchical_expl_policy = StepBasedSwitchingPolicy(
+            planner_expl_policy,
+            expl_policy,
+            policy2_steps_per_policy1_step=variant.get("num_ll_actions_per_hl_action"),
+            use_episode_breaks=variant.get("use_episode_breaks", False),
+            only_keep_trajs_after_grasp_success=variant.get(
+                "only_keep_trajs_after_grasp_success", False
+            ),
+            only_keep_trajs_stagewise=variant.get("only_keep_trajs_stagewise", False),
+            terminate_each_stage=variant.get("terminate_each_stage", False),
+        )
         eval_path_collector = MdpPathCollector(
             eval_env,
             hierarchical_eval_policy,
@@ -609,6 +561,189 @@ def experiment(variant):
             replay_buffer=replay_buffer,
             **variant["algorithm_kwargs"],
         )
+    algorithm.to(ptu.device)
+    if variant.get("load_path", None):
+        policy = pickle.load(open(os.path.join(variant["load_path"]), "rb"))
+        policy = MakeDeterministic(policy)
+        algorithm.eval_data_collector._policy = policy
+        if variant.get("mp_env_kwargs", None):
+            if variant["mp_env_kwargs"]["teleport_instead_of_mp"]:
+                func = video_func
+            else:
+                if variant["plan_to_learned_goals"]:
+                    func = mp_video_func_v4
+                else:
+                    func = mp_video_func
+            func(algorithm, -1)
+    else:
+        if variant.get("mp_env_kwargs", None):
+            if variant["mp_env_kwargs"]["teleport_instead_of_mp"]:
+                func = video_func
+            else:
+                if variant["plan_to_learned_goals"]:
+                    func = mp_video_func_v4
+                else:
+                    func = mp_video_func
+        else:
+            func = video_func
+        func(algorithm, -1)
+        algorithm.post_epoch_funcs.append(func)
+        algorithm.train()
+
+
+def get_planner_and_control_trainers(variant, obs_dim, action_dim, expl_env, eval_env):
+    from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
+    from rlkit.torch.sac.policies import MakeDeterministic
+    from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
+
+    trainer, expl_policy, eval_policy = get_trainer(
+        variant, obs_dim, action_dim, eval_env, variant["trainer_kwargs"]
+    )
+
+    replay_buffer = EnvReplayBuffer(
+        variant["replay_buffer_size"],
+        expl_env,
+    )
+
+    if variant["plan_to_learned_goals"]:
+        planner_trainer, planner_expl_policy, planner_eval_policy = get_trainer(
+            variant, obs_dim, action_dim, eval_env, variant["planner_trainer_kwargs"]
+        )
+
+        planner_replay_buffer = EnvReplayBuffer(
+            variant["replay_buffer_size"],
+            expl_env,
+        )
+
+        if (
+            variant.get("control_path", None) is not None
+            and variant.get("planner_path", None) is not None
+        ):
+            trainer = pickle.load(open(variant["control_path"], "rb"))
+            planner_trainer = pickle.load(open(variant["planner_path"], "rb"))
+            trainer.env = eval_env
+            planner_trainer.env = eval_env
+            expl_policy = trainer.policy
+            eval_policy = MakeDeterministic(expl_policy)
+            planner_expl_policy = planner_trainer.policy
+            planner_eval_policy = MakeDeterministic(planner_expl_policy)
+
+        hierarchical_eval_policy = StepBasedSwitchingPolicy(
+            planner_eval_policy,
+            eval_policy,
+            policy2_steps_per_policy1_step=variant.get("num_ll_actions_per_hl_action"),
+            use_episode_breaks=False,  # eval should not use episode breaks
+        )
+        hierarchical_expl_policy = StepBasedSwitchingPolicy(
+            planner_expl_policy,
+            expl_policy,
+            policy2_steps_per_policy1_step=variant.get("num_ll_actions_per_hl_action"),
+            use_episode_breaks=variant.get("use_episode_breaks", False),
+            only_keep_trajs_after_grasp_success=variant.get(
+                "only_keep_trajs_after_grasp_success", False
+            ),
+            only_keep_trajs_stagewise=variant.get("only_keep_trajs_stagewise", False),
+            terminate_each_stage=variant.get("terminate_each_stage", False),
+        )
+    return (
+        trainer,
+        replay_buffer,
+        hierarchical_expl_policy,
+        hierarchical_eval_policy,
+        planner_trainer,
+        planner_replay_buffer,
+    )
+
+
+def multi_stage_modular_experiment(variant):
+    import torch
+
+    torch.set_float32_matmul_precision("medium")
+    import rlkit.torch.pytorch_util as ptu
+    from rlkit.envs.wrappers.mujoco_vec_wrappers import (
+        DummyVecEnv,
+        StableBaselinesVecEnv,
+    )
+    from rlkit.samplers.data_collector import MdpPathCollector
+    from rlkit.samplers.rollout_functions import rollout_multi_stage_modular
+    from rlkit.torch.sac.policies import MakeDeterministic
+    from rlkit.torch.torch_rl_algorithm import (
+        TorchBatchMultiStageModularRLAlgorithm,
+    )
+    from rlkit.mprl.hierarchical_policies import (
+        MultiStageStepBasedSwitchingPolicy,
+        StepBasedSwitchingPolicy,
+    )
+
+    num_expl_envs = variant.get("num_expl_envs", 1)
+    if num_expl_envs > 1:
+        env_fns = [lambda: make_env(variant) for _ in range(num_expl_envs)]
+        expl_env = StableBaselinesVecEnv(
+            env_fns=env_fns,
+            start_method="fork",
+        )
+    else:
+        expl_envs = [make_env(variant)]
+        expl_env = DummyVecEnv(expl_envs, pass_render_kwargs=False)
+
+    eval_env = expl_env
+
+    obs_dim = eval_env.observation_space.low.size
+    action_dim = eval_env.action_space.low.size
+
+    (
+        trainer_1,
+        replay_buffer_1,
+        hierarchical_expl_policy_1,
+        hierarchical_eval_policy_1,
+        planner_trainer_1,
+        planner_replay_buffer_1,
+    ) = get_planner_and_control_trainers(
+        variant, obs_dim, action_dim, expl_env, eval_env
+    )
+
+    (
+        trainer_2,
+        replay_buffer_2,
+        hierarchical_expl_policy_2,
+        hierarchical_eval_policy_2,
+        planner_trainer_2,
+        planner_replay_buffer_2,
+    ) = get_planner_and_control_trainers(
+        variant, obs_dim, action_dim, expl_env, eval_env
+    )
+
+    hierarchical_expl_policy = MultiStageStepBasedSwitchingPolicy(
+        [hierarchical_expl_policy_1, hierarchical_expl_policy_2]
+    )
+    hierarchical_eval_policy = MultiStageStepBasedSwitchingPolicy(
+        [hierarchical_eval_policy_1, hierarchical_eval_policy_2]
+    )
+
+    eval_path_collector = MdpPathCollector(
+        eval_env,
+        hierarchical_eval_policy,
+        rollout_fn=rollout_multi_stage_modular,
+    )
+    expl_path_collector = MdpPathCollector(
+        expl_env,
+        hierarchical_expl_policy,
+        rollout_fn=rollout_multi_stage_modular,
+    )
+
+    # Define algorithm
+    algorithm = TorchBatchMultiStageModularRLAlgorithm(
+        trainers=[trainer_1, trainer_2],
+        exploration_env=expl_env,
+        evaluation_env=eval_env,
+        exploration_data_collector=expl_path_collector,
+        evaluation_data_collector=eval_path_collector,
+        replay_buffers=[replay_buffer_1, replay_buffer_2],
+        planner_replay_buffers=[planner_replay_buffer_1, planner_replay_buffer_2],
+        planner_trainers=[planner_trainer_1, planner_trainer_2],
+        num_stages=variant["num_hl_actions_total"],
+        **variant["algorithm_kwargs"],
+    )
     algorithm.to(ptu.device)
     if variant.get("load_path", None):
         policy = pickle.load(open(os.path.join(variant["load_path"]), "rb"))
