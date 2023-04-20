@@ -244,8 +244,9 @@ def set_robot_based_on_ee_pos(
 
     ik.sync_state()
     cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
+    pos_diff = target_pos - env._eef_xpos
     rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
-    joint_pos = ik.joint_positions_for_eef_command(target_pos - env._eef_xpos, rot_diff)
+    joint_pos = ik.joint_positions_for_eef_command(pos_diff, rot_diff)
     env.robots[0].set_robot_joint_positions(joint_pos)
     assert (
         env.sim.data.qpos[:7] - joint_pos
@@ -273,6 +274,11 @@ def set_robot_based_on_ee_pos(
     osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
     osc_ctrl.reset_goal()
     env.robots[0].controller = osc_ctrl
+
+    ee_error = np.linalg.norm(
+        env._eef_xpos - target_pos
+    )
+    return ee_error
 
 
 def check_robot_string(string):
