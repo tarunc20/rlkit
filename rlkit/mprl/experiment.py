@@ -644,6 +644,9 @@ def get_planner_and_control_trainers(variant, obs_dim, action_dim, expl_env, eva
             ),
             only_keep_trajs_stagewise=variant.get("only_keep_trajs_stagewise", False),
             terminate_each_stage=variant.get("terminate_each_stage", False),
+            filter_stage1_based_on_stage0_grasp=variant.get(
+                "filter_stage1_based_on_stage0_grasp", False
+            ),
         )
     return (
         trainer,

@@ -775,6 +775,9 @@ def rollout_multi_stage_modular(
             set(range(stage_indices[stage - 1], stage_indices[stage]))
             - set(planner_indices[stage - 1])
         )
+    filter_stage1_based_on_stage0_grasp = (
+        agent.active_policy.filter_stage1_based_on_stage0_grasp
+    )
     for i in range(env.num_envs):
         merged_paths.append(
             dict(
@@ -790,6 +793,12 @@ def rollout_multi_stage_modular(
             )
         )
         for stage in range(0, num_stages):
+            if (
+                stage == 1
+                and filter_stage1_based_on_stage0_grasp
+                and not env_infos[i][control_indices[stage - 1][-1]]["grasped"]
+            ):
+                continue
             paths.append(
                 dict(
                     type=f"control_{stage}",
