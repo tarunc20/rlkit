@@ -59,6 +59,7 @@ class MdpPathCollector(PathCollector):
                 path_len = len(path["actions"])
                 if (
                     path_len != max_path_length
+                    and len(path["terminals"]) > 0
                     and not path["terminals"][-1]
                     and discard_incomplete_paths
                 ):

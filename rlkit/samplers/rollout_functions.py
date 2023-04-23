@@ -771,10 +771,13 @@ def rollout_multi_stage_modular(
     # control indices should be all indices in range(0, max_path_length) that are not in planner_indices
     for stage in range(1, num_stages + 1):
         control_indices.append([])
-        control_indices[stage - 1] = list(
-            set(range(stage_indices[stage - 1], stage_indices[stage]))
-            - set(planner_indices[stage - 1])
-        )
+        try:
+            control_indices[stage - 1] = list(
+                set(range(stage_indices[stage - 1], stage_indices[stage]))
+                - set(planner_indices[stage - 1])
+            )
+        except:
+            print(traceback.format_exc())
     filter_stage1_based_on_stage0_grasp = (
         agent.active_policy.filter_stage1_based_on_stage0_grasp
     )
@@ -799,18 +802,19 @@ def rollout_multi_stage_modular(
                 and not env_infos[i][control_indices[stage - 1][-1]]["grasped"]
             ):
                 continue
-            paths.append(
-                dict(
-                    type=f"control_{stage}",
-                    observations=observations[i][control_indices[stage]],
-                    actions=actions[i][control_indices[stage]],
-                    rewards=rewards[i][control_indices[stage]],
-                    next_observations=next_observations[i][control_indices[stage]],
-                    terminals=terminals[i][control_indices[stage]],
-                    agent_infos=agent_infos,
-                    env_infos=[env_infos[i][idx] for idx in control_indices[stage]],
+            if len(control_indices[stage]) > 0:
+                paths.append(
+                    dict(
+                        type=f"control_{stage}",
+                        observations=observations[i][control_indices[stage]],
+                        actions=actions[i][control_indices[stage]],
+                        rewards=rewards[i][control_indices[stage]],
+                        next_observations=next_observations[i][control_indices[stage]],
+                        terminals=terminals[i][control_indices[stage]],
+                        agent_infos=agent_infos,
+                        env_infos=[env_infos[i][idx] for idx in control_indices[stage]],
+                    )
                 )
-            )
             paths.append(
                 dict(
                     type=f"planner_{stage}",

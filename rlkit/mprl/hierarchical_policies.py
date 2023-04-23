@@ -32,16 +32,12 @@ class StepBasedSwitchingPolicy(Policy):
         self.policy1 = policy1
         self.policy2 = policy2
         self.policy2_steps_per_policy1_step = policy2_steps_per_policy1_step
-        self.num_steps = 0
-        self.current_policy = policy1
-        self.current_policy_str = "policy1"
-        self.current_policy2_steps = 0
-        self.take_policy1_step = True
         self.use_episode_breaks = use_episode_breaks
         self.only_keep_trajs_after_grasp_success = only_keep_trajs_after_grasp_success
         self.only_keep_trajs_stagewise = only_keep_trajs_stagewise
         self.terminate_each_stage = terminate_each_stage
         self.filter_stage1_based_on_stage0_grasp = filter_stage1_based_on_stage0_grasp
+        self.reset()
 
     def get_action(self, observation):
         """
@@ -77,6 +73,7 @@ class StepBasedSwitchingPolicy(Policy):
         self.num_steps = 0
         self.current_policy = self.policy1
         self.current_policy_str = "policy1"
+        self.take_policy1_step = True
 
 
 class MultiStageStepBasedSwitchingPolicy(Policy):

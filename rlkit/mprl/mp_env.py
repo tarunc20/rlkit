@@ -275,6 +275,10 @@ def set_robot_based_on_ee_pos(
     osc_ctrl.reset_goal()
     env.robots[0].controller = osc_ctrl
 
+    env.sim.data.qpos[7:9] = gripper_qpos
+    env.sim.data.qvel[7:9] = gripper_qvel
+    env.sim.forward()
+
     ee_error = np.linalg.norm(env._eef_xpos - target_pos)
     return ee_error
 
@@ -755,6 +759,7 @@ class MPEnv(RobosuiteEnv):
         num_ll_actions_per_hl_action=25,
         planner_only_actions=False,
         add_grasped_to_obs=False,
+        terminate_on_last_state=False,
         # mp
         planning_time=1,
         mp_bounds_low=None,
@@ -823,6 +828,7 @@ class MPEnv(RobosuiteEnv):
         self.take_planner_step = True
         self.current_ll_policy_steps = 0
         self.reset_at_grasped_state = reset_at_grasped_state
+        self.terminate_on_last_state = terminate_on_last_state
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -991,6 +997,8 @@ class MPEnv(RobosuiteEnv):
         self.was_in_hand = False
         self.has_succeeded = False
         self.terminal = False
+        self.take_planner_step = True
+        self.current_ll_policy_steps = 0
         if not self.plan_to_learned_goals and not self.planner_only_actions:
             if self.teleport_instead_of_mp:
                 pos = self.get_init_target_pos()
@@ -1254,4 +1262,6 @@ class MPEnv(RobosuiteEnv):
         if self.predict_done_actions:
             d = action[-1] > 0
         d = self.update_done_info_based_on_termination(i, d)
+        if self.terminate_on_last_state:
+            d = self.ep_step_ctr == self.horizon
         return o, r, d, i
