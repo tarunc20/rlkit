@@ -275,9 +275,7 @@ def set_robot_based_on_ee_pos(
     osc_ctrl.reset_goal()
     env.robots[0].controller = osc_ctrl
 
-    ee_error = np.linalg.norm(
-        env._eef_xpos - target_pos
-    )
+    ee_error = np.linalg.norm(env._eef_xpos - target_pos)
     return ee_error
 
 

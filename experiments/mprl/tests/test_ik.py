@@ -33,7 +33,7 @@ if __name__ == "__main__":
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
-    mp_env_kwargs['controller_configs'] = controller_config
+    mp_env_kwargs["controller_configs"] = controller_config
     env = suite.make(
         **environment_kwargs,
         has_renderer=False,
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         error = set_robot_based_on_ee_pos(
             env,
             env._eef_xpos.copy(),
-            env.reset_ori.copy(), # gets 1e-8 error
+            env.reset_ori.copy(),  # gets 1e-8 error
             # env._eef_xquat.copy(), # gets 1e-1 error!
             env.ik_ctrl,
             qpos,
