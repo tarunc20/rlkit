@@ -33,6 +33,7 @@ if __name__ == "__main__":
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
+    mp_env_kwargs['controller_configs'] = controller_config
     env = suite.make(
         **environment_kwargs,
         has_renderer=False,
@@ -51,30 +52,18 @@ if __name__ == "__main__":
     for s in range(num_steps):
         env.reset()
         qpos, qvel = env.sim.data.qpos.copy(), env.sim.data.qvel.copy()
-        target_z_pos = (
-            env.sim.data.body_xpos[env.obj_body_id[env.obj_to_use]][-1] + 0.05
-        )
-        pose = np.array(
-            [
-                0.2,
-                0.15,
-                target_z_pos,
-            ]
-        )
-        target_pos = pose
         for i in tqdm(range(100)):
             env.step(env.action_space.sample())
-        cv2.imwrite(f"before_{s}.png", env.get_image())
         error = set_robot_based_on_ee_pos(
             env,
-            target_pos,
-            env.reset_ori,
+            env._eef_xpos.copy(),
+            env.reset_ori.copy(), # gets 1e-8 error
+            # env._eef_xquat.copy(), # gets 1e-1 error!
             env.ik_ctrl,
             qpos,
             qvel,
-            None,
-            is_grasped=False,
+            False,
+            controller_config,
         )
-        cv2.imwrite(f"after_{s}.png", env.get_image())
         total += error
     print(f"Avg Distance to target: {total/num_steps})")
