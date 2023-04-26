@@ -812,9 +812,10 @@ class MPEnv(RobosuiteEnv):
         with io.StringIO() as string:
             string.write(ET.tostring(self.model.root, encoding="unicode"))
             st = string.getvalue()
-        self.dm_mujoco = module.get_dm_mujoco()
-        self.dm_sim = self.dm_mujoco.Physics.from_xml_string(st)
-        self.model = self.dm_sim.model
+        if check_com_grasp:
+            self.dm_mujoco = module.get_dm_mujoco()
+            self.dm_sim = self.dm_mujoco.Physics.from_xml_string(st)
+            self.model = self.dm_sim.model
         self.check_com_grasp = check_com_grasp
         self.recompute_reward_post_teleport = recompute_reward_post_teleport
         self.controller_configs = controller_configs
