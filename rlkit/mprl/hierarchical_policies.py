@@ -74,6 +74,7 @@ class StepBasedSwitchingPolicy(Policy):
         self.current_policy = self.policy1
         self.current_policy_str = "policy1"
         self.take_policy1_step = True
+        self.current_policy2_steps = 0
 
 
 class MultiStageStepBasedSwitchingPolicy(Policy):
