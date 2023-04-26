@@ -251,8 +251,11 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
     def reset_camera(self, camera_settings):
         if camera_settings is None:
             camera_settings = {}
-        self.renderer = DMRenderer(self.sim, camera_settings=camera_settings)
-
+        try:
+            # This is pretty hacky, but prevents renderer from being instantiated when dm backend is false
+            self.renderer = DMRenderer(self.sim, camera_settings=camera_settings)
+        except:
+            pass
     def reset_action_space(
         self,
         control_mode="end_effector",
