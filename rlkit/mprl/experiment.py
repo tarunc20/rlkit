@@ -97,8 +97,8 @@ def video_func(algorithm, epoch):
     import numpy as np
 
     from rlkit.core import logger
-    from rlkit.torch.model_based.dreamer.visualization import make_video
     from rlkit.core.batch_rl_algorithm import BatchModularRLAlgorithm
+    from rlkit.torch.model_based.dreamer.visualization import make_video
 
     if epoch % 50 == 0 or epoch == -1 and epoch != 0:
         eval_collector = algorithm.eval_data_collector
@@ -446,6 +446,7 @@ def experiment(variant):
         DummyVecEnv,
         StableBaselinesVecEnv,
     )
+    from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
     from rlkit.samplers.data_collector import MdpPathCollector
     from rlkit.samplers.rollout_functions import rollout_modular, vec_rollout
     from rlkit.torch.sac.policies import MakeDeterministic
@@ -453,7 +454,6 @@ def experiment(variant):
         TorchBatchModularRLAlgorithm,
         TorchBatchRLAlgorithm,
     )
-    from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
 
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:
@@ -593,8 +593,8 @@ def experiment(variant):
 
 def get_planner_and_control_trainers(variant, obs_dim, action_dim, expl_env, eval_env):
     from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
-    from rlkit.torch.sac.policies import MakeDeterministic
     from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
+    from rlkit.torch.sac.policies import MakeDeterministic
 
     trainer, expl_policy, eval_policy = get_trainer(
         variant, obs_dim, action_dim, eval_env, variant["trainer_kwargs"]
@@ -667,16 +667,14 @@ def multi_stage_modular_experiment(variant):
         DummyVecEnv,
         StableBaselinesVecEnv,
     )
-    from rlkit.samplers.data_collector import MdpPathCollector
-    from rlkit.samplers.rollout_functions import rollout_multi_stage_modular
-    from rlkit.torch.sac.policies import MakeDeterministic
-    from rlkit.torch.torch_rl_algorithm import (
-        TorchBatchMultiStageModularRLAlgorithm,
-    )
     from rlkit.mprl.hierarchical_policies import (
         MultiStageStepBasedSwitchingPolicy,
         StepBasedSwitchingPolicy,
     )
+    from rlkit.samplers.data_collector import MdpPathCollector
+    from rlkit.samplers.rollout_functions import rollout_multi_stage_modular
+    from rlkit.torch.sac.policies import MakeDeterministic
+    from rlkit.torch.torch_rl_algorithm import TorchBatchMultiStageModularRLAlgorithm
 
     num_expl_envs = variant.get("num_expl_envs", 1)
     if num_expl_envs > 1:

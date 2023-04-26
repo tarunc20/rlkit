@@ -3,10 +3,10 @@ import abc
 import gtimer as gt
 from tqdm import tqdm
 
+from rlkit.core import eval_util, logger
 from rlkit.core.rl_algorithm import BaseRLAlgorithm, _get_epoch_timings
 from rlkit.data_management.replay_buffer import ReplayBuffer
 from rlkit.samplers.data_collector import PathCollector
-from rlkit.core import eval_util, logger
 
 
 class BatchRLAlgorithm(BaseRLAlgorithm, metaclass=abc.ABCMeta):

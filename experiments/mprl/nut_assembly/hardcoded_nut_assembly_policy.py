@@ -3,6 +3,7 @@ import pickle
 import cv2
 import numpy as np
 import robosuite as suite
+import robosuite.utils.transform_utils as T
 import torch
 from matplotlib import pyplot as plt
 from robosuite.controllers import controller_factory
@@ -21,7 +22,6 @@ from rlkit.mprl.mp_env import (
     update_controller_config,
 )
 from rlkit.torch.sac.policies import MakeDeterministic
-import robosuite.utils.transform_utils as T
 
 if __name__ == "__main__":
     mp_env_kwargs = dict(

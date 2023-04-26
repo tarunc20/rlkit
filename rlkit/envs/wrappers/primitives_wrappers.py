@@ -256,6 +256,7 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
             self.renderer = DMRenderer(self.sim, camera_settings=camera_settings)
         except:
             pass
+
     def reset_action_space(
         self,
         control_mode="end_effector",

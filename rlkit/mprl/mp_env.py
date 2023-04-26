@@ -3,10 +3,10 @@ import io
 import xml.etree.ElementTree as ET
 
 import cv2
+import gym
 import numpy as np
 import robosuite.utils.transform_utils as T
 from gym import spaces
-import gym
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
