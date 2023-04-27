@@ -35,6 +35,16 @@ def preprocess_variant(variant, debug):
         algorithm_kwargs["num_expl_steps_per_train_loop"] = variant["max_path_length"]
         algorithm_kwargs["num_trains_per_train_loop"] = 1
         algorithm_kwargs["num_train_loops_per_epoch"] = 1
+    else:
+        algorithm_kwargs = variant["algorithm_kwargs"]
+        algorithm_kwargs["num_expl_steps_per_train_loop"] = max(
+            algorithm_kwargs["num_expl_steps_per_train_loop"],
+            variant["num_expl_envs"] * variant["max_path_length"],
+        )
+        algorithm_kwargs["num_trains_per_train_loop"] = max(
+            algorithm_kwargs["num_trains_per_train_loop"],
+            variant["num_expl_envs"] * variant["max_path_length"],
+        )
     return variant
 
 
@@ -57,6 +67,11 @@ def preprocess_variant_mp(variant, debug):
         ]
         if debug:
             variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = 1
+        else:
+            variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = max(
+                variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"],
+                variant["num_expl_envs"] * variant["max_path_length"],
+            )
     return variant
 
 

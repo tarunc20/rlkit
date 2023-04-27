@@ -34,7 +34,7 @@ if __name__ == "__main__":
             vertical_displacement=0.05,
             teleport_instead_of_mp=True,
             randomize_init_target_pos=False,
-            mp_bounds_low=(-0.2, -0, 0.0),
+            mp_bounds_low=(-0.2, 0.6, 0.0),
             mp_bounds_high=(0.2, 0.8, 0.2),
             backtrack_movement_fraction=0.001,
             clamp_actions=True,
@@ -87,4 +87,8 @@ if __name__ == "__main__":
     plt.savefig("returns.png")
 
     # for i in range(10000):
+    #     env.reset()
+    #     env.step(np.concatenate((np.random.uniform(-1, 1, 3), [0])))
     #     env.render(mode="human")
+    #     # print(env.get_endeff_pos())
+    #     time.sleep(.1)

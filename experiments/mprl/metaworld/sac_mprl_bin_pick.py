@@ -17,8 +17,8 @@ if __name__ == "__main__":
             min_num_steps_before_training=3300,
             num_epochs=10000,
             num_eval_steps_per_epoch=2500,
-            num_expl_steps_per_train_loop=6464,
-            num_trains_per_train_loop=6464,
+            num_expl_steps_per_train_loop=1000,
+            num_trains_per_train_loop=1000,
         ),
         env_suite="metaworld",
         environment_kwargs=dict(
@@ -44,7 +44,7 @@ if __name__ == "__main__":
             vertical_displacement=0.05,
             teleport_instead_of_mp=True,
             randomize_init_target_pos=False,
-            mp_bounds_low=(-0.2, 0, 0.0),
+            mp_bounds_low=(-0.2, 0.6, 0.0),
             mp_bounds_high=(0.2, 0.8, 0.2),
             backtrack_movement_fraction=0.001,
             clamp_actions=True,
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         version="normal",
         plan_to_learned_goals=False,
         num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),
-        planner_num_trains_per_train_loop=6464,
+        planner_num_trains_per_train_loop=1000,
         control_path=None,
         planner_path=None,
     )

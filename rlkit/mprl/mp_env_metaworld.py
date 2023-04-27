@@ -844,24 +844,16 @@ class MPEnv(MetaworldEnv):
                 is_grasped = self.check_grasp()
                 if self.teleport_instead_of_mp:
                     # make gripper fully open at start
-                    # pos = backtracking_search_from_goal(
-                    #     self,
-                    #     ignore_object_collision=is_grasped,
-                    #     start_pos=self._eef_xpos,
-                    #     start_ori=self._eef_xquat,
-                    #     goal_pos=pos,
-                    #     ori=quat,
-                    #     qpos=self.reset_qpos,
-                    #     qvel=self.reset_qvel,
-                    #     movement_fraction=0.01,
-                    #     is_grasped=is_grasped,
-                    # )
-                    set_robot_based_on_ee_pos(
+                    pos = backtracking_search_from_goal(
                         self,
-                        pos,
-                        quat,
-                        self.reset_qpos,
-                        self.reset_qvel,
+                        ignore_object_collision=is_grasped,
+                        start_pos=self._eef_xpos,
+                        start_ori=self._eef_xquat,
+                        goal_pos=pos,
+                        ori=quat,
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        movement_fraction=0.01,
                         is_grasped=is_grasped,
                     )
                     self.hasnt_teleported = False
