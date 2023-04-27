@@ -57,7 +57,7 @@ if __name__ == "__main__":
     ee_pos = env.get_endeff_pos().copy()
     target = ee_pos + np.array([0.0, 0, -0.05])
     t = time.time()
-    render_mode = "human"
+    render_mode = "rgb_array"
     rs = []
     for _ in range(75):
         o, r, d, i = env.step(np.concatenate((target - env.get_endeff_pos(), [0])))
