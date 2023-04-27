@@ -11,8 +11,8 @@ def preprocess_variant(variant, debug):
     variant["algorithm_kwargs"]["num_eval_steps_per_epoch"] = (
         50 * variant["max_path_length"]
     )
-    controller_configs = variant.pop("controller_configs")
-    environment_kwargs = variant.pop("environment_kwargs")
+    controller_configs = variant.pop("controller_configs", {})
+    environment_kwargs = variant.pop("environment_kwargs", {})
 
     environment_kwargs["controller_configs"] = controller_configs
     environment_kwargs["horizon"] = variant["max_path_length"]
@@ -55,37 +55,56 @@ def preprocess_variant_mp(variant, debug):
         variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = variant[
             "planner_num_trains_per_train_loop"
         ]
+        if debug:
+            variant["algorithm_kwargs"]["planner_num_trains_per_train_loop"] = 1
     return variant
 
 
 # Create gym-compatible envs
 def make_env(variant):
     import gym
-    import robosuite as suite
-    from robosuite.wrappers import GymWrapper
-
-    from rlkit.envs.wrappers import NormalizedBoxEnv
-    from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
 
     gym.logger.set_level(40)  # resolves annoying bbox warning
-    expl_env = suite.make(
-        **variant["expl_environment_kwargs"],
-        has_renderer=False,
-        has_offscreen_renderer=True,
-        use_camera_obs=False,
-        camera_names="frontview",
-        hard_reset=True,
-    )
-    if variant.get("mprl", False):
-        expl_env = MPEnv(
-            GymWrapper(expl_env),
-            **variant.get("mp_env_kwargs"),
+    env_suite = variant.get("env_suite", "robosuite")
+    if env_suite == "robosuite":
+        import robosuite as suite
+        from robosuite.wrappers import GymWrapper
+
+        from rlkit.envs.wrappers import NormalizedBoxEnv
+        from rlkit.mprl.mp_env import MPEnv, RobosuiteEnv
+
+        expl_env = suite.make(
+            **variant["expl_environment_kwargs"],
+            has_renderer=False,
+            has_offscreen_renderer=True,
+            use_camera_obs=False,
+            camera_names="frontview",
+            hard_reset=True,
         )
-    else:
-        expl_env = RobosuiteEnv(
-            NormalizedBoxEnv(GymWrapper(expl_env)),
-            **variant.get("robosuite_env_kwargs"),
-        )
+        if variant.get("mprl", False):
+            expl_env = MPEnv(
+                GymWrapper(expl_env),
+                **variant.get("mp_env_kwargs"),
+            )
+        else:
+            expl_env = RobosuiteEnv(
+                NormalizedBoxEnv(GymWrapper(expl_env)),
+                **variant.get("robosuite_env_kwargs"),
+            )
+    elif env_suite == "metaworld":
+        from rlkit.envs.primitives_make_env import make_env as make_env_primitives
+        from rlkit.mprl.mp_env_metaworld import MetaworldEnv, MPEnv
+
+        env_name = variant["expl_environment_kwargs"]["env_name"]
+        env_kwargs = variant["expl_environment_kwargs"]["env_kwargs"]
+        env = make_env_primitives(env_suite, env_name, env_kwargs)
+        if variant.get("mprl", False):
+            expl_env = MPEnv(
+                env,
+                **variant.get("mp_env_kwargs"),
+            )
+        else:
+            expl_env = MetaworldEnv(env)
     return expl_env
 
 
@@ -124,7 +143,7 @@ def video_func(algorithm, epoch):
         print(
             f"r: {rewards}, is grasped: {eval_env.env_method('check_grasp')}, logged grasp: {infos['grasped']}"
         )
-        success_rate = eval_env.env_method("_check_success")
+        success_rate = infos["success"]
         logdir = logger.get_snapshot_dir()
         flattened_frames = []
         for i in range(num_envs):

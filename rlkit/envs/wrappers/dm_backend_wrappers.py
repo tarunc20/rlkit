@@ -12,6 +12,7 @@ from metaworld.envs.mujoco.mujoco_env import MujocoEnv
 from metaworld.envs.mujoco.sawyer_xyz.v2.sawyer_assembly_peg_v2 import (
     SawyerNutAssemblyEnvV2,
 )
+from robosuite.utils.transform_utils import convert_quat, mat2quat
 
 
 def patch_mjlib_accessors(mjlib, model, data):
@@ -535,7 +536,27 @@ class SawyerMocapBaseDMBackendMetaworld(
         self.reset_mocap_welds(self.sim)
 
     def get_endeff_pos(self):
-        return self.data.get_body_xpos("hand").copy()
+        site_name = "endEffector"
+        pos = self.sim.data.site_xpos[self.sim.model.site_name2id(site_name)].copy()
+        return pos
+
+    def get_endeff_quat(self):
+        site_name = "endEffector"
+        quat = convert_quat(
+            mat2quat(
+                self.sim.data.site_xmat[self.sim.model.site_name2id(site_name)].reshape(
+                    (3, 3)
+                )
+            )
+        ).copy()
+        return quat
+
+    def _set_obj_pose(self, pose):
+        qpos = self.data.qpos.flat.copy()
+        qvel = self.data.qvel.flat.copy()
+        qpos[9:16] = pose
+        qvel[9:16] = 0
+        self.set_state(qpos, qvel)
 
     @property
     def tcp_center(self):

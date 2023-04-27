@@ -33,7 +33,7 @@ class TimeLimit(gym.Wrapper):
         render_mode="rgb_array",
         render_im_shape=(64, 64),
     ):
-        assert self._step is not None, "Must reset environment."
+        # assert self._step is not None, "Must reset environment."
         obs, reward, done, info = self.env.step(
             action,
             render_every_step=render_every_step,
@@ -185,9 +185,10 @@ class MetaworldWrapper(gym.Wrapper):
         if self.use_wrist_cam:
             channels = 6
 
-        self.observation_space = Box(
-            0, 255, (channels * self.imwidth * self.imheight,), dtype=np.uint8
-        )
+        if use_image_obs:
+            self.observation_space = Box(
+                0, 255, (channels * self.imwidth * self.imheight,), dtype=np.uint8
+            )
         self.image_shape = (channels, self.imwidth, self.imheight)
 
         self.reward_scale = reward_scale
