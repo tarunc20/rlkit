@@ -238,8 +238,8 @@ def set_robot_based_on_ee_pos(
     old_eef_xpos = env._eef_xpos.copy()
 
     # reset to canonical state before doing IK
-    env.sim.data.qpos[:] = qpos
-    env.sim.data.qvel[:] = qvel
+    env.sim.data.qpos[:7] = qpos[:7]
+    env.sim.data.qvel[:7] = qvel[:7]
     env.sim.forward()
 
     ik.sync_state()
@@ -266,6 +266,9 @@ def set_robot_based_on_ee_pos(
         )
         set_object_pose(env, new_object_pose[0], new_object_pose[1])
         env.sim.forward()
+    else:
+        # make sure the object is back where it started
+        set_object_pose(env, object_pose[:3], object_pose[3:])
 
     # teleporting the arm breaks the controller -> rebuilt it entirely
     new_args = copy.deepcopy(default_controller_configs)
