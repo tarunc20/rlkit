@@ -217,7 +217,7 @@ class BatchMultiStageModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta)
         planner_trainers=None,
         planner_num_trains_per_train_loop=40,
         num_stages=1,
-        epoch_to_start_training_second_stage=500,
+        epoch_to_start_training_second_stage=0,
     ):
         super().__init__(
             trainers,
