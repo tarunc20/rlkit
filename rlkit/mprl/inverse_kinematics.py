@@ -154,7 +154,6 @@ def qpos_from_site_pose_sampling(
     dtype = env.sim.data.qpos.dtype
     tried = 0
     while True:
-
         if target_pos is not None and target_quat is not None:
             jac = np.empty((6, len(joint_names)), dtype=dtype)
             err = np.empty(6, dtype=dtype)

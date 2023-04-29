@@ -119,15 +119,12 @@ def vec_rollout_low_level_raps(
     env_infos = [{}]
 
     policy_obs = (None, np.array(obs))
-    phases = (
-        np.linspace(
-            0,
-            1,
-            num_low_level_actions_per_primitive,
-            endpoint=False,
-        )
-        + 1 / (num_low_level_actions_per_primitive)
-    )
+    phases = np.linspace(
+        0,
+        1,
+        num_low_level_actions_per_primitive,
+        endpoint=False,
+    ) + 1 / (num_low_level_actions_per_primitive)
     phases = np.repeat(phases.reshape(1, -1), num_envs, axis=0)
     for step in range(0, max_path_length):
         high_level_action, agent_info = agent.get_action(policy_obs)

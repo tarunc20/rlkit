@@ -21,7 +21,6 @@ class DeepMindControl:
 
     @property
     def observation_space(self):
-
         spaces = {}
         for key, value in self._env.observation_spec().items():
             spaces[key] = gym.spaces.Box(-np.inf, np.inf, value.shape, dtype=np.float32)

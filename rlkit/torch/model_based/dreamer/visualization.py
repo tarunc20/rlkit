@@ -24,7 +24,6 @@ def reconstruct_from_state(state, world_model):
 
 
 def convert_img_to_save(img, img_size):
-
     channels = img.shape[1] // (img_size * img_size)
 
     img = np.copy(img.reshape(channels, img_size, img_size).transpose(1, 2, 0))

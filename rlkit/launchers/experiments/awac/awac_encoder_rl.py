@@ -105,7 +105,6 @@ def experiment(variant):
     variant.update(env_params)
 
     if "env_id" in env_params:
-
         expl_env = gym.make(env_params["env_id"])
         eval_env = gym.make(env_params["env_id"])
     else:

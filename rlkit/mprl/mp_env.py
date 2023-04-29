@@ -678,7 +678,7 @@ class RobosuiteEnv(ProxyEnv):
         return self._wrapped_env._flatten_obs(di)
 
     def add_cameras(self):
-        for (cam_name, cam_w, cam_h, cam_d, cam_seg) in zip(
+        for cam_name, cam_w, cam_h, cam_d, cam_seg in zip(
             self.camera_names,
             self.camera_widths,
             self.camera_heights,

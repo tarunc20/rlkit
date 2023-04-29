@@ -422,7 +422,6 @@ def split(
     split_fig=False,
     **kwargs
 ):
-
     split_values = {}
     for s in split:
         split_values[s] = set()

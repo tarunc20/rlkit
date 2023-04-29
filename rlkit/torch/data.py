@@ -41,7 +41,7 @@ class InfiniteRandomSampler(Sampler):
         return idx
 
     def __len__(self):
-        return 2 ** 62
+        return 2**62
 
 
 class InfiniteWeightedRandomSampler(Sampler):
@@ -76,4 +76,4 @@ class InfiniteWeightedRandomSampler(Sampler):
         return idx
 
     def __len__(self):
-        return 2 ** 62
+        return 2**62

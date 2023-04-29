@@ -238,7 +238,10 @@ class WorldModel(jit.ScriptModule):
             deter: (batch_size, path_length, deter_size)
         """
         for step in range(path_length):
-            (post_params, prior_params,) = self.obs_step(
+            (
+                post_params,
+                prior_params,
+            ) = self.obs_step(
                 state,
                 action[:, step],
                 embed[:, step],
@@ -464,7 +467,10 @@ class LowlevelRAPSWorldModel(WorldModel):
                 prior_params = self.action_step(state, action_to_apply.detach())
                 post_params = prior_params
             else:
-                (post_params, prior_params,) = self.obs_step(
+                (
+                    post_params,
+                    prior_params,
+                ) = self.obs_step(
                     state,
                     action_to_apply.detach(),
                     embed[:, ctr],

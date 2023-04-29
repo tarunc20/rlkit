@@ -141,7 +141,6 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
     env_name = None  # will get populated at some point
 
     for ep_directory in os.listdir(directory):
-
         state_paths = os.path.join(directory, ep_directory, "state_*.npz")
         states = []
         actions = []

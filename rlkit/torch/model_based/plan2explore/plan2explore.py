@@ -122,7 +122,6 @@ class Plan2ExploreTrainer(DreamerV2Trainer):
         World Model Loss
         """
         with torch.cuda.amp.autocast():
-
             (
                 post,
                 prior,

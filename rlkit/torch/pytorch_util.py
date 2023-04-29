@@ -34,7 +34,10 @@ def copy_model_params_from_to(source, target):
 
 def maximum_2d(t1, t2):
     # noinspection PyArgumentList
-    return torch.max(torch.cat((t1.unsqueeze(2), t2.unsqueeze(2)), dim=2), dim=2,)[
+    return torch.max(
+        torch.cat((t1.unsqueeze(2), t2.unsqueeze(2)), dim=2),
+        dim=2,
+    )[
         0
     ].squeeze(2)
 
