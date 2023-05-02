@@ -300,6 +300,8 @@ class BatchMultiStageModularRLAlgorithm(BatchRLAlgorithm, metaclass=abc.ABCMeta)
 
                 self.training_mode(True)
                 for stage in range(self.num_stages):
+                    if stage > 0 and epoch < self.epoch_to_start_training_second_stage:
+                        continue
                     if self.replay_buffers[stage]._size > self.batch_size:
                         for _ in range(self.num_trains_per_train_loop):
                             train_data = self.replay_buffers[stage].random_batch(

@@ -135,11 +135,11 @@ def make_env(env_suite, env_name, env_kwargs):
     if unflatten_images:
         env = ImageUnFlattenWrapper(env)
 
-    if use_raw_action_wrappers:
-        env = ActionRepeat(env, 2)
-        env = NormalizeActions(env)
-        env = TimeLimit(env, max_path_length // 2)
-    else:
-        env = TimeLimit(env, max_path_length)
+    # if use_raw_action_wrappers:
+    #     env = ActionRepeat(env, 2)
+    #     env = NormalizeActions(env)
+    #     env = TimeLimit(env, max_path_length // 2)
+    # else:
+    #     env = TimeLimit(env, max_path_length)
     env.reset
     return env
