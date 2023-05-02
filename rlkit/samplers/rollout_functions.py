@@ -311,6 +311,7 @@ def rollout_modular(
         env.render(**render_kwargs)
     episode_breaks = []
     terminate_each_stage = agent.terminate_each_stage
+    terminate_planner_actions = agent.terminate_planner_actions
     planner_indices = []
     while path_length < max_path_length:
         o_for_agent = preprocess_obs_for_policy_fn(o)
@@ -342,7 +343,7 @@ def rollout_modular(
         bad_masks.append(env_info["bad_mask"])
 
         if use_planner:
-            if terminate_each_stage:
+            if terminate_each_stage or terminate_planner_actions:
                 terminals[-1] = np.array([True] * env.num_envs)
         o = next_o
         path_length += 1
@@ -676,7 +677,8 @@ def rollout_multi_stage_modular(
     if render:
         env.render(**render_kwargs)
     episode_breaks = []
-    terminate_each_stage = False
+    terminate_each_stage = agent.active_policy.terminate_each_stage
+    terminate_planner_actions = agent.active_policy.terminate_planner_actions
     planner_indices = []
     control_indices = []
     stage_indices = [0]
@@ -712,13 +714,14 @@ def rollout_multi_stage_modular(
         bad_masks.append(env_info["bad_mask"])
 
         if use_planner:
-            if terminate_each_stage:
+            if terminate_each_stage or terminate_planner_actions:
                 terminals[-1] = np.array([True] * env.num_envs)
         o = next_o
         path_length += 1
     if terminate_each_stage and len(observations) > 0:
         terminals[-1] = np.array([True] * env.num_envs)
     stage_indices.append(path_length)
+
     actions = np.array(actions)
     if len(actions.shape) == 1:
         actions = np.expand_dims(actions, 1)
