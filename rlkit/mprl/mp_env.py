@@ -110,7 +110,7 @@ def get_object_pose(env):
         )
     else:
         raise NotImplementedError()
-    return np.concatenate((object_pos, object_quat))
+    return object_pos, object_quat
 
 
 def set_object_pose(env, object_pos, object_quat):
@@ -124,7 +124,8 @@ def set_object_pose(env, object_pos, object_quat):
 
     """
     name = env.name.split("_")[1]
-    object_quat = T.convert_quat(object_quat, to="wxyz")
+    if not name.startswith("Door"):
+        object_quat = T.convert_quat(object_quat, to="wxyz")
     if name.endswith("Lift"):
         env.sim.data.qpos[9:12] = object_pos
         env.sim.data.qpos[12:16] = object_quat
@@ -231,7 +232,9 @@ def set_robot_based_on_ee_pos(
     If grasping an object, ensures the object moves with the arm in a consistent way.
     """
     # cache quantities from prior to setting the state
-    object_pose = get_object_pose(env).copy()
+    object_pos, object_quat = get_object_pose(env)
+    object_pos = object_pos.copy()
+    object_quat = object_quat.copy()
     gripper_qpos = env.sim.data.qpos[7:9].copy()
     gripper_qvel = env.sim.data.qvel[7:9].copy()
     old_eef_xquat = env._eef_xquat.copy()
@@ -262,13 +265,13 @@ def set_robot_based_on_ee_pos(
 
         # apply the transform to the object
         new_object_pose = mat2pose(
-            np.dot(transform, pose2mat((object_pose[:3], object_pose[3:])))
+            np.dot(transform, pose2mat((object_pos, object_quat)))
         )
         set_object_pose(env, new_object_pose[0], new_object_pose[1])
         env.sim.forward()
     else:
         # make sure the object is back where it started
-        set_object_pose(env, object_pose[:3], object_pose[3:])
+        set_object_pose(env, object_pos, object_quat)
 
     # teleporting the arm breaks the controller -> rebuilt it entirely
     new_args = copy.deepcopy(default_controller_configs)
@@ -422,6 +425,7 @@ def mp_to_point(
     planning_time=1,
     get_intermediate_frames=False,
     backtrack_movement_fraction=0.001,
+    default_controller_configs=None,
 ):
     qpos_curr = env.sim.data.qpos.copy()
     qvel_curr = env.sim.data.qvel.copy()
@@ -429,8 +433,10 @@ def mp_to_point(
     ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
     ik_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
 
-    og_eef_xpos = env._eef_xpos.copy()
-    og_eef_xquat = env._eef_xquat.copy()
+    og_eef_xpos = env._eef_xpos.copy().astype(np.float64)
+    og_eef_xquat = env._eef_xquat.copy().astype(np.float64)
+    og_eef_xquat = og_eef_xquat / np.linalg.norm(og_eef_xquat)
+    pos[3:] = pos[3:] / np.linalg.norm(pos[3:])
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -447,7 +453,16 @@ def mp_to_point(
             return True
         else:
             # TODO; if it was grasping before ik and not after automatically set to invalid
-            set_robot_based_on_ee_pos(env, pos, quat, ik_ctrl, qpos, qvel, grasp)
+            set_robot_based_on_ee_pos(
+                env,
+                pos,
+                quat,
+                ik_ctrl,
+                qpos,
+                qvel,
+                grasp,
+                default_controller_configs=default_controller_configs,
+            )
             valid = not check_robot_collision(
                 env, ignore_object_collision=ignore_object_collision
             )
@@ -495,7 +510,14 @@ def mp_to_point(
     goal().rotation().w = pos[6]
     goal_valid = isStateValid(goal())
     goal_error = set_robot_based_on_ee_pos(
-        env, pos[:3], pos[3:], ik_ctrl, qpos, qvel, grasp
+        env,
+        pos[:3],
+        pos[3:],
+        ik_ctrl,
+        qpos,
+        qvel,
+        grasp,
+        default_controller_configs=default_controller_configs,
     )
     print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {goal_error}")
@@ -512,6 +534,7 @@ def mp_to_point(
             qvel,
             is_grasped=grasp,
             movement_fraction=backtrack_movement_fraction,
+            default_controller_configs=default_controller_configs,
         )
         goal = ob.State(space)
         goal().setXYZ(*pos[:3])
@@ -527,6 +550,7 @@ def mp_to_point(
             qpos,
             qvel,
             grasp,
+            default_controller_configs=default_controller_configs,
         )
         goal_valid = isStateValid(goal())
         print(f"Updated Goal Validity: {goal_valid}")
@@ -561,6 +585,7 @@ def mp_to_point(
             qpos,
             qvel,
             grasp,
+            default_controller_configs=default_controller_configs,
         )
         set_robot_based_on_ee_pos(
             env,
@@ -570,6 +595,7 @@ def mp_to_point(
             qpos,
             qvel,
             grasp,
+            default_controller_configs=default_controller_configs,
         )
     intermediate_frames = []
     if solved:
@@ -596,6 +622,7 @@ def mp_to_point(
                     qpos,
                     qvel,
                     grasp,
+                    default_controller_configs=default_controller_configs,
                 )
                 new_state = np.concatenate((env._eef_xpos, env._eef_xquat))
             else:
@@ -1190,6 +1217,7 @@ class MPEnv(RobosuiteEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
+                        default_controller_configs=self.controller_configs,
                     )
                 o, r, d, i = self._flatten_obs(o), self.reward(action), False, {}
                 self.take_planner_step = False

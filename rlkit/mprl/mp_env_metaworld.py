@@ -117,6 +117,15 @@ def check_robot_collision(env, ignore_object_collision):
     return False
 
 
+def gripper_contact(string, side):
+    if string is None:
+        return False
+    if side == "left":
+        return string.startswith("leftclaw") or string.startswith("leftpad")
+    elif side == "right":
+        return string.startswith("rightclaw") or string.startswith("rightpad")
+
+
 def check_object_grasp(env):
     # TODO: finish this function
     obs = env._get_obs()
@@ -138,14 +147,33 @@ def check_object_grasp(env):
     object_gripper_contact = False
     d = env.sim.data
     obj_string = get_object_string(env)
+    left_gripper_contact = False
+    right_gripper_contact = False
+    object_in_contact_with_env = False
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
         con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
-        if check_robot_string(con1) and check_string(con2, obj_string):
-            object_gripper_contact = True
-        if check_robot_string(con2) and check_string(con1, obj_string):
-            object_gripper_contact = True
-    is_grasped = object_grasped > thresh and object_gripper_contact
+        if (gripper_contact(con1, "left") and check_string(con2, obj_string)) or (
+            gripper_contact(con2, "left") and check_string(con1, obj_string)
+        ):
+            left_gripper_contact = True
+        elif (gripper_contact(con1, "right") and check_string(con2, obj_string)) or (
+            gripper_contact(con2, "right") and check_string(con1, obj_string)
+        ):
+            right_gripper_contact = True
+        else:
+            if not check_robot_string(con1) and check_string(con2, obj_string):
+                object_in_contact_with_env = True
+            if not check_robot_string(con2) and check_string(con1, obj_string):
+                object_in_contact_with_env = True
+        # if check_robot_string(con1) and check_string(con2, obj_string):
+        #     object_gripper_contact = True
+        # if check_robot_string(con2) and check_string(con1, obj_string):
+        #     object_gripper_contact = True
+    # check if there exists a string starting with left and a string starting with right in gripper contacts
+    object_gripper_contact = left_gripper_contact and right_gripper_contact
+    is_grasped = object_gripper_contact and (not object_in_contact_with_env)
+    # is_grasped = object_grasped > thresh and object_gripper_contact and object_lifted
     return is_grasped
 
 
@@ -169,8 +197,8 @@ def set_robot_based_on_ee_pos(
     old_eef_xpos = env._eef_xpos.copy()
 
     # reset to canonical state before doing IK
-    env.sim.data.qpos[:] = qpos
-    env.sim.data.qvel[:] = qvel
+    env.sim.data.qpos[:7] = qpos[:7]
+    env.sim.data.qvel[:7] = qvel[:7]
     env.sim.forward()
 
     qpos_from_site_pose(
@@ -210,8 +238,10 @@ def set_robot_based_on_ee_pos(
         )
         set_object_pose(env, new_object_pose[0], new_object_pose[1])
         env.sim.forward()
+    else:
+        # make sure the object is back where it started
+        set_object_pose(env, object_pose[:3], object_pose[3:])
 
-    # teleporting the arm breaks the controller -> rebuilt it entirely
     env.sim.data.qpos[7:9] = gripper_qpos
     env.sim.data.qvel[7:9] = gripper_qvel
     env.sim.forward()
