@@ -904,6 +904,7 @@ class MPEnv(MetaworldEnv):
                     )
                     o = self._get_obs()
                 r, i = self.evaluate_state(o, action)
+                r = r * self.reward_scale
                 d = False
                 self.take_planner_step = False
                 self.high_level_step += 1
