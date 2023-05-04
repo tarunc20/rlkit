@@ -47,7 +47,7 @@ if __name__ == "__main__":
             env_name="PickPlaceCan",
         ),
         mp_env_kwargs=dict(
-            vertical_displacement=0.06,
+            vertical_displacement=0.08,
             teleport_instead_of_mp=True,
             randomize_init_target_pos=False,
             mp_bounds_low=(-1.45, -1.25, 0.45),
@@ -57,8 +57,8 @@ if __name__ == "__main__":
             update_with_true_state=True,
             grip_ctrl_scale=0.0025,
             planning_time=20,
-            verify_stable_grasp=True,
             teleport_on_grasp=True,
+            verify_stable_grasp=True,
         ),
         policy_kwargs=dict(hidden_sizes=(256, 256)),
         qf_kwargs=dict(hidden_sizes=(256, 256)),

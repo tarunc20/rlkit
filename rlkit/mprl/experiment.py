@@ -134,7 +134,7 @@ def video_func(algorithm, epoch):
     from rlkit.core.batch_rl_algorithm import BatchModularRLAlgorithm
     from rlkit.torch.model_based.dreamer.visualization import make_video
 
-    if epoch % 50 == 0 or epoch == -1 and epoch != 0:
+    if epoch % 5 == 0 or epoch == -1 and epoch != 0:
         eval_collector = algorithm.eval_data_collector
         eval_env = algorithm.eval_env
         policy = eval_collector._policy

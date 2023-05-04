@@ -393,14 +393,15 @@ def visualize_primitive_unsubsampled_rollout(
     print(f"Saved Rollout Visualization to {file_path}")
 
 
-def make_video(frames, logdir, epoch):
+def make_video(frames, logdir, epoch, use_wandb=True):
     filename = os.path.join(logdir, f"viz_{epoch}.mp4")
     frames = np.asarray(frames)[:, :, :, ::-1]
     with imageio.get_writer(filename, fps=20) as writer:
         for frame in frames:
             writer.append_data(frame)
-    wandb.log({"eval_video": wandb.Video(filename, format="mp4")})
-    print("Logged video to Wandb")
+    if use_wandb:
+        wandb.log({"eval_video": wandb.Video(filename, format="mp4")})
+        print("Logged video to Wandb")
 
 
 def post_epoch_visualize_func(algorithm, epoch):
