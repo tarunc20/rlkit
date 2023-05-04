@@ -2,6 +2,7 @@ import pickle
 
 import cv2
 import numpy as np
+from rlkit.torch.model_based.dreamer.visualization import make_video
 import robosuite as suite
 import robosuite.utils.transform_utils as T
 import torch
@@ -25,7 +26,7 @@ from rlkit.torch.sac.policies import MakeDeterministic
 
 if __name__ == "__main__":
     mp_env_kwargs = dict(
-        vertical_displacement=0.08,
+        vertical_displacement=0.03,
         teleport_instead_of_mp=True,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
@@ -37,7 +38,7 @@ if __name__ == "__main__":
         planning_time=20,
         teleport_on_grasp=True,
         check_com_grasp=False,
-        terminate_on_success=True,
+        terminate_on_success=False,
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
@@ -74,53 +75,57 @@ if __name__ == "__main__":
     mp_env_kwargs["controller_configs"] = controller_args
     env = suite.make(
         **robosuite_args,
-        has_renderer=True,
-        has_offscreen_renderer=False,
+        has_renderer=False,
+        has_offscreen_renderer=True,
         use_camera_obs=False,
         camera_names="frontview",
         camera_heights=1024,
         camera_widths=1024,
     )
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
-    num_episodes = 1
+    num_episodes = 5
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0
     np.random.seed(1)
+    frames = []
     for s in tqdm(range(num_episodes)):
         o = env.reset()
         rs = []
-        nut = env.nuts[1]
-        nut_name = nut.name
-        nut_quat = T.convert_quat(
-            env.sim.data.body_xquat[env.obj_body_id[nut_name]], to="xyzw"
-        )
-        eef_quat = env._eef_xquat
-        rel_nut_ee = T.quat_multiply(eef_quat, T.quat_inverse(nut_quat))
-        print(rel_nut_ee)
 
-        for i in range(50):
+        for i in range(25):
             a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
             rs.append(r)
-            env.render()
-        for i in range(50):
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(10):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
-            env.render()
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(5):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
         for i in range(50):
             a = np.concatenate(([0, 0, -0.3], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
-            env.render()
+            # env.render()
+            frames.append(env.get_image())
         for i in range(50):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
             rs.append(r)
-            env.render()
+            # env.render()
+            frames.append(env.get_image())
         print(env._check_success())
         plt.plot(rs)
         plt.show()
         success_rate += env._check_success()
     print(f"Success Rate: {success_rate/num_episodes}")
+    make_video(frames, "videos", 0, use_wandb=False)
