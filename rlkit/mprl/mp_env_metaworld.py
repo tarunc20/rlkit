@@ -636,6 +636,7 @@ class MPEnv(MetaworldEnv):
         check_com_grasp=False,
         verify_stable_grasp=False,
         reset_at_grasped_state=False,
+        max_path_length=200,
     ):
         super().__init__(
             env,
@@ -671,6 +672,7 @@ class MPEnv(MetaworldEnv):
         self.reset_at_grasped_state = reset_at_grasped_state
         self.terminate_on_last_state = terminate_on_last_state
         self.planner_command_orientation = False
+        self.max_path_length = max_path_length
 
         if self.add_grasped_to_obs:
             # update observation space
