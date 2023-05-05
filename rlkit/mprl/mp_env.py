@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 import cv2
 import gym
 import numpy as np
+from robosuite.wrappers.gym_wrapper import GymWrapper
 import robosuite.utils.transform_utils as T
 from gym import spaces
 from robosuite.controllers import controller_factory
@@ -697,6 +698,11 @@ class RobosuiteEnv(ProxyEnv):
         terminate_on_success=False,
         terminate_on_drop=False,
     ):
+        if not type(env) == GymWrapper:
+            env.action_space = None
+            env.observation_space = None
+            robots = "".join([type(robot.robot_model).__name__ for robot in env.robots])
+            env.name = robots + "_" + type(env).__name__
         super().__init__(env)
         self.add_cameras()
         self.num_steps = 0
@@ -712,7 +718,10 @@ class RobosuiteEnv(ProxyEnv):
 
     def get_observation(self):
         di = self._wrapped_env._get_observations(force_update=True)
-        return self._wrapped_env._flatten_obs(di)
+        if type(self._wrapped_env) == GymWrapper:
+            return self._wrapped_env._flatten_obs(di)
+        else:
+            return di
 
     def add_cameras(self):
         for cam_name, cam_w, cam_h, cam_d, cam_seg in zip(
@@ -1130,6 +1139,9 @@ class MPEnv(RobosuiteEnv):
         self.hasnt_teleported = True
         if self.add_grasped_to_obs:
             obs = np.concatenate((obs, np.array([0])))
+        # fully open the gripper
+        self.sim.data.qpos[7:9] = np.array([0.04, -0.04])
+        self.sim.forward()
         return obs
 
     def check_grasp(self, verify_stable_grasp=False):
