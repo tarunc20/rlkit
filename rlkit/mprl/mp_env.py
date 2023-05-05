@@ -5,12 +5,12 @@ import xml.etree.ElementTree as ET
 import cv2
 import gym
 import numpy as np
-from robosuite.wrappers.gym_wrapper import GymWrapper
 import robosuite.utils.transform_utils as T
 from gym import spaces
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import *
+from robosuite.wrappers.gym_wrapper import GymWrapper
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv

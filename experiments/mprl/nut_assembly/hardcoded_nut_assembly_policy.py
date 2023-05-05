@@ -2,7 +2,6 @@ import pickle
 
 import cv2
 import numpy as np
-from rlkit.torch.model_based.dreamer.visualization import make_video
 import robosuite as suite
 import robosuite.utils.transform_utils as T
 import torch
@@ -22,6 +21,7 @@ from rlkit.mprl.mp_env import (
     set_robot_based_on_ee_pos,
     update_controller_config,
 )
+from rlkit.torch.model_based.dreamer.visualization import make_video
 from rlkit.torch.sac.policies import MakeDeterministic
 
 if __name__ == "__main__":
