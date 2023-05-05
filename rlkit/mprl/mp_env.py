@@ -828,6 +828,7 @@ class MPEnv(RobosuiteEnv):
         randomize_init_target_pos_range=(0.04, 0.06),
         teleport_on_grasp=False,
         use_teleports_in_step=True,
+        hardcoded_orientations=False,
         # upstream env
         slack_reward=0,
         predict_done_actions=False,
@@ -881,6 +882,7 @@ class MPEnv(RobosuiteEnv):
         self.current_ll_policy_steps = 0
         self.reset_at_grasped_state = reset_at_grasped_state
         self.terminate_on_last_state = terminate_on_last_state
+        self.hardcoded_orientations = hardcoded_orientations
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -992,61 +994,66 @@ class MPEnv(RobosuiteEnv):
                     self.sim.forward()
         else:
             shifted_pos = pos + np.array([0, 0, self.vertical_displacement])
-            # orig_ee_quat = self._eef_xquat.copy()
-            # ee_euler = mat2euler(quat2mat(orig_ee_quat))
-            # obj_euler = mat2euler(quat2mat(quat))
-            # ee_euler[2] = obj_euler[2] + np.pi / 2
-            # ee_quat = mat2quat(euler2mat(ee_euler))
-            # error1 = set_robot_based_on_ee_pos(
-            #     self,
-            #     shifted_pos.copy(),
-            #     ee_quat.copy(),
-            #     self.ik_ctrl,
-            #     qpos,
-            #     qvel,
-            #     is_grasped=False,
-            #     default_controller_configs=self.controller_configs,
-            # )
-            # ee_euler = mat2euler(quat2mat(orig_ee_quat))
-            # obj_euler = mat2euler(quat2mat(quat))
-            # ee_euler[2] = obj_euler[2] - np.pi / 2
-            # ee_quat = mat2quat(euler2mat(ee_euler))
-            # error2 = set_robot_based_on_ee_pos(
-            #     self,
-            #     shifted_pos.copy(),
-            #     ee_quat.copy(),
-            #     self.ik_ctrl,
-            #     qpos,
-            #     qvel,
-            #     is_grasped=False,
-            #     default_controller_configs=self.controller_configs,
-            # )
+            if self.hardcoded_orientations:
+                # compute perpendicular top grasps for the object, pick one that has less error
+                orig_ee_quat = self._eef_xquat.copy()
+                ee_euler = mat2euler(quat2mat(orig_ee_quat))
+                obj_euler = mat2euler(quat2mat(quat))
+                ee_euler[2] = obj_euler[2] + np.pi / 2
+                ee_quat = mat2quat(euler2mat(ee_euler))
+                error1 = set_robot_based_on_ee_pos(
+                    self,
+                    shifted_pos.copy(),
+                    ee_quat.copy(),
+                    self.ik_ctrl,
+                    qpos,
+                    qvel,
+                    is_grasped=False,
+                    default_controller_configs=self.controller_configs,
+                )
+                qpos1, qvel1 = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
 
-            # if error1 < error2:
-            #     ee_euler = mat2euler(quat2mat(orig_ee_quat))
-            #     obj_euler = mat2euler(quat2mat(quat))
-            #     ee_euler[2] = obj_euler[2] + np.pi / 2
-            #     ee_quat = mat2quat(euler2mat(ee_euler))
-            #     error1 = set_robot_based_on_ee_pos(
-            #         self,
-            #         shifted_pos.copy(),
-            #         ee_quat.copy(),
-            #         self.ik_ctrl,
-            #         qpos,
-            #         qvel,
-            #         is_grasped=False,
-            #         default_controller_configs=self.controller_configs,
-            #     )
-            set_robot_based_on_ee_pos(
-                self,
-                shifted_pos.copy(),
-                self._eef_xquat.copy(),
-                self.ik_ctrl,
-                qpos,
-                qvel,
-                is_grasped=False,
-                default_controller_configs=self.controller_configs,
-            )
+                ee_euler = mat2euler(quat2mat(orig_ee_quat))
+                obj_euler = mat2euler(quat2mat(quat))
+                ee_euler[2] = obj_euler[2] - np.pi / 2
+                ee_quat = mat2quat(euler2mat(ee_euler))
+                error2 = set_robot_based_on_ee_pos(
+                    self,
+                    shifted_pos.copy(),
+                    ee_quat.copy(),
+                    self.ik_ctrl,
+                    qpos,
+                    qvel,
+                    is_grasped=False,
+                    default_controller_configs=self.controller_configs,
+                )
+
+                if error1 < error2:
+                    ee_euler = mat2euler(quat2mat(orig_ee_quat))
+                    obj_euler = mat2euler(quat2mat(quat))
+                    ee_euler[2] = obj_euler[2] + np.pi / 2
+                    ee_quat = mat2quat(euler2mat(ee_euler))
+                    error1 = set_robot_based_on_ee_pos(
+                        self,
+                        shifted_pos.copy(),
+                        ee_quat.copy(),
+                        self.ik_ctrl,
+                        qpos,
+                        qvel,
+                        is_grasped=False,
+                        default_controller_configs=self.controller_configs,
+                    )
+            else:
+                set_robot_based_on_ee_pos(
+                    self,
+                    shifted_pos.copy(),
+                    self._eef_xquat.copy(),
+                    self.ik_ctrl,
+                    qpos,
+                    qvel,
+                    is_grasped=False,
+                    default_controller_configs=self.controller_configs,
+                )
 
         # teleporting the arm can break the controller
         self.robots[0].controller.reset_goal()
