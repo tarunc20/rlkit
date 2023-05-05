@@ -1011,7 +1011,6 @@ class MPEnv(RobosuiteEnv):
                     is_grasped=False,
                     default_controller_configs=self.controller_configs,
                 )
-                cv2.imwrite('test1.png', self.get_image())
                 # qpos1, qvel1 = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
 
                 # ee_euler = mat2euler(quat2mat(orig_ee_quat))
