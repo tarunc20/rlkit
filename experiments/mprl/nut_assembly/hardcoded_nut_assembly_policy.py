@@ -26,7 +26,7 @@ from rlkit.torch.sac.policies import MakeDeterministic
 
 if __name__ == "__main__":
     mp_env_kwargs = dict(
-        vertical_displacement=0.03,
+        vertical_displacement=0.04,
         teleport_instead_of_mp=True,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
@@ -42,6 +42,7 @@ if __name__ == "__main__":
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
+        hardcoded_orientations=True
     )
     robosuite_args = dict(
         robots="Panda",
@@ -83,7 +84,7 @@ if __name__ == "__main__":
         camera_widths=1024,
     )
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
-    num_episodes = 5
+    num_episodes = 10
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0

@@ -1011,38 +1011,42 @@ class MPEnv(RobosuiteEnv):
                     is_grasped=False,
                     default_controller_configs=self.controller_configs,
                 )
-                qpos1, qvel1 = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
+                cv2.imwrite('test1.png', self.get_image())
+                # qpos1, qvel1 = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
 
-                ee_euler = mat2euler(quat2mat(orig_ee_quat))
-                obj_euler = mat2euler(quat2mat(quat))
-                ee_euler[2] = obj_euler[2] - np.pi / 2
-                ee_quat = mat2quat(euler2mat(ee_euler))
-                error2 = set_robot_based_on_ee_pos(
-                    self,
-                    shifted_pos.copy(),
-                    ee_quat.copy(),
-                    self.ik_ctrl,
-                    qpos,
-                    qvel,
-                    is_grasped=False,
-                    default_controller_configs=self.controller_configs,
-                )
+                # ee_euler = mat2euler(quat2mat(orig_ee_quat))
+                # obj_euler = mat2euler(quat2mat(quat))
+                # ee_euler[2] = obj_euler[2] - np.pi / 2
+                # ee_quat = mat2quat(euler2mat(ee_euler))
+                # error2 = set_robot_based_on_ee_pos(
+                #     self,
+                #     shifted_pos.copy(),
+                #     ee_quat.copy(),
+                #     self.ik_ctrl,
+                #     qpos,
+                #     qvel,
+                #     is_grasped=False,
+                #     default_controller_configs=self.controller_configs,
+                # )
+                # cv2.imwrite('test2.png', self.get_image())
 
-                if error1 < error2:
-                    ee_euler = mat2euler(quat2mat(orig_ee_quat))
-                    obj_euler = mat2euler(quat2mat(quat))
-                    ee_euler[2] = obj_euler[2] + np.pi / 2
-                    ee_quat = mat2quat(euler2mat(ee_euler))
-                    error1 = set_robot_based_on_ee_pos(
-                        self,
-                        shifted_pos.copy(),
-                        ee_quat.copy(),
-                        self.ik_ctrl,
-                        qpos,
-                        qvel,
-                        is_grasped=False,
-                        default_controller_configs=self.controller_configs,
-                    )
+                # print(error1, error2)
+
+                # if error1 < error2:
+                #     ee_euler = mat2euler(quat2mat(orig_ee_quat))
+                #     obj_euler = mat2euler(quat2mat(quat))
+                #     ee_euler[2] = obj_euler[2] + np.pi / 2
+                #     ee_quat = mat2quat(euler2mat(ee_euler))
+                #     error1 = set_robot_based_on_ee_pos(
+                #         self,
+                #         shifted_pos.copy(),
+                #         ee_quat.copy(),
+                #         self.ik_ctrl,
+                #         qpos,
+                #         qvel,
+                #         is_grasped=False,
+                #         default_controller_configs=self.controller_configs,
+                #     )
             else:
                 set_robot_based_on_ee_pos(
                     self,
