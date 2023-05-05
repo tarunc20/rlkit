@@ -105,6 +105,7 @@ if __name__ == "__main__":
     for s in tqdm(range(num_episodes)):
         o = env.reset()
         rs = []
+        frames.append(env.get_image())
         # for i in range(300):
         #     a = np.concatenate(
         #         (

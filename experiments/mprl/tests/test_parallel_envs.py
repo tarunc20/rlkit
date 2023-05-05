@@ -65,6 +65,7 @@ if __name__ == "__main__":
     variant = dict(
         mp_env_kwargs=mp_env_kwargs,
         expl_environment_kwargs=robosuite_args,
+        robosuite_env_kwargs=dict(),
         mprl=True,
     )
 
@@ -85,6 +86,8 @@ if __name__ == "__main__":
         action = np.random.normal(size=(num_envs, env.action_space.low.size))
         obs, reward, done, info = env.step(action)
         num_steps_taken += num_envs
+        # if _ % 500 == 0:
+        #     env.reset()
     end = time.time()
     print(
         f"Num Envs: {num_envs}, Frames per second: ",
