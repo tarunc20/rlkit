@@ -94,7 +94,7 @@ def make_env(variant):
             has_offscreen_renderer=True,
             use_camera_obs=False,
             camera_names="frontview",
-            hard_reset=True,
+            hard_reset=False,
         )
         if variant.get("mprl", False):
             expl_env = MPEnv(
@@ -103,7 +103,7 @@ def make_env(variant):
             )
         else:
             expl_env = RobosuiteEnv(
-                NormalizedBoxEnv(GymWrapper(expl_env)),
+                GymWrapper(expl_env),
                 **variant.get("robosuite_env_kwargs"),
             )
     elif env_suite == "metaworld":
