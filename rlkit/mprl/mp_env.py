@@ -204,14 +204,16 @@ def check_object_grasp(env):
             object_geoms=env.objects[env.object_id],
         )
     elif name.endswith("NutAssemblySquare"):
+        nut = env.nuts[0]
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
-            object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
+            object_geoms=[g for g in nut.contact_geoms],
         )
     elif name.endswith("NutAssemblyRound"):
+        nut = env.nuts[1]
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
-            object_geoms=[g for nut in env.nuts for g in nut.contact_geoms],
+            object_geoms=[g for g in nut.contact_geoms],
         )
     elif name.endswith("Door"):
         is_grasped = env._check_grasp(  # this is not going to work well, but likely won't be used anyways
@@ -1012,7 +1014,6 @@ class MPEnv(RobosuiteEnv):
                     default_controller_configs=self.controller_configs,
                 )
                 # qpos1, qvel1 = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
-
                 # ee_euler = mat2euler(quat2mat(orig_ee_quat))
                 # obj_euler = mat2euler(quat2mat(quat))
                 # ee_euler[2] = obj_euler[2] - np.pi / 2
@@ -1215,6 +1216,8 @@ class MPEnv(RobosuiteEnv):
                 pose[0] -= 0.075
             elif self.name.endswith("Square"):
                 pose = np.array(self.sim.data.body_xpos[self.peg1_body_id])
+                pose[2] += 0.15
+                pose[0] -= 0.075
 
         return pose
 
