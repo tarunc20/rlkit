@@ -37,12 +37,12 @@ if __name__ == "__main__":
         grip_ctrl_scale=0.0025,
         planning_time=20,
         teleport_on_grasp=True,
-        check_com_grasp=False,
         terminate_on_success=False,
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
-        hardcoded_orientations=True
+        hardcoded_orientations=True,
+        num_ll_actions_per_hl_action=50,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="NutAssemblyRound",
+        env_name="NutAssembly",
         horizon=500,
     )
     # OSC controller spec
@@ -100,25 +100,55 @@ if __name__ == "__main__":
             rs.append(r)
             # env.render()
             frames.append(env.get_image())
-        for i in range(10):
+        for i in range(15):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             # env.render()
             frames.append(env.get_image())
-        for i in range(5):
+        for i in range(10):
             a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             # env.render()
             frames.append(env.get_image())
-        for i in range(50):
+        for i in range(40):
             a = np.concatenate(([0, 0, -0.3], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             # env.render()
             frames.append(env.get_image())
-        for i in range(50):
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(25):
+            a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(15):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(40):
+            a = np.concatenate(([0, 0, -0.3], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(10):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
             rs.append(r)

@@ -23,11 +23,11 @@ if __name__ == "__main__":
         grip_ctrl_scale=0.0025,
         planning_time=20,
         teleport_on_grasp=True,
-        check_com_grasp=False,
         terminate_on_success=False,
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
+        hardcoded_orientations=True,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceCan",
+        env_name="PickPlaceMilk",
     )
     # OSC controller spec
     # controller_args = dict(
