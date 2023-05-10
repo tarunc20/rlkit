@@ -22,7 +22,7 @@ if __name__ == "__main__":
         update_with_true_state=True,
         grip_ctrl_scale=0.0025,
         planning_time=20,
-        teleport_on_grasp=True,
+        hardcoded_high_level_plan=True,
         terminate_on_success=False,
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
@@ -35,7 +35,9 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceMilk",
+        env_name="PickPlace",
+        valid_obj_names=["Cereal", "Milk", "Can", "Bread"],
+        reward_scale=4.0,
     )
     # OSC controller spec
     # controller_args = dict(
@@ -94,92 +96,123 @@ if __name__ == "__main__":
     ptu.device = torch.device("cuda")
     success_rate = 0
     frames = []
-    target_pos = np.array(
-        [
-            0.2,
-            0.4,
-            env.sim.data.qpos[18] + 0.1,
-        ]
-    )
-    frames = []
     for s in tqdm(range(num_episodes)):
         o = env.reset()
         rs = []
         frames.append(env.get_image())
-        # for i in range(300):
-        #     a = np.concatenate(
-        #         (
-        #             env.sim.data.qpos[30:33] + np.array([0, 0, 0.1]) - env._eef_xpos,
-        #             [0, 0, 0, -1],
-        #         )
-        #     )
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     env.render()
         for i in range(15):
             a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             frames.append(env.get_image())
-            # print(r)
-            # env.render()
-        for i in range(5):
+        for i in range(10):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             frames.append(env.get_image())
-
-        for i in range(5):
+        for i in range(10):
             a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
             o, r, d, info = env.step(a)
             rs.append(r)
             frames.append(env.get_image())
-        env.check_grasp()
-        # print(r)
-        # env.render()
-        #     if d:
-        #         break
-        # if d:
-        #     continue
-        # im = env.get_image()
-        # import cv2
-
-        # cv2.imwrite(f"test_{s}.png", im)
-        for i in range(15):
-            a = np.concatenate(([0, 0, -0.2], [0, 0, 0, 1]))
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            frames.append(env.get_image())
-            # print(r)
-            # env.render()
-        # for i in range(200):
-        #     a = np.concatenate((target_pos - env._eef_xpos, [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        # env.render()
-        # im = env.get_image()
-        # import cv2
-
-        # cv2.imwrite(f"test_{s}.png", im)
         for i in range(10):
-            a = np.concatenate(([0, 0, -0.0], [0, 0, 0, -1]))
+            a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
-            # print(r)
             rs.append(r)
             frames.append(env.get_image())
-            if d:
-                break
-        # env.render()
-        # grasp = env.check_grasp(verify_stable_grasp=True)
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+
+        for i in range(15):
+            a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+
+        for i in range(15):
+            a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+
+        for i in range(15):
+            a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            frames.append(env.get_image())
+
         # plt.plot(rs)
         # plt.savefig(f"test_{s}.png")
         # plt.clf()
         # cumsum = np.cumsum(rs)
         # plt.plot(cumsum)
         # plt.savefig(f"test_{s}_cumsum.png")
+        # plt.clf()
         # plt.show()
         success_rate += env._check_success()
         print(env._check_success())
-        # make_video(frames, "test", 0)
     print(f"Success Rate: {success_rate/num_episodes}")
     make_video(frames, "videos", 0, use_wandb=False)
