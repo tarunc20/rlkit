@@ -33,7 +33,7 @@ except ImportError:
     from ompl import util as ou
 
 
-def get_object_pose_mp(env):
+def get_object_pose_mp(env, obj_idx=0):
     """
     Note this is only used for computing the target for MP
     this is NOT the true object pose
@@ -42,18 +42,23 @@ def get_object_pose_mp(env):
     if name.endswith("Lift"):
         object_pos = env.sim.data.qpos[9:12].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[12:16].copy(), to="xyzw")
-    elif name.startswith("PickPlaceMilk"):
+    elif name.endswith("PickPlaceMilk"):
         object_pos = env.sim.data.qpos[9:12].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[12:16].copy(), to="xyzw")
-    elif name.startswith("PickPlaceBread"):
+    elif name.endswith("PickPlaceBread"):
         object_pos = env.sim.data.qpos[16:19].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[19:23].copy(), to="xyzw")
-    elif name.startswith("PickPlaceCereal"):
+    elif name.endswith("PickPlaceCereal"):
         object_pos = env.sim.data.qpos[23:26].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[26:30].copy(), to="xyzw")
-    elif name.startswith("PickPlaceCan"):
+    elif name.endswith("PickPlaceCan"):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
+    elif name.endswith("PickPlace"):
+        object_pos = env.sim.data.qpos[9 + 7 * obj_idx : 12 + 7 * obj_idx].copy()
+        object_quat = T.convert_quat(
+            env.sim.data.qpos[12 + 7 * obj_idx : 16 + 7 * obj_idx].copy(), to="xyzw"
+        )
     elif name.startswith("Door"):
         object_pos = env.sim.data.site_xpos[env.door_handle_site_id]
         object_quat = np.zeros(4)
@@ -65,6 +70,8 @@ def get_object_pose_mp(env):
             nut = env.nuts[0]
         elif name.endswith("Round"):
             nut = env.nuts[1]
+        elif name.endswith("NutAssembly"):
+            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
         nut_name = nut.name
         object_pos = env.sim.data.get_site_xpos(nut.important_sites["handle"])
         object_quat = T.convert_quat(
@@ -75,7 +82,7 @@ def get_object_pose_mp(env):
     return object_pos, object_quat
 
 
-def get_object_pose(env):
+def get_object_pose(env, obj_idx=0):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
         object_pos = env.sim.data.qpos[9:12].copy()
@@ -92,6 +99,11 @@ def get_object_pose(env):
     elif name.startswith("PickPlaceCan"):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
+    elif name.endswith("PickPlace"):
+        object_pos = env.sim.data.qpos[9 + 7 * obj_idx : 12 + 7 * obj_idx].copy()
+        object_quat = T.convert_quat(
+            env.sim.data.qpos[12 + 7 * obj_idx : 16 + 7 * obj_idx].copy(), to="xyzw"
+        )
     elif name.startswith("Door"):
         object_pos = np.array(
             [env.sim.data.qpos[env.hinge_qpos_addr]]
@@ -107,6 +119,8 @@ def get_object_pose(env):
             nut = env.nuts[0]
         elif name.endswith("Round"):
             nut = env.nuts[1]
+        elif name.endswith("NutAssembly"):
+            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
         nut_name = nut.name
         object_pos = np.array(env.sim.data.body_xpos[env.obj_body_id[nut_name]])
         object_quat = T.convert_quat(
@@ -117,7 +131,7 @@ def get_object_pose(env):
     return object_pos, object_quat
 
 
-def set_object_pose(env, object_pos, object_quat):
+def set_object_pose(env, object_pos, object_quat, obj_idx=0):
     """
     Set the object pose in the environment.
     Makes sure to convert from xyzw to wxyz format for quaternion. qpos requires wxyz!
@@ -145,6 +159,9 @@ def set_object_pose(env, object_pos, object_quat):
     elif name.startswith("PickPlaceCan"):
         env.sim.data.qpos[30:33] = object_pos
         env.sim.data.qpos[33:37] = object_quat
+    elif name.endswith("PickPlace"):
+        env.sim.data.qpos[9 + 7 * obj_idx : 12 + 7 * obj_idx] = object_pos
+        env.sim.data.qpos[12 + 7 * obj_idx : 16 + 7 * obj_idx] = object_quat
     elif name.startswith("Door"):
         env.sim.data.qpos[env.hinge_qpos_addr] = object_pos
         env.sim.data.qpos[env.handle_qpos_addr] = object_quat
@@ -155,6 +172,8 @@ def set_object_pose(env, object_pos, object_quat):
             nut = env.nuts[0]
         elif name.endswith("Round"):
             nut = env.nuts[1]
+        elif name.endswith("NutAssembly"):
+            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
         env.sim.data.set_joint_qpos(
             nut.joints[0],
             np.concatenate([np.array(object_pos), np.array(object_quat)]),
@@ -163,7 +182,7 @@ def set_object_pose(env, object_pos, object_quat):
         raise NotImplementedError()
 
 
-def get_object_string(env):
+def get_object_string(env, obj_idx=0):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
         obj_string = "cube"
@@ -176,6 +195,8 @@ def get_object_string(env):
             obj_string = "Milk"
         elif name.endswith("Cereal"):
             obj_string = "Cereal"
+        else:
+            obj_string = env.valid_obj_names[obj_idx]
     elif name.endswith("Door"):
         obj_string = "latch"
     elif name.endswith("Wipe"):
@@ -185,13 +206,15 @@ def get_object_string(env):
             nut = env.nuts[0]
         elif name.endswith("Round"):
             nut = env.nuts[1]
+        elif name.endswith("NutAssembly"):
+            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
         obj_string = nut.name
     else:
         raise NotImplementedError()
     return obj_string
 
 
-def check_object_grasp(env):
+def check_object_grasp(env, obj_idx=0):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
         is_grasped = env._check_grasp(
@@ -199,10 +222,16 @@ def check_object_grasp(env):
             object_geoms=env.cube,
         )
     elif name.startswith("PickPlace"):
-        is_grasped = env._check_grasp(
+        if name.endswith("PickPlace"):
+            is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
-            object_geoms=env.objects[env.object_id],
+            object_geoms=env.objects[obj_idx],
         )
+        else:
+            is_grasped = env._check_grasp(
+                gripper=env.robots[0].gripper,
+                object_geoms=env.objects[env.object_id],
+            )
     elif name.endswith("NutAssemblySquare"):
         nut = env.nuts[0]
         is_grasped = env._check_grasp(
@@ -211,6 +240,12 @@ def check_object_grasp(env):
         )
     elif name.endswith("NutAssemblyRound"):
         nut = env.nuts[1]
+        is_grasped = env._check_grasp(
+            gripper=env.robots[0].gripper,
+            object_geoms=[g for g in nut.contact_geoms],
+        )
+    elif name.endswith("NutAssembly"):
+        nut = env.nuts[1 - obj_idx]
         is_grasped = env._check_grasp(
             gripper=env.robots[0].gripper,
             object_geoms=[g for g in nut.contact_geoms],
@@ -236,13 +271,14 @@ def set_robot_based_on_ee_pos(
     qvel,
     is_grasped,
     default_controller_configs,
+    obj_idx=0,
 ):
     """
     Set robot joint positions based on target ee pose. Uses IK to solve for joint positions.
     If grasping an object, ensures the object moves with the arm in a consistent way.
     """
     # cache quantities from prior to setting the state
-    object_pos, object_quat = get_object_pose(env)
+    object_pos, object_quat = get_object_pose(env, obj_idx=obj_idx)
     object_pos = object_pos.copy()
     object_quat = object_quat.copy()
     gripper_qpos = env.sim.data.qpos[7:9].copy()
@@ -277,11 +313,11 @@ def set_robot_based_on_ee_pos(
         new_object_pose = mat2pose(
             np.dot(transform, pose2mat((object_pos, object_quat)))
         )
-        set_object_pose(env, new_object_pose[0], new_object_pose[1])
+        set_object_pose(env, new_object_pose[0], new_object_pose[1], obj_idx=obj_idx)
         env.sim.forward()
     else:
         # make sure the object is back where it started
-        set_object_pose(env, object_pos, object_quat)
+        set_object_pose(env, object_pos, object_quat, obj_idx=obj_idx)
 
     # teleporting the arm breaks the controller -> rebuilt it entirely
     new_args = copy.deepcopy(default_controller_configs)
@@ -311,8 +347,8 @@ def check_string(string, other_string):
     return string.startswith(other_string)
 
 
-def check_robot_collision(env, ignore_object_collision):
-    obj_string = get_object_string(env)
+def check_robot_collision(env, ignore_object_collision, obj_idx=0):
+    obj_string = get_object_string(env, obj_idx=obj_idx)
     d = env.sim.data
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
@@ -828,7 +864,7 @@ class MPEnv(RobosuiteEnv):
         clamp_actions=False,
         randomize_init_target_pos=False,
         randomize_init_target_pos_range=(0.04, 0.06),
-        teleport_on_grasp=False,
+        hardcoded_high_level_plan=True,
         use_teleports_in_step=True,
         hardcoded_orientations=False,
         # upstream env
@@ -837,7 +873,6 @@ class MPEnv(RobosuiteEnv):
         terminate_on_success=False,
         terminate_on_drop=False,
         # grasp checks
-        check_com_grasp=False,
         verify_stable_grasp=False,
         reset_at_grasped_state=False,
     ):
@@ -861,16 +896,6 @@ class MPEnv(RobosuiteEnv):
         self.clamp_actions = clamp_actions
         self.backtrack_movement_fraction = backtrack_movement_fraction
         self.randomize_init_target_pos = randomize_init_target_pos
-        self.teleport_on_grasp = teleport_on_grasp
-        self.mjlib = module.get_dm_mujoco().wrapper.mjbindings.mjlib
-        with io.StringIO() as string:
-            string.write(ET.tostring(self.model.root, encoding="unicode"))
-            st = string.getvalue()
-        if check_com_grasp:
-            self.dm_mujoco = module.get_dm_mujoco()
-            self.dm_sim = self.dm_mujoco.Physics.from_xml_string(st)
-            self.model = self.dm_sim.model
-        self.check_com_grasp = check_com_grasp
         self.recompute_reward_post_teleport = recompute_reward_post_teleport
         self.controller_configs = controller_configs
         self.verify_stable_grasp = verify_stable_grasp
@@ -885,6 +910,7 @@ class MPEnv(RobosuiteEnv):
         self.reset_at_grasped_state = reset_at_grasped_state
         self.terminate_on_last_state = terminate_on_last_state
         self.hardcoded_orientations = hardcoded_orientations
+        self.hardcoded_high_level_plan = hardcoded_high_level_plan
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -894,174 +920,129 @@ class MPEnv(RobosuiteEnv):
                 shape=(self.observation_space.shape[0] + 1,),
             )
 
-    def get_target_pos_list(self):
-        pos_list = []
+    def compute_hardcoded_orientation(self, target_pos, quat):
+        qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
+        # compute perpendicular top grasps for the object, pick one that has less error
+        orig_ee_quat = self._eef_xquat.copy()
+        ee_euler = mat2euler(quat2mat(orig_ee_quat))
+        obj_euler = mat2euler(quat2mat(quat))
+        ee_euler[2] = obj_euler[2] + np.pi / 2
+        target_quat1 = mat2quat(euler2mat(ee_euler))
+        # error1 = set_robot_based_on_ee_pos(
+        #     self,
+        #     target_pos.copy(),
+        #     target_quat1.copy(),
+        #     self.ik_ctrl,
+        #     self.reset_qpos,
+        #     self.reset_qvel,
+        #     is_grasped=False,
+        #     default_controller_configs=self.controller_configs,
+        #     obj_idx=self.obj_idx,
+        # )
+
+        # ee_euler[2] = obj_euler[2] - np.pi / 2
+        # target_quat2 = mat2quat(euler2mat(ee_euler))
+        # error2 = set_robot_based_on_ee_pos(
+        #     self,
+        #     target_pos.copy(),
+        #     target_quat2.copy(),
+        #     self.ik_ctrl,
+        #     self.reset_qpos,
+        #     self.reset_qvel,
+        #     is_grasped=False,
+        #     default_controller_configs=self.controller_configs,
+        #     obj_idx=self.obj_idx,
+        # )
+        # if error1 < error2:
+        #     target_quat = target_quat1
+        # else:
+        #     target_quat = target_quat2
+
+        target_quat = target_quat1
+        self.sim.data.qpos[:] = qpos
+        self.sim.data.qvel[:] = qvel
+        self.sim.forward()
+        return target_quat
+
+    def get_target_pose_list(self):
+        pose_list = []
         # init target pos (object pos + vertical displacement)
         pos, quat = get_object_pose_mp(self)
-        pos = pos + np.array([0, 0, self.vertical_displacement])
-        pos_list.append(pos)
+        target_pos = pos + np.array([0, 0, self.vertical_displacement])
+        if self.hardcoded_orientations:
+            target_quat = self.compute_hardcoded_orientation(target_pos, quat)
+        else:
+            target_quat = self.reset_ori
+
+        pose_list.append((target_pos, target_quat))
         # final target positions, depending on the task
         if self.name.endswith("Lift"):
-            pos_list.append(np.array([0, 0, 0.1]) + self.initial_object_pos)
+            target_pos = np.array([0, 0, 0.1]) + self.initial_object_pos
+            target_quat = self.reset_ori
+            pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceBread"):
-            pos_list.append(
-                np.array(
-                    [
-                        0.2,
-                        0.15,
-                        self.initial_object_pos[-1] + 0.1,
-                    ]
-                )
-            )
+            target_pos = np.array([0.2, 0.15, self.initial_object_pos[-1] + 0.1])
+            target_quat = self.reset_ori
+            pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceCan"):
-            pos_list.append(
-                np.array(
-                    [
-                        0.2,
-                        0.4,
-                        self.initial_object_pos[-1] + 0.1,
-                    ]
-                )
-            )
+            target_pos = np.array([0.2, 0.4, self.initial_object_pos[-1] + 0.1])
+            target_quat = self.reset_ori
+            pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceCereal"):
-            pos_list.append(
-                np.array(
-                    [
-                        0.0,
-                        0.4,
-                        self.initial_object_pos[-1] + 0.1,
-                    ]
-                )
-            )
+            target_pos = np.array([0.0, 0.4, self.initial_object_pos[-1] + 0.1])
+            target_quat = self.reset_ori
+            pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceMilk"):
-            pos_list.append(
-                np.array(
-                    [
-                        0.0,
-                        0.15,
-                        self.initial_object_pos[-1] + 0.1,
-                    ]
-                )
-            )
+            target_pos = np.array([0.0, 0.15, self.initial_object_pos[-1] + 0.1])
+            target_quat = self.reset_ori
+            pose_list.append((target_pos, target_quat))
         elif "NutAssembly" in self.name:
-            if self.name.endswith("Round"):
+            if self.name.endswith("NutAssembly"):
+                pose_list = []
+                pos, quat = get_object_pose_mp(self, obj_idx=0)
+                pos = pos + np.array([0, 0, self.vertical_displacement])
+                if self.hardcoded_orientations:
+                    # compute perpendicular top grasps for the object, pick one that has less error
+                    target_quat = self.compute_hardcoded_orientation(target_pos, quat)
+                else:
+                    target_quat = self.reset_ori
+                pose_list.append((pos, target_quat))
+
                 peg_pos = np.array(self.sim.data.body_xpos[self.peg2_body_id])
-            elif self.name.endswith("Square"):
+                peg_pos[2] += 0.15
+                peg_pos[0] -= 0.065
+                pose_list.append((peg_pos, self.reset_ori))
+
+                pos, quat = get_object_pose_mp(self, obj_idx=1)
+                pos = pos + np.array([0, 0, self.vertical_displacement])
+                if self.hardcoded_orientations:
+                    # compute perpendicular top grasps for the object, pick one that has less error
+                    target_quat = self.compute_hardcoded_orientation(target_pos, quat)
+                else:
+                    target_quat = self.reset_ori
+
+                pose_list.append((pos, target_quat))
                 peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
-            peg_pos[2] += 0.15
-            pos_list.append(peg_pos)
-        return pos_list
+                peg_pos[2] += 0.15
+                peg_pos[0] -= 0.065
+                pose_list.append((peg_pos, self.reset_ori))
+            else:
+                if self.name.endswith("Round"):
+                    peg_pos = np.array(self.sim.data.body_xpos[self.peg2_body_id])
+                elif self.name.endswith("Square"):
+                    peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
+                peg_pos[2] += 0.15
+                peg_pos[0] -= 0.065
+                target_pos = peg_pos
+                target_quat = self.reset_ori
+                pose_list.append((target_pos, target_quat))
+        return pose_list
 
     def get_target_pos(self):
-        target_pos_list = self.get_target_pos_list()
-        if self.high_level_step > len(target_pos_list) - 1:
-            return target_pos_list[-1]
-        return self.get_target_pos_list()[self.high_level_step]
-
-    def get_init_target_pos(self):
-        pos, quat = get_object_pose_mp(self)
-        qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
-        if self.randomize_init_target_pos:
-            # sample a random position in a sphere around the target (not in collision)
-            # the orientation of the arm should not be changed
-            stop_sampling_target_pos = False
-            xquat = self._eef_xquat
-            while not stop_sampling_target_pos:
-                random_perturbation = np.random.normal(0, 1, 3)
-                random_perturbation[2] = np.abs(random_perturbation[2])
-                random_perturbation /= np.linalg.norm(random_perturbation)
-                scale = np.random.uniform(*self.randomize_init_target_pos_range)
-                shifted_pos = pos + random_perturbation * scale
-                # backtrack from the position just in case we sampled a point in collision
-                set_robot_based_on_ee_pos(
-                    self,
-                    shifted_pos.copy(),
-                    self._eef_xquat,
-                    self.ik_ctrl,
-                    qpos,
-                    qvel,
-                    is_grasped=False,
-                    default_controller_configs=self.controller_configs,
-                )
-                ori_cond = np.linalg.norm(self._eef_xquat - xquat) < 1e-6
-                grasp_cond = not self.check_grasp()
-                collision_cond = not check_robot_collision(
-                    self, ignore_object_collision=False
-                )
-                if ori_cond and grasp_cond and collision_cond:
-                    stop_sampling_target_pos = True
-                else:
-                    self.sim.data.qpos[:] = qpos
-                    self.sim.data.qvel[:] = qvel
-                    self.sim.forward()
-        else:
-            shifted_pos = pos + np.array([0, 0, self.vertical_displacement])
-            if self.hardcoded_orientations:
-                # compute perpendicular top grasps for the object, pick one that has less error
-                orig_ee_quat = self._eef_xquat.copy()
-                ee_euler = mat2euler(quat2mat(orig_ee_quat))
-                obj_euler = mat2euler(quat2mat(quat))
-                ee_euler[2] = obj_euler[2] + np.pi / 2
-                ee_quat = mat2quat(euler2mat(ee_euler))
-                error1 = set_robot_based_on_ee_pos(
-                    self,
-                    shifted_pos.copy(),
-                    ee_quat.copy(),
-                    self.ik_ctrl,
-                    qpos,
-                    qvel,
-                    is_grasped=False,
-                    default_controller_configs=self.controller_configs,
-                )
-                # qpos1, qvel1 = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
-                # ee_euler = mat2euler(quat2mat(orig_ee_quat))
-                # obj_euler = mat2euler(quat2mat(quat))
-                # ee_euler[2] = obj_euler[2] - np.pi / 2
-                # ee_quat = mat2quat(euler2mat(ee_euler))
-                # error2 = set_robot_based_on_ee_pos(
-                #     self,
-                #     shifted_pos.copy(),
-                #     ee_quat.copy(),
-                #     self.ik_ctrl,
-                #     qpos,
-                #     qvel,
-                #     is_grasped=False,
-                #     default_controller_configs=self.controller_configs,
-                # )
-                # cv2.imwrite('test2.png', self.get_image())
-
-                # print(error1, error2)
-
-                # if error1 < error2:
-                #     ee_euler = mat2euler(quat2mat(orig_ee_quat))
-                #     obj_euler = mat2euler(quat2mat(quat))
-                #     ee_euler[2] = obj_euler[2] + np.pi / 2
-                #     ee_quat = mat2quat(euler2mat(ee_euler))
-                #     error1 = set_robot_based_on_ee_pos(
-                #         self,
-                #         shifted_pos.copy(),
-                #         ee_quat.copy(),
-                #         self.ik_ctrl,
-                #         qpos,
-                #         qvel,
-                #         is_grasped=False,
-                #         default_controller_configs=self.controller_configs,
-                #     )
-            else:
-                set_robot_based_on_ee_pos(
-                    self,
-                    shifted_pos.copy(),
-                    self._eef_xquat.copy(),
-                    self.ik_ctrl,
-                    qpos,
-                    qvel,
-                    is_grasped=False,
-                    default_controller_configs=self.controller_configs,
-                )
-
-        # teleporting the arm can break the controller
-        self.robots[0].controller.reset_goal()
-        return pos
+        target_pose_list = self.get_target_pose_list()
+        if self.high_level_step > len(target_pose_list) - 1:
+            return target_pose_list[-1]
+        return self.get_target_pose_list()[self.high_level_step]
 
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
@@ -1101,33 +1082,48 @@ class MPEnv(RobosuiteEnv):
         self.high_level_step = 0
         self.num_failed_solves = 0
         self.num_steps = 0
+        self.current_ll_policy_steps = 0
+
         self.reset_pos = self._eef_xpos.copy()
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
         self.initial_object_pos, _ = get_object_pose_mp(self)
         self.initial_object_pos = self.initial_object_pos.copy()
+
         update_controller_config(self, self.ik_controller_config)
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
         self.ik_ctrl.update_base_pose(self.robots[0].base_pos, self.robots[0].base_ori)
+
         self.was_in_hand = False
         self.has_succeeded = False
         self.terminal = False
         self.take_planner_step = True
-        self.current_ll_policy_steps = 0
+
+        self.teleport_on_grasp = True
+        self.teleport_on_place = False
         if not self.plan_to_learned_goals and not self.planner_only_actions:
+            target_pos, target_quat = self.get_target_pos()
+            self.high_level_step += 1
             if self.teleport_instead_of_mp:
-                pos = self.get_init_target_pos()
-                obs = self.get_observation()
+                set_robot_based_on_ee_pos(
+                    self,
+                    target_pos.copy(),
+                    target_quat.copy(),
+                    self.ik_ctrl,
+                    self.reset_qpos,
+                    self.reset_qvel,
+                    is_grasped=False,
+                    default_controller_configs=self.controller_configs,
+                    obj_idx=self.obj_idx,
+                )
                 # self.num_steps += 100 #don't log this
             else:
-                pos = self.get_init_target_pos()
-                pos = np.concatenate((pos, self.reset_ori))
-                obs = mp_to_point(
+                mp_to_point(
                     self,
                     self.ik_controller_config,
                     self.osc_controller_config,
-                    pos.astype(np.float64),
+                    np.concatenate((target_pos, target_quat)).astype(np.float64),
                     qpos=self.reset_qpos,
                     qvel=self.reset_qvel,
                     grasp=False,
@@ -1135,7 +1131,7 @@ class MPEnv(RobosuiteEnv):
                     get_intermediate_frames=get_intermediate_frames,
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
-                obs = self._flatten_obs(obs)
+            self.take_planner_step = False
         if self.reset_at_grasped_state:
             pos = self.get_init_target_pos()
             for i in range(15):
@@ -1147,19 +1143,23 @@ class MPEnv(RobosuiteEnv):
             if not self.check_grasp():
                 print("Grasp failed, resetting")
                 self.reset()
-        self.hasnt_teleported = True
-        if self.add_grasped_to_obs:
-            obs = np.concatenate((obs, np.array([0])))
         # fully open the gripper
         self.sim.data.qpos[7:9] = np.array([0.04, -0.04])
         self.sim.forward()
+        obs = self.get_observation()
+        if self.add_grasped_to_obs:
+            obs = np.concatenate((obs, np.array([0])))
         return obs
 
+    @property
+    def obj_idx(self):
+        return (self.high_level_step - 1) // 2
+
     def check_grasp(self, verify_stable_grasp=False):
-        is_grasped = super().check_grasp()
+        is_grasped = check_object_grasp(self, obj_idx=self.obj_idx)
 
         if is_grasped and verify_stable_grasp:
-            obj_string = get_object_string(self)
+            obj_string = get_object_string(self, obj_idx=self.obj_idx)
             d = self.sim.data
             object_in_contact_with_env = False
             for coni in range(d.ncon):
@@ -1170,56 +1170,7 @@ class MPEnv(RobosuiteEnv):
                 if not check_robot_string(con2) and check_string(con1, obj_string):
                     object_in_contact_with_env = True
             is_grasped = is_grasped and not object_in_contact_with_env
-        return is_grasped and not self.check_com_grasp
-
-    def get_target_pos_no_planner(
-        self,
-    ):
-        if self.name.endswith("Lift"):
-            pose = np.array([0, 0, 0.1]) + self.initial_object_pos
-        elif self.name.endswith("PickPlaceBread"):
-            pose = np.array(
-                [
-                    0.2,
-                    0.15,
-                    self.initial_object_pos[-1] + 0.1,
-                ]
-            )
-        elif self.name.endswith("PickPlaceCan"):
-            pose = np.array(
-                [
-                    0.2,
-                    0.4,
-                    self.initial_object_pos[-1] + 0.1,
-                ]
-            )
-        elif self.name.endswith("PickPlaceCereal"):
-            pose = np.array(
-                [
-                    0.0,
-                    0.4,
-                    self.initial_object_pos[-1] + 0.1,
-                ]
-            )
-        elif self.name.endswith("PickPlaceMilk"):
-            pose = np.array(
-                [
-                    0.0,
-                    0.15,
-                    self.initial_object_pos[-1] + 0.1,
-                ]
-            )
-        elif "NutAssembly" in self.name:
-            if self.name.endswith("Round"):
-                pose = np.array(self.sim.data.body_xpos[self.peg2_body_id])
-                pose[2] += 0.15
-                pose[0] -= 0.075
-            elif self.name.endswith("Square"):
-                pose = np.array(self.sim.data.body_xpos[self.peg1_body_id])
-                pose[2] += 0.15
-                pose[0] -= 0.075
-
-        return pose
+        return is_grasped
 
     def clamp_planner_action_mp_space_bounds(self, action):
         action[:3] = np.clip(action[:3], self.mp_bounds_low, self.mp_bounds_high)
@@ -1261,7 +1212,6 @@ class MPEnv(RobosuiteEnv):
                         is_grasped=is_grasped,
                         default_controller_configs=self.controller_configs,
                     )
-                    self.hasnt_teleported = False
                     o = self._get_observations()
                 else:
                     o = mp_to_point(
@@ -1292,35 +1242,50 @@ class MPEnv(RobosuiteEnv):
             self.ep_step_ctr += 1
         else:
             o, r, d, i = self._wrapped_env.step(action)
+            self.current_ll_policy_steps += 1
             self.num_steps += 1
             self.ep_step_ctr += 1
-            if self.hasnt_teleported:
-                is_grasped = self.check_grasp(
-                    verify_stable_grasp=self.verify_stable_grasp
-                )
+            is_grasped = self.check_grasp(verify_stable_grasp=self.verify_stable_grasp)
+            if self.hardcoded_high_level_plan:
+                if self.teleport_on_grasp:
+                    take_planner_step = is_grasped
+                    if take_planner_step:
+                        self.teleport_on_grasp = False
+                        self.teleport_on_place = True
+                elif self.teleport_on_place:
+                    if "PickPlace" in self.name:
+                        take_planner_step = bool(self.objects_in_bins[self.obj_idx])
+                    elif "NutAssembly" in self.name:
+                        # only take planner step if current nut is full placed on the peg
+                        take_planner_step = (
+                            bool(self.objects_on_pegs[1 - self.obj_idx])
+                            and not self.check_grasp()
+                        )
+                    else:
+                        take_planner_step = (
+                            not self.check_grasp()
+                        )  # want to move on only after we are not in contact at all anymore
+                    if take_planner_step:
+                        self.teleport_on_place = False
+                        self.teleport_on_grasp = True
             else:
-                is_grasped = False
-            if (
-                (self.ep_step_ctr == self.horizon and is_grasped)
-                or (self.teleport_on_grasp and is_grasped)
-                and self.use_teleports_in_step
-            ):
-                target_pos = self.get_target_pos_no_planner()
+                take_planner_step = self.take_planner_step
+            if self.high_level_step >= len(self.get_target_pose_list()):
+                # at the final stage of the high level plan
+                take_planner_step = False
+            if take_planner_step:
+                target_pos, target_quat = self.get_target_pos()
                 if self.teleport_instead_of_mp:
                     set_robot_based_on_ee_pos(
                         self,
                         target_pos,
-                        self.reset_ori,
+                        target_quat,
                         self.ik_ctrl,
                         self.reset_qpos,
                         self.reset_qvel,
                         is_grasped=is_grasped,
                         default_controller_configs=self.controller_configs,
-                    )
-                    self.hasnt_teleported = False
-                    print(
-                        "distance to goal: ",
-                        np.linalg.norm(target_pos - self._eef_xpos),
+                        obj_idx=self.obj_idx,
                     )
                 else:
                     mp_to_point(
@@ -1339,6 +1304,11 @@ class MPEnv(RobosuiteEnv):
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
+                self.take_planner_step = False
+                self.high_level_step += 1
+            if self.current_ll_policy_steps == self.num_ll_actions_per_hl_action:
+                self.take_planner_step = True
+                self.current_ll_policy_steps = 0
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
