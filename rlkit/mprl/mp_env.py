@@ -33,6 +33,50 @@ except ImportError:
     from ompl import util as ou
 
 
+def get_object_string(env, obj_idx=0):
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
+        obj_string = "cube"
+    elif name.startswith("PickPlace"):
+        if name.endswith("Bread"):
+            obj_string = "Bread"
+        elif name.endswith("Can"):
+            obj_string = "Can"
+        elif name.endswith("Milk"):
+            obj_string = "Milk"
+        elif name.endswith("Cereal"):
+            obj_string = "Cereal"
+        else:
+            obj_string = env.valid_obj_names[obj_idx]
+    elif name.endswith("Door"):
+        obj_string = "latch"
+    elif name.endswith("Wipe"):
+        obj_string = ""
+    elif "NutAssembly" in name:
+        if name.endswith("Square"):
+            nut = env.nuts[0]
+        elif name.endswith("Round"):
+            nut = env.nuts[1]
+        elif name.endswith("NutAssembly"):
+            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
+        obj_string = nut.name
+    else:
+        raise NotImplementedError()
+    return obj_string
+
+
+def compute_correct_obj_idx(env, obj_idx=0):
+    valid_obj_names = env.valid_obj_names
+    obj_string_to_idx = {}
+    idx = 0
+    for obj_name in ["Milk", "Bread", "Cereal", "Can"]:
+        if obj_name in valid_obj_names:
+            obj_string_to_idx[obj_name] = idx
+            idx += 1
+    obj_idx = obj_string_to_idx[get_object_string(env, obj_idx=obj_idx)]
+    return obj_idx
+
+
 def get_object_pose_mp(env, obj_idx=0):
     """
     Note this is only used for computing the target for MP
@@ -55,9 +99,13 @@ def get_object_pose_mp(env, obj_idx=0):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
     elif name.endswith("PickPlace"):
-        object_pos = env.sim.data.qpos[9 + 7 * obj_idx : 12 + 7 * obj_idx].copy()
+        new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+        object_pos = env.sim.data.qpos[
+            9 + 7 * new_obj_idx : 12 + 7 * new_obj_idx
+        ].copy()
         object_quat = T.convert_quat(
-            env.sim.data.qpos[12 + 7 * obj_idx : 16 + 7 * obj_idx].copy(), to="xyzw"
+            env.sim.data.qpos[12 + 7 * new_obj_idx : 16 + 7 * new_obj_idx].copy(),
+            to="xyzw",
         )
     elif name.startswith("Door"):
         object_pos = env.sim.data.site_xpos[env.door_handle_site_id]
@@ -100,9 +148,13 @@ def get_object_pose(env, obj_idx=0):
         object_pos = env.sim.data.qpos[30:33].copy()
         object_quat = T.convert_quat(env.sim.data.qpos[33:37].copy(), to="xyzw")
     elif name.endswith("PickPlace"):
-        object_pos = env.sim.data.qpos[9 + 7 * obj_idx : 12 + 7 * obj_idx].copy()
+        new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+        object_pos = env.sim.data.qpos[
+            9 + 7 * new_obj_idx : 12 + 7 * new_obj_idx
+        ].copy()
         object_quat = T.convert_quat(
-            env.sim.data.qpos[12 + 7 * obj_idx : 16 + 7 * obj_idx].copy(), to="xyzw"
+            env.sim.data.qpos[12 + 7 * new_obj_idx : 16 + 7 * new_obj_idx].copy(),
+            to="xyzw",
         )
     elif name.startswith("Door"):
         object_pos = np.array(
@@ -160,8 +212,9 @@ def set_object_pose(env, object_pos, object_quat, obj_idx=0):
         env.sim.data.qpos[30:33] = object_pos
         env.sim.data.qpos[33:37] = object_quat
     elif name.endswith("PickPlace"):
-        env.sim.data.qpos[9 + 7 * obj_idx : 12 + 7 * obj_idx] = object_pos
-        env.sim.data.qpos[12 + 7 * obj_idx : 16 + 7 * obj_idx] = object_quat
+        new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+        env.sim.data.qpos[9 + 7 * new_obj_idx : 12 + 7 * new_obj_idx] = object_pos
+        env.sim.data.qpos[12 + 7 * new_obj_idx : 16 + 7 * new_obj_idx] = object_quat
     elif name.startswith("Door"):
         env.sim.data.qpos[env.hinge_qpos_addr] = object_pos
         env.sim.data.qpos[env.handle_qpos_addr] = object_quat
@@ -182,38 +235,6 @@ def set_object_pose(env, object_pos, object_quat, obj_idx=0):
         raise NotImplementedError()
 
 
-def get_object_string(env, obj_idx=0):
-    name = env.name.split("_")[1]
-    if name.endswith("Lift"):
-        obj_string = "cube"
-    elif name.startswith("PickPlace"):
-        if name.endswith("Bread"):
-            obj_string = "Bread"
-        elif name.endswith("Can"):
-            obj_string = "Can"
-        elif name.endswith("Milk"):
-            obj_string = "Milk"
-        elif name.endswith("Cereal"):
-            obj_string = "Cereal"
-        else:
-            obj_string = env.valid_obj_names[obj_idx]
-    elif name.endswith("Door"):
-        obj_string = "latch"
-    elif name.endswith("Wipe"):
-        obj_string = ""
-    elif "NutAssembly" in name:
-        if name.endswith("Square"):
-            nut = env.nuts[0]
-        elif name.endswith("Round"):
-            nut = env.nuts[1]
-        elif name.endswith("NutAssembly"):
-            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
-        obj_string = nut.name
-    else:
-        raise NotImplementedError()
-    return obj_string
-
-
 def check_object_grasp(env, obj_idx=0):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
@@ -224,9 +245,9 @@ def check_object_grasp(env, obj_idx=0):
     elif name.startswith("PickPlace"):
         if name.endswith("PickPlace"):
             is_grasped = env._check_grasp(
-            gripper=env.robots[0].gripper,
-            object_geoms=env.objects[obj_idx],
-        )
+                gripper=env.robots[0].gripper,
+                object_geoms=env.objects[compute_correct_obj_idx(env, obj_idx=obj_idx)],
+            )
         else:
             is_grasped = env._check_grasp(
                 gripper=env.robots[0].gripper,
@@ -272,6 +293,7 @@ def set_robot_based_on_ee_pos(
     is_grasped,
     default_controller_configs,
     obj_idx=0,
+    open_gripper_on_tp=False,
 ):
     """
     Set robot joint positions based on target ee pose. Uses IK to solve for joint positions.
@@ -319,6 +341,14 @@ def set_robot_based_on_ee_pos(
         # make sure the object is back where it started
         set_object_pose(env, object_pos, object_quat, obj_idx=obj_idx)
 
+    if open_gripper_on_tp:
+        env.sim.data.qpos[7:9] = np.array([0.04, -0.04])
+        env.sim.data.qvel[7:9] = np.zeros(2)
+        env.sim.forward()
+    else:
+        env.sim.data.qpos[7:9] = gripper_qpos
+        env.sim.data.qvel[7:9] = gripper_qvel
+        env.sim.forward()
     # teleporting the arm breaks the controller -> rebuilt it entirely
     new_args = copy.deepcopy(default_controller_configs)
     update_controller_config(env, new_args)
@@ -326,10 +356,6 @@ def set_robot_based_on_ee_pos(
     osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
     osc_ctrl.reset_goal()
     env.robots[0].controller = osc_ctrl
-
-    env.sim.data.qpos[7:9] = gripper_qpos
-    env.sim.data.qvel[7:9] = gripper_qvel
-    env.sim.forward()
 
     ee_error = np.linalg.norm(env._eef_xpos - target_pos)
     return ee_error
@@ -981,21 +1007,44 @@ class MPEnv(RobosuiteEnv):
             target_quat = self.reset_ori
             pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceBread"):
-            target_pos = np.array([0.2, 0.15, self.initial_object_pos[-1] + 0.1])
+            target_pos = np.array([0.2, 0.15, self.initial_object_pos[-1] + 0.125])
             target_quat = self.reset_ori
             pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceCan"):
-            target_pos = np.array([0.2, 0.4, self.initial_object_pos[-1] + 0.1])
+            target_pos = np.array([0.2, 0.4, self.initial_object_pos[-1] + 0.125])
             target_quat = self.reset_ori
             pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceCereal"):
-            target_pos = np.array([0.0, 0.4, self.initial_object_pos[-1] + 0.1])
+            target_pos = np.array([0.0, 0.4, self.initial_object_pos[-1] + 0.125])
             target_quat = self.reset_ori
             pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlaceMilk"):
-            target_pos = np.array([0.0, 0.15, self.initial_object_pos[-1] + 0.1])
+            target_pos = np.array([0.0, 0.15, self.initial_object_pos[-1] + 0.125])
             target_quat = self.reset_ori
             pose_list.append((target_pos, target_quat))
+        elif self.name.endswith("PickPlace"):
+            pose_list = []
+            for obj_idx in range(len(self.valid_obj_names)):
+                pos, quat = get_object_pose_mp(self, obj_idx=obj_idx)
+                if self.valid_obj_names[obj_idx] == "Bread":
+                    vertical_displacement = 0.06
+                else:
+                    vertical_displacement = self.vertical_displacement
+                pos = pos + np.array([0, 0, vertical_displacement])
+                if (
+                    self.hardcoded_orientations
+                    and self.valid_obj_names[obj_idx] == "Cereal"
+                ):
+                    # compute perpendicular top grasps for the object, pick one that has less error
+                    target_quat = self.compute_hardcoded_orientation(target_pos, quat)
+                else:
+                    target_quat = self.reset_ori
+                pose_list.append((pos, target_quat))
+                obj_idx = compute_correct_obj_idx(self, obj_idx)
+                target_pos = self.target_bin_placements[obj_idx].copy()
+                target_pos[2] += 0.125
+                target_quat = self.reset_ori
+                pose_list.append((target_pos, target_quat))
         elif "NutAssembly" in self.name:
             if self.name.endswith("NutAssembly"):
                 pose_list = []
@@ -1046,12 +1095,11 @@ class MPEnv(RobosuiteEnv):
 
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
-        if "NutAssembly" in self.name:
-            # for nut assembly, we need to add a few burn in steps to get the right object pos
-            for _ in range(5):
-                self._wrapped_env.step(np.zeros(7))
-            self.sim.data.qpos[7:9] = np.array([0.04, -0.04])
-            self.sim.forward()
+        # for nut assembly, we need to add a few burn in steps to get the right object pos
+        for _ in range(5):
+            a = np.zeros(7)
+            a[-1] = -1
+            self._wrapped_env.step(a)
         self.ik_controller_config = {
             "type": "IK_POSE",
             "ik_pos_limit": 0.02,
@@ -1088,8 +1136,14 @@ class MPEnv(RobosuiteEnv):
         self.reset_ori = self._eef_xquat.copy()
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
-        self.initial_object_pos, _ = get_object_pose_mp(self)
-        self.initial_object_pos = self.initial_object_pos.copy()
+        self.initial_object_pos = get_object_pose_mp(self)[0].copy()
+
+        if self.name.endswith("PickPlace"):
+            self.initial_object_pos = []
+            for obj_idx in range(len(self.valid_obj_names)):
+                self.initial_object_pos.append(
+                    get_object_pose_mp(self, obj_idx=obj_idx)[0].copy()
+                )
 
         update_controller_config(self, self.ik_controller_config)
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
@@ -1116,9 +1170,11 @@ class MPEnv(RobosuiteEnv):
                     is_grasped=False,
                     default_controller_configs=self.controller_configs,
                     obj_idx=self.obj_idx,
+                    open_gripper_on_tp=True,
                 )
                 # self.num_steps += 100 #don't log this
             else:
+                # TODO: have mp also open gripper here
                 mp_to_point(
                     self,
                     self.ik_controller_config,
@@ -1143,9 +1199,6 @@ class MPEnv(RobosuiteEnv):
             if not self.check_grasp():
                 print("Grasp failed, resetting")
                 self.reset()
-        # fully open the gripper
-        self.sim.data.qpos[7:9] = np.array([0.04, -0.04])
-        self.sim.forward()
         obs = self.get_observation()
         if self.add_grasped_to_obs:
             obs = np.concatenate((obs, np.array([0])))
@@ -1246,6 +1299,7 @@ class MPEnv(RobosuiteEnv):
             self.num_steps += 1
             self.ep_step_ctr += 1
             is_grasped = self.check_grasp(verify_stable_grasp=self.verify_stable_grasp)
+            open_gripper_on_tp = False
             if self.hardcoded_high_level_plan:
                 if self.teleport_on_grasp:
                     take_planner_step = is_grasped
@@ -1254,7 +1308,13 @@ class MPEnv(RobosuiteEnv):
                         self.teleport_on_place = True
                 elif self.teleport_on_place:
                     if "PickPlace" in self.name:
-                        take_planner_step = bool(self.objects_in_bins[self.obj_idx])
+                        new_obj_idx = compute_correct_obj_idx(
+                            self, obj_idx=self.obj_idx
+                        )
+                        take_planner_step = (
+                            bool(self.objects_in_bins[new_obj_idx])
+                            and not self.check_grasp()
+                        )
                     elif "NutAssembly" in self.name:
                         # only take planner step if current nut is full placed on the peg
                         take_planner_step = (
@@ -1266,6 +1326,7 @@ class MPEnv(RobosuiteEnv):
                             not self.check_grasp()
                         )  # want to move on only after we are not in contact at all anymore
                     if take_planner_step:
+                        open_gripper_on_tp = True
                         self.teleport_on_place = False
                         self.teleport_on_grasp = True
             else:
@@ -1286,8 +1347,10 @@ class MPEnv(RobosuiteEnv):
                         is_grasped=is_grasped,
                         default_controller_configs=self.controller_configs,
                         obj_idx=self.obj_idx,
+                        open_gripper_on_tp=open_gripper_on_tp,
                     )
                 else:
+                    # TODO: have mp also open gripper here if open_gripper_on_tp is True
                     mp_to_point(
                         self,
                         self.ik_controller_config,

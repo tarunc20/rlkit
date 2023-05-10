@@ -36,7 +36,7 @@ if __name__ == "__main__":
         update_with_true_state=True,
         grip_ctrl_scale=0.0025,
         planning_time=20,
-        teleport_on_grasp=True,
+        hardcoded_high_level_plan=True,
         terminate_on_success=False,
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
@@ -51,6 +51,7 @@ if __name__ == "__main__":
         ignore_done=True,
         use_object_obs=True,
         env_name="NutAssembly",
+        reward_scale=2.0,
         horizon=500,
     )
     # OSC controller spec
@@ -124,6 +125,7 @@ if __name__ == "__main__":
             rs.append(r)
             # env.render()
             frames.append(env.get_image())
+
         for i in range(25):
             a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
             o, r, d, info = env.step(a)
@@ -156,7 +158,7 @@ if __name__ == "__main__":
             frames.append(env.get_image())
         print(env._check_success())
         plt.plot(rs)
-        plt.show()
+        plt.savefig(f"plots/{s}.png")
         success_rate += env._check_success()
     print(f"Success Rate: {success_rate/num_episodes}")
-    make_video(frames, "videos", 0, use_wandb=False)
+    make_video(frames, "videos", 1, use_wandb=False)
