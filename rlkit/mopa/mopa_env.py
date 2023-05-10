@@ -3,18 +3,19 @@ import copy
 import matplotlib.pyplot as plt 
 from gym import spaces
 import collections
+import mujoco_py # added to fix build import error
 from robosuite.utils.transform_utils import (
+    convert_quat,
     euler2mat,
     mat2pose,
     mat2quat,
     pose2mat,
     quat2mat,
+    mat2quat,
     quat_conjugate,
     quat_multiply,
 )
-from rlkit.mopa.env.inverse_kinematics import qpos_from_site_pose_sampling, qpos_from_site_pose
-from rlkit.mopa.util.env import joint_convert, mat2quat, quat_mul, rotation_matrix, quat2mat
-from rlkit.mopa.util.transform_utils import mat2pose, convert_quat, pose2mat
+from mopa_rl.env.inverse_kinematics import qpos_from_site_pose_sampling, qpos_from_site_pose
 import robosuite.utils.transform_utils as T
 
 LIFT_ROBOT_BODIES = [
@@ -425,7 +426,7 @@ class MoPAMPEnv():
         qpos, qvel = self._wrapped_env.sim.data.qpos.copy(), self._wrapped_env.sim.data.qvel.copy()
         if self.name == "SawyerLift-v0":
             # get cube position 
-            cube_pos = get_object_pose(self._wrapped_env, "cube")[:3].copy() + np.array([0., 0., self.vertical_displacement])
+            cube_pos = get_object_pose(self._wrapped_env, "cube")[:3].copy() + np.array([0., 0.00, self.vertical_displacement])
             # get gripper position
             gripper_pos = get_site_pose(self._wrapped_env, "grip_site")[0]
             ac = collections.OrderedDict()
@@ -616,7 +617,8 @@ class MoPAMPEnv():
                     gripper_ac = np.array([action[-1]])
                     ac = collections.OrderedDict()
                     ac['default'] = delta_pos
-                    ac['gripper'] = gripper_ac
+                    if self.name == "SawyerLift-v0" or self.name == "SawyerLiftObstacle-v0":
+                        ac['gripper'] = gripper_ac 
                     if self.planner_command_orientation:
                         delta_rot_mat = euler2mat(action[3:6])
                         target_rot = delta_rot_mat @ self._wrapped_env.sim.data.get_site_xmat("grip_site")
@@ -650,7 +652,8 @@ class MoPAMPEnv():
                 gripper_ac = np.array([action[-1]])
                 ac = collections.OrderedDict()
                 ac['default'] = delta_pos 
-                ac['gripper'] = gripper_ac
+                if self.name == "SawyerLift-v0" or self.name == "SawyerLiftObstacle-v0":
+                    ac['gripper'] = gripper_ac 
                 if self.planner_command_orientation:
                     delta_rot_mat = euler2mat(action[3:6])
                     target_rot = delta_rot_mat @ self._wrapped_env.sim.data.get_site_xmat("grip_site")
@@ -742,6 +745,6 @@ class MoPAMPEnv():
         return o, r, d, i
 
     def get_image(self, *args, **kwargs):
-        frame = (self._wrapped_env.render("rgb_array") * 255.0)[:, :, ::-1].astype(np.uint8)
+        frame = (self._wrapped_env.render("rgb_array") * 255.0).astype(np.uint8)
         return frame
 

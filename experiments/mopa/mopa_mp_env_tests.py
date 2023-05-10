@@ -2,21 +2,16 @@ import numpy as np
 import gym
 from tqdm import tqdm
 from gym import spaces
+import mujoco_py
 import sys
 import os
 from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
-import rlkit.mopa.env
 import cv2
-from rlkit.mopa.env.inverse_kinematics import qpos_from_site_pose_sampling, qpos_from_site_pose
 from rlkit.envs.wrappers import NormalizedBoxEnv
-from rlkit.mopa.util.env import joint_convert, mat2quat, quat_mul, rotation_matrix, quat2mat
-from rlkit.mopa.util.transform_utils import mat2pose, convert_quat, pose2mat
-from rlkit.mopa.config import sawyer
 import matplotlib.pyplot as plt
 from collections import namedtuple, OrderedDict
-from rlkit.mopa.config.default_configs import LIFT_CONFIG, LIFT_OBSTACLE_CONFIG, ASSEMBLY_OBSTACLE_CONFIG
+from mopa_rl.config.default_configs import LIFT_CONFIG, LIFT_OBSTACLE_CONFIG, ASSEMBLY_OBSTACLE_CONFIG
 from rlkit.mopa.mopa_env import *
-import mujoco_py
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 import torch
 
@@ -294,7 +289,7 @@ if __name__ == "__main__":
             num_eval_steps_per_epoch=500, # used to be 2500
             num_expl_steps_per_train_loop=1000,
             num_trains_per_train_loop=1000,
-            max_path_length=50,
+            max_path_length=100,
         ),
         mprl=True,
         plan_to_learned_goals=False, # set false for now 
