@@ -901,6 +901,7 @@ class MPEnv(RobosuiteEnv):
         # grasp checks
         verify_stable_grasp=False,
         reset_at_grasped_state=False,
+        steps_of_high_level_plan_to_complete=2,
     ):
         super().__init__(
             env,
@@ -937,6 +938,9 @@ class MPEnv(RobosuiteEnv):
         self.terminate_on_last_state = terminate_on_last_state
         self.hardcoded_orientations = hardcoded_orientations
         self.hardcoded_high_level_plan = hardcoded_high_level_plan
+        self.steps_of_high_level_plan_to_complete = (   
+            steps_of_high_level_plan_to_complete
+        )
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -1045,6 +1049,8 @@ class MPEnv(RobosuiteEnv):
                 target_pos[2] += 0.125
                 target_quat = self.reset_ori
                 pose_list.append((target_pos, target_quat))
+                if len(pose_list) >= self.steps_of_high_level_plan_to_complete:
+                    break
         elif "NutAssembly" in self.name:
             if self.name.endswith("NutAssembly"):
                 pose_list = []
@@ -1062,19 +1068,20 @@ class MPEnv(RobosuiteEnv):
                 peg_pos[0] -= 0.065
                 pose_list.append((peg_pos, self.reset_ori))
 
-                pos, quat = get_object_pose_mp(self, obj_idx=1)
-                pos = pos + np.array([0, 0, self.vertical_displacement])
-                if self.hardcoded_orientations:
-                    # compute perpendicular top grasps for the object, pick one that has less error
-                    target_quat = self.compute_hardcoded_orientation(target_pos, quat)
-                else:
-                    target_quat = self.reset_ori
+                if self.steps_of_high_level_plan_to_complete >= 2:
+                    pos, quat = get_object_pose_mp(self, obj_idx=1)
+                    pos = pos + np.array([0, 0, self.vertical_displacement])
+                    if self.hardcoded_orientations:
+                        # compute perpendicular top grasps for the object, pick one that has less error
+                        target_quat = self.compute_hardcoded_orientation(target_pos, quat)
+                    else:
+                        target_quat = self.reset_ori
 
-                pose_list.append((pos, target_quat))
-                peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
-                peg_pos[2] += 0.15
-                peg_pos[0] -= 0.065
-                pose_list.append((peg_pos, self.reset_ori))
+                    pose_list.append((pos, target_quat))
+                    peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
+                    peg_pos[2] += 0.15
+                    peg_pos[0] -= 0.065
+                    pose_list.append((peg_pos, self.reset_ori))
             else:
                 if self.name.endswith("Round"):
                     peg_pos = np.array(self.sim.data.body_xpos[self.peg2_body_id])
