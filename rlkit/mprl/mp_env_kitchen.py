@@ -60,7 +60,7 @@ def get_object_pose_mp(env, obj_idx=0):
     if element == "slide cabinet":
         object_pos = env.get_site_xpos("schandle1")
         object_quat = np.zeros(4)  # doesn't really matter
-    elif element == "top left burner":
+    elif element == "top burner":
         object_pos = env.get_site_xpos("tlbhandle")
         object_quat = np.zeros(4)  # doesn't really matter
     elif element == 'hinge cabinet':
@@ -106,67 +106,62 @@ def check_object_grasp(env, obj_idx=0):
     is_grasped = False
 
     if element == "slide cabinet":
-        if not env.initializing:
-            for i in range(1, 6):
-                obj_pos = env.get_site_xpos("schandle{}".format(i))
-                left_pad = env.get_site_xpos("leftpad")
-                right_pad = env.get_site_xpos("rightpad")
-                within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.07
-                within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.07
-                right = right_pad[0] < obj_pos[0]
-                left = obj_pos[0] < left_pad[0]
-                if right and left and within_sphere_right and within_sphere_left:
-                    is_grasped = True
-    if element == "top left burner":
-        if not env.initializing:
-            obj_pos = env.get_site_xpos("tlbhandle")
+        for i in range(1, 6):
+            obj_pos = env.get_site_xpos("schandle{}".format(i))
             left_pad = env.get_site_xpos("leftpad")
             right_pad = env.get_site_xpos("rightpad")
-            within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.035
-            within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.04
+            within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.07
+            within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.07
             right = right_pad[0] < obj_pos[0]
             left = obj_pos[0] < left_pad[0]
-            if within_sphere_right and within_sphere_left and right and left:
+            if right and left and within_sphere_right and within_sphere_left:
                 is_grasped = True
+    if element == "top burner":
+        obj_pos = env.get_site_xpos("tlbhandle")
+        left_pad = env.get_site_xpos("leftpad")
+        right_pad = env.get_site_xpos("rightpad")
+        within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.035
+        within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.04
+        right = right_pad[0] < obj_pos[0]
+        left = obj_pos[0] < left_pad[0]
+        if within_sphere_right and within_sphere_left and right and left:
+            is_grasped = True
     if element == "microwave":
-        if not env.initializing:
-            for i in range(1, 6):
-                obj_pos = env.get_site_xpos("mchandle{}".format(i))
-                left_pad = env.get_site_xpos("leftpad")
-                right_pad = env.get_site_xpos("rightpad")
-                within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.05
-                within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.05
-                if (
-                    right_pad[0] < obj_pos[0]
-                    and obj_pos[0] < left_pad[0]
-                    and within_sphere_right
-                    and within_sphere_left
-                ):
-                    is_grasped = True
+        for i in range(1, 6):
+            obj_pos = env.get_site_xpos("mchandle{}".format(i))
+            left_pad = env.get_site_xpos("leftpad")
+            right_pad = env.get_site_xpos("rightpad")
+            within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.05
+            within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.05
+            if (
+                right_pad[0] < obj_pos[0]
+                and obj_pos[0] < left_pad[0]
+                and within_sphere_right
+                and within_sphere_left
+            ):
+                is_grasped = True
     if element == "hinge cabinet":
-        if not env.initializing:
-            for i in range(1, 6):
-                obj_pos = env.get_site_xpos("hchandle{}".format(i))
-                left_pad = env.get_site_xpos("leftpad")
-                right_pad = env.get_site_xpos("rightpad")
-                within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.06
-                within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.06
-                if (
-                    right_pad[0] < obj_pos[0]
-                    and obj_pos[0] < left_pad[0]
-                    and within_sphere_right
-                ):
-                    is_grasped = True
+        for i in range(1, 6):
+            obj_pos = env.get_site_xpos("hchandle{}".format(i))
+            left_pad = env.get_site_xpos("leftpad")
+            right_pad = env.get_site_xpos("rightpad")
+            within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.06
+            within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.06
+            if (
+                right_pad[0] < obj_pos[0]
+                and obj_pos[0] < left_pad[0]
+                and within_sphere_right
+            ):
+                is_grasped = True
     if element == "light switch":
-        if not env.initializing:
-            for i in range(1, 4):
-                obj_pos = env.get_site_xpos("lshandle{}".format(i))
-                left_pad = env.get_site_xpos("leftpad")
-                right_pad = env.get_site_xpos("rightpad")
-                within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.045
-                within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.03
-                if within_sphere_right and within_sphere_left:
-                    is_grasped = True
+        for i in range(1, 4):
+            obj_pos = env.get_site_xpos("lshandle{}".format(i))
+            left_pad = env.get_site_xpos("leftpad")
+            right_pad = env.get_site_xpos("rightpad")
+            within_sphere_left = np.linalg.norm(obj_pos - left_pad) < 0.045
+            within_sphere_right = np.linalg.norm(obj_pos - right_pad) < 0.03
+            if within_sphere_right and within_sphere_left:
+                is_grasped = True
     if element == "kettle":
         # TODO: check if kettle is grasped
         pass
@@ -615,7 +610,7 @@ def mp_to_point(
     return env._get_observations()
 
 
-class KitchenEnv(ProxyEnv):
+class KitchenEnv:
     def __init__(
         self,
         env,
@@ -623,7 +618,10 @@ class KitchenEnv(ProxyEnv):
         terminate_on_success=False,
         terminate_on_drop=False,
     ):
-        super().__init__(env)
+        # super().__init__(env)
+        self._wrapped_env = env
+        self.action_space = self._wrapped_env.action_space
+        self.observation_space = self._wrapped_env.observation_space
         self.num_steps = 0
         self.predict_done_actions = predict_done_actions
         self.terminate_on_success = terminate_on_success
@@ -633,9 +631,19 @@ class KitchenEnv(ProxyEnv):
                 np.concatenate((self._wrapped_env.action_space.low, [-1])),
                 np.concatenate((self._wrapped_env.action_space.high, [1])),
             )
+        self.sim = self._wrapped_env.sim
+        self.data = self._wrapped_env.data
+        self.TASK_ELEMENTS = self._wrapped_env.TASK_ELEMENTS
+        self.OBS_ELEMENT_INDICES = self._wrapped_env.OBS_ELEMENT_INDICES
+        self.tasks_to_complete = self._wrapped_env.tasks_to_complete
 
     def get_observation(self):
-        return self.env.env._get_obs()
+        return np.zeros(self.observation_space.low.shape) # only going to train from images
+    
+    def render(self, imwidth, imheight, mode="rgb_array"):
+        return self._wrapped_env.render(
+            mode=mode
+        )
 
     def get_image(self):
         return self.render(
@@ -649,7 +657,7 @@ class KitchenEnv(ProxyEnv):
         self.was_in_hand = False
         self.has_succeeded = False
         self.terminal = False
-        o = super().reset(**kwargs)
+        o = self._wrapped_env.reset(**kwargs)
         return self.get_observation()
 
     def check_grasp(
@@ -681,7 +689,7 @@ class KitchenEnv(ProxyEnv):
         if self.predict_done_actions:
             old_action = action
             action = action[:-1]
-        o, r, d, i = super().step(action)
+        o, r, d, i = self._wrapped_env.step(action)
         self.num_steps += 1
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
@@ -691,6 +699,17 @@ class KitchenEnv(ProxyEnv):
         d = self.update_done_info_based_on_termination(i, d)
         return o, r, d, i
 
+    def get_site_xpos(self, name):
+        id = self._wrapped_env.sim.model.site_name2id(name)
+        return self._wrapped_env.sim.data.site_xpos[id]
+
+    def get_site_xmat(self, name):
+        id = self._wrapped_env.sim.model.site_name2id(name)
+        return self._wrapped_env.sim.data.site_xmat[id]
+    
+    def get_ee_pose(self):
+        return self.get_site_xpos("end_effector")
+    
     @property
     def _eef_xpos(self):
         return self.get_ee_pose().copy()
@@ -839,14 +858,15 @@ class MPEnv(KitchenEnv):
             if element == "slide cabinet":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
-            elif element == "top left burner":
+            elif element == "top burner":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             elif element == 'hinge cabinet':
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             elif element == 'light switch':
-                target_pos = object_pos + np.array([0, -0.075, 0])
+                # target_pos = object_pos + np.array([0, -0.075, 0])
+                target_pos = object_pos + np.array([0, -0.05, 0]) #TODO: try this
                 target_quat = self.reset_ori
             elif element == 'microwave':
                 target_pos = object_pos + np.array([0, -0.05, 0])
