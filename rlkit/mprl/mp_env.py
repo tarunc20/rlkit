@@ -953,7 +953,7 @@ class MPEnv(RobosuiteEnv):
     def compute_hardcoded_orientation(self, target_pos, quat):
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         # compute perpendicular top grasps for the object, pick one that has less error
-        orig_ee_quat = self._eef_xquat.copy()
+        orig_ee_quat = self.reset_ori.copy()
         ee_euler = mat2euler(quat2mat(orig_ee_quat))
         obj_euler = mat2euler(quat2mat(quat))
         ee_euler[2] = obj_euler[2] + np.pi / 2
@@ -1167,7 +1167,7 @@ class MPEnv(RobosuiteEnv):
             target_pos, target_quat = self.get_target_pos()
             self.high_level_step += 1
             if self.teleport_instead_of_mp:
-                set_robot_based_on_ee_pos(
+                error = set_robot_based_on_ee_pos(
                     self,
                     target_pos.copy(),
                     target_quat.copy(),
@@ -1180,6 +1180,7 @@ class MPEnv(RobosuiteEnv):
                     open_gripper_on_tp=True,
                 )
                 # self.num_steps += 100 #don't log this
+                # print('start error', error)
             else:
                 # TODO: have mp also open gripper here
                 mp_to_point(
@@ -1219,17 +1220,20 @@ class MPEnv(RobosuiteEnv):
         is_grasped = check_object_grasp(self, obj_idx=self.obj_idx)
 
         if is_grasped and verify_stable_grasp:
-            obj_string = get_object_string(self, obj_idx=self.obj_idx)
-            d = self.sim.data
-            object_in_contact_with_env = False
-            for coni in range(d.ncon):
-                con1 = self.sim.model.geom_id2name(d.contact[coni].geom1)
-                con2 = self.sim.model.geom_id2name(d.contact[coni].geom2)
-                if not check_robot_string(con1) and check_string(con2, obj_string):
-                    object_in_contact_with_env = True
-                if not check_robot_string(con2) and check_string(con1, obj_string):
-                    object_in_contact_with_env = True
-            is_grasped = is_grasped and not object_in_contact_with_env
+            # obj_string = get_object_string(self, obj_idx=self.obj_idx)
+            # d = self.sim.data
+            # object_in_contact_with_env = False
+            # for coni in range(d.ncon):
+            #     con1 = self.sim.model.geom_id2name(d.contact[coni].geom1)
+            #     con2 = self.sim.model.geom_id2name(d.contact[coni].geom2)
+            #     if not check_robot_string(con1) and check_string(con2, obj_string):
+            #         object_in_contact_with_env = True
+            #     if not check_robot_string(con2) and check_string(con1, obj_string):
+            #         object_in_contact_with_env = True
+            # is_grasped = is_grasped and not object_in_contact_with_env
+            pos, quat = get_object_pose(self, obj_idx=self.obj_idx)
+            init_object_pos = self.initial_object_pos[self.obj_idx] if type(self.initial_object_pos) is list else self.initial_object_pos
+            is_grasped = is_grasped and (pos[2] - init_object_pos[2]) > 0.01
         return is_grasped
 
     def clamp_planner_action_mp_space_bounds(self, action):
@@ -1344,7 +1348,7 @@ class MPEnv(RobosuiteEnv):
             if take_planner_step:
                 target_pos, target_quat = self.get_target_pos()
                 if self.teleport_instead_of_mp:
-                    set_robot_based_on_ee_pos(
+                    error = set_robot_based_on_ee_pos(
                         self,
                         target_pos,
                         target_quat,
@@ -1356,6 +1360,8 @@ class MPEnv(RobosuiteEnv):
                         obj_idx=self.obj_idx,
                         open_gripper_on_tp=open_gripper_on_tp,
                     )
+                    # if open_gripper_on_tp:
+                    #     print("tp after grasp error", error)
                 else:
                     # TODO: have mp also open gripper here if open_gripper_on_tp is True
                     mp_to_point(
