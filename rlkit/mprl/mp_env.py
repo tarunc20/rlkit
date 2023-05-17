@@ -901,7 +901,7 @@ class MPEnv(RobosuiteEnv):
         # grasp checks
         verify_stable_grasp=False,
         reset_at_grasped_state=False,
-        steps_of_high_level_plan_to_complete=2,
+        steps_of_high_level_plan_to_complete=-1,
     ):
         super().__init__(
             env,
@@ -1049,7 +1049,7 @@ class MPEnv(RobosuiteEnv):
                 target_pos[2] += 0.125
                 target_quat = self.reset_ori
                 pose_list.append((target_pos, target_quat))
-                if len(pose_list) >= self.steps_of_high_level_plan_to_complete:
+                if len(pose_list) >= self.steps_of_high_level_plan_to_complete and self.steps_of_high_level_plan_to_complete > 0:
                     break
         elif "NutAssembly" in self.name:
             if self.name.endswith("NutAssembly"):
@@ -1068,7 +1068,7 @@ class MPEnv(RobosuiteEnv):
                 peg_pos[0] -= 0.065
                 pose_list.append((peg_pos, self.reset_ori))
 
-                if self.steps_of_high_level_plan_to_complete >= 2:
+                if self.steps_of_high_level_plan_to_complete >= 2 or self.steps_of_high_level_plan_to_complete == -1:
                     pos, quat = get_object_pose_mp(self, obj_idx=1)
                     pos = pos + np.array([0, 0, self.vertical_displacement])
                     if self.hardcoded_orientations:
