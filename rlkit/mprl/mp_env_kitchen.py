@@ -63,16 +63,16 @@ def get_object_pose_mp(env, obj_idx=0):
     elif element == "top burner":
         object_pos = env.get_site_xpos("tlbhandle")
         object_quat = np.zeros(4)  # doesn't really matter
-    elif element == 'hinge cabinet':
+    elif element == "hinge cabinet":
         object_pos = env.get_site_xpos("hchandle1")
         object_quat = np.zeros(4)  # doesn't really matter
-    elif element == 'light switch':
+    elif element == "light switch":
         object_pos = env.get_site_xpos("lshandle1")
         object_quat = np.zeros(4)  # doesn't really matter
-    elif element == 'microwave':
+    elif element == "microwave":
         object_pos = env.get_site_xpos("mchandle1")
         object_quat = np.zeros(4)  # doesn't really matter
-    elif element == 'kettle':
+    elif element == "kettle":
         object_pos = env.get_site_xpos("khandle1")
         object_quat = np.zeros(4)  # doesn't really matter
     return object_pos, object_quat
@@ -638,12 +638,12 @@ class KitchenEnv:
         self.tasks_to_complete = self._wrapped_env.tasks_to_complete
 
     def get_observation(self):
-        return np.zeros(self.observation_space.low.shape) # only going to train from images
-    
+        return np.zeros(
+            self.observation_space.low.shape
+        )  # only going to train from images
+
     def render(self, imwidth, imheight, mode="rgb_array"):
-        return self._wrapped_env.render(
-            mode=mode
-        )
+        return self._wrapped_env.render(mode=mode)
 
     def get_image(self):
         return self.render(
@@ -706,17 +706,19 @@ class KitchenEnv:
     def get_site_xmat(self, name):
         id = self._wrapped_env.sim.model.site_name2id(name)
         return self._wrapped_env.sim.data.site_xmat[id]
-    
+
     def get_ee_pose(self):
         return self.get_site_xpos("end_effector")
-    
+
     @property
     def _eef_xpos(self):
         return self.get_ee_pose().copy()
 
     @property
     def _eef_xquat(self):
-        return T.convert_quat(T.mat2quat(self.get_site_xmat("end_effector").reshape(3, 3)), to="wxyz")
+        return T.convert_quat(
+            T.mat2quat(self.get_site_xmat("end_effector").reshape(3, 3)), to="wxyz"
+        )
         # return self.get_ee_quat()
 
     def set_state(self, qpos, qvel):
@@ -861,17 +863,17 @@ class MPEnv(KitchenEnv):
             elif element == "top burner":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
-            elif element == 'hinge cabinet':
+            elif element == "hinge cabinet":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
-            elif element == 'light switch':
+            elif element == "light switch":
                 # target_pos = object_pos + np.array([0, -0.075, 0])
-                target_pos = object_pos + np.array([0, -0.05, 0]) #TODO: try this
+                target_pos = object_pos + np.array([0, -0.05, 0])  # TODO: try this
                 target_quat = self.reset_ori
-            elif element == 'microwave':
+            elif element == "microwave":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
-            elif element == 'kettle':
+            elif element == "kettle":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             pose_list.append((target_pos, target_quat))
