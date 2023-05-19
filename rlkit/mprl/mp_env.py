@@ -1103,7 +1103,7 @@ class MPEnv(RobosuiteEnv):
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
         # for nut assembly, we need to add a few burn in steps to get the right object pos
-        for _ in range(5):
+        for _ in range(100):
             a = np.zeros(7)
             a[-1] = -1
             self._wrapped_env.step(a)
@@ -1231,7 +1231,7 @@ class MPEnv(RobosuiteEnv):
             #     if not check_robot_string(con2) and check_string(con1, obj_string):
             #         object_in_contact_with_env = True
             # is_grasped = is_grasped and not object_in_contact_with_env
-            pos, quat = get_object_pose(self, obj_idx=self.obj_idx)
+            pos, quat = get_object_pose_mp(self, obj_idx=self.obj_idx)
             init_object_pos = self.initial_object_pos[self.obj_idx] if type(self.initial_object_pos) is list else self.initial_object_pos
             is_grasped = is_grasped and (pos[2] - init_object_pos[2]) > 0.01
         return is_grasped
