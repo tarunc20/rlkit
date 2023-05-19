@@ -635,7 +635,6 @@ class KitchenEnv:
         self.data = self._wrapped_env.data
         self.TASK_ELEMENTS = self._wrapped_env.TASK_ELEMENTS
         self.OBS_ELEMENT_INDICES = self._wrapped_env.OBS_ELEMENT_INDICES
-        self.tasks_to_complete = self._wrapped_env.tasks_to_complete
 
     def get_observation(self):
         return np.zeros(
@@ -683,7 +682,7 @@ class KitchenEnv:
         return d
 
     def _check_success(self):
-        return len(self.tasks_to_complete) == 0
+        return len(self._wrapped_env.tasks_to_complete) == 0
 
     def step(self, action):
         if self.predict_done_actions:
@@ -753,7 +752,7 @@ class MPEnv(KitchenEnv):
         clamp_actions=False,
         randomize_init_target_pos=False,
         randomize_init_target_pos_range=(0.04, 0.06),
-        hardcoded_high_level_plan=False,
+        hardcoded_high_level_plan=True,
         use_teleports_in_step=True,
         hardcoded_orientations=False,
         # upstream env
@@ -810,7 +809,7 @@ class MPEnv(KitchenEnv):
     def compute_hardcoded_orientation(self, target_pos, quat):
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         # compute perpendicular top grasps for the object, pick one that has less error
-        orig_ee_quat = self._eef_xquat.copy()
+        orig_ee_quat = self.reset_ori.copy()
         ee_euler = mat2euler(quat2mat(orig_ee_quat))
         obj_euler = mat2euler(quat2mat(quat))
         ee_euler[2] = obj_euler[2] + np.pi / 2
@@ -854,9 +853,9 @@ class MPEnv(KitchenEnv):
     def get_target_pose_list(self):
         pose_list = []
         # init target pos (object pos + vertical displacement)
-        object_pos, object_quat = get_object_pose_mp(self)
         # final target positions, depending on the task
-        for element in self.TASK_ELEMENTS:
+        for idx, element in enumerate(self.TASK_ELEMENTS):
+            object_pos, object_quat = get_object_pose_mp(self, obj_idx=idx)
             if element == "slide cabinet":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
@@ -867,8 +866,7 @@ class MPEnv(KitchenEnv):
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             elif element == "light switch":
-                # target_pos = object_pos + np.array([0, -0.075, 0])
-                target_pos = object_pos + np.array([0, -0.05, 0])  # TODO: try this
+                target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             elif element == "microwave":
                 target_pos = object_pos + np.array([0, -0.05, 0])
@@ -943,7 +941,7 @@ class MPEnv(KitchenEnv):
 
     @property
     def obj_idx(self):
-        return (self.high_level_step - 1) // 2
+        return (self.high_level_step - 1)
 
     def check_grasp(self, verify_stable_grasp=False):
         is_grasped = check_object_grasp(self, obj_idx=self.obj_idx)
@@ -1036,19 +1034,13 @@ class MPEnv(KitchenEnv):
             is_grasped = self.check_grasp(verify_stable_grasp=self.verify_stable_grasp)
             open_gripper_on_tp = False
             if self.hardcoded_high_level_plan:
-                if self.teleport_on_grasp:
-                    take_planner_step = is_grasped
-                    if take_planner_step:
-                        self.teleport_on_grasp = False
-                        self.teleport_on_place = True
-                elif self.teleport_on_place:
-                    take_planner_step = (
-                        not self.check_grasp()
-                    )  # want to move on only after we are not in contact at all anymore
-                    if take_planner_step:
-                        open_gripper_on_tp = True
-                        self.teleport_on_place = False
-                        self.teleport_on_grasp = True
+                # check if sub-task is complete
+                object_string = get_object_string(self, obj_idx=self.obj_idx)
+                if object_string not in self._wrapped_env.tasks_to_complete:
+                    open_gripper_on_tp = True
+                    take_planner_step = True
+                else:
+                    take_planner_step = False
             else:
                 take_planner_step = self.take_planner_step
             if self.high_level_step >= len(self.get_target_pose_list()):
@@ -1061,7 +1053,6 @@ class MPEnv(KitchenEnv):
                         self,
                         target_pos,
                         target_quat,
-                        self.ik_ctrl,
                         self.reset_qpos,
                         self.reset_qvel,
                         is_grasped=is_grasped,
