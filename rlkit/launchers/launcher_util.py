@@ -150,6 +150,7 @@ def run_experiment_here(
     experiment_uuid = actual_log_dir.split("/")[-1]
     run = None
     if variant.get("wandb", False):
+        logger.use_wandb = True
         exp_pref = variant["exp_prefix"]
         exp_id = variant["exp_id"]
         group_name = f"{exp_pref}_{exp_id}"
