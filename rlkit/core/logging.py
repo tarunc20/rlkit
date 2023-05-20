@@ -80,7 +80,7 @@ def mkdir_p(path):
 
 
 class Logger(object):
-    def __init__(self):
+    def __init__(self, use_wandb=True):
         self._prefixes = []
         self._prefix_str = ""
 
@@ -104,6 +104,8 @@ class Logger(object):
         self._log_tabular_only = False
         self._header_printed = False
         self.table_printer = TerminalTablePrinter()
+        
+        self.use_wandb = use_wandb
 
     def reset(self):
         self.__init__()
@@ -199,10 +201,8 @@ class Logger(object):
 
     def record_tabular(self, key, val):
         self._tabular.append((self._tabular_prefix_str + str(key), str(val)))
-        try:
+        if self.use_wandb:
             wandb.log({self._tabular_prefix_str + str(key): val})
-        except:
-            pass
 
     def record_dict(self, d, prefix=None):
         if prefix is not None:
