@@ -112,7 +112,7 @@ def check_grasp(env, name):
     Returns:
         boolean corresponding to grasped object
     """
-    if name == "SawyerLift-v0":
+    if name == "SawyerLift-v0" or name == "SawyerLiftObstacle-v0":
         touch_left_finger = False
         touch_right_finger = False
         for i in range(env.sim.data.ncon):
@@ -424,14 +424,17 @@ class MoPAMPEnv():
 
     def get_init_target_pos(self):
         qpos, qvel = self._wrapped_env.sim.data.qpos.copy(), self._wrapped_env.sim.data.qvel.copy()
-        if self.name == "SawyerLift-v0":
+        if self.name == "SawyerLift-v0" or self.name == "SawyerLiftObstacle-v0":
             # get cube position 
             cube_pos = get_object_pose(self._wrapped_env, "cube")[:3].copy() + np.array([0., 0.00, self.vertical_displacement])
+            quat = np.array([-0.1268922, 0.21528646, 0.96422245, -0.08846001])
+            quat /= np.linalg.norm(quat)
             # get gripper position
             gripper_pos = get_site_pose(self._wrapped_env, "grip_site")[0]
             ac = collections.OrderedDict()
             ac['default'] = cube_pos - gripper_pos 
-            set_robot_based_on_ee_pos(
+            ac['quat'] = quat
+            result, err_norm = set_robot_based_on_ee_pos(
                 self._wrapped_env,
                 ac,
                 self.ik_env,
