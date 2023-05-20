@@ -230,11 +230,11 @@ def set_robot_based_on_ee_pos(
         new_object_pose = mat2pose(
             np.dot(transform, pose2mat((object_pos, object_quat)))
         )
-        set_object_pose(env, new_object_pose[0], new_object_pose[1], obj_idx=obj_idx)
-        env.sim.forward()
-    else:
-        # make sure the object is back where it started
-        set_object_pose(env, object_pos, object_quat, obj_idx=obj_idx)
+    #     set_object_pose(env, new_object_pose[0], new_object_pose[1], obj_idx=obj_idx)
+    #     env.sim.forward()
+    # else:
+    #     # make sure the object is back where it started
+    #     set_object_pose(env, object_pos, object_quat, obj_idx=obj_idx)
 
     if open_gripper_on_tp:
         env.sim.data.qpos[7:9] = np.array([0.04, 0.04])
