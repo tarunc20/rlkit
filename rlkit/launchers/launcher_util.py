@@ -150,7 +150,6 @@ def run_experiment_here(
     experiment_uuid = actual_log_dir.split("/")[-1]
     run = None
     if variant.get("wandb", False):
-        logger.use_wandb = True
         exp_pref = variant["exp_prefix"]
         exp_id = variant["exp_id"]
         group_name = f"{exp_pref}_{exp_id}"
@@ -203,6 +202,8 @@ def run_experiment_here(
                 comments=variant.get("comments", ""),
             )
             print("Logged to ml_runlog")
+    else:
+        logger.use_wandb = False
     set_seed(seed)
     from rlkit.torch.pytorch_util import set_gpu_mode
 

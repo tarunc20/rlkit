@@ -80,7 +80,7 @@ def mkdir_p(path):
 
 
 class Logger(object):
-    def __init__(self, use_wandb=False):
+    def __init__(self, use_wandb=True):
         self._prefixes = []
         self._prefix_str = ""
 
