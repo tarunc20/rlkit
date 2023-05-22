@@ -902,6 +902,7 @@ class MPEnv(RobosuiteEnv):
         verify_stable_grasp=False,
         reset_at_grasped_state=False,
         steps_of_high_level_plan_to_complete=-1,
+        timeout_on_stage_failure=True,
     ):
         super().__init__(
             env,
@@ -941,7 +942,7 @@ class MPEnv(RobosuiteEnv):
         self.steps_of_high_level_plan_to_complete = (   
             steps_of_high_level_plan_to_complete
         )
-
+        self.timeout_on_stage_failure = timeout_on_stage_failure
         if self.add_grasped_to_obs:
             # update observation space
             self.observation_space = gym.spaces.Box(
@@ -1103,7 +1104,7 @@ class MPEnv(RobosuiteEnv):
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
         # for nut assembly, we need to add a few burn in steps to get the right object pos
-        for _ in range(100):
+        for _ in range(10): #100 was for old saved policies
             a = np.zeros(7)
             a[-1] = -1
             self._wrapped_env.step(a)
@@ -1385,6 +1386,7 @@ class MPEnv(RobosuiteEnv):
             if self.current_ll_policy_steps == self.num_ll_actions_per_hl_action:
                 self.take_planner_step = True
                 self.current_ll_policy_steps = 0
+            
         i["success"] = float(self._check_success())
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
@@ -1401,4 +1403,6 @@ class MPEnv(RobosuiteEnv):
         d = self.update_done_info_based_on_termination(i, d)
         if self.terminate_on_last_state:
             d = self.ep_step_ctr == self.horizon
+        if self.timeout_on_stage_failure and self.ep_step_ctr // 25 > self.high_level_step:
+            d = True
         return o, r, d, i

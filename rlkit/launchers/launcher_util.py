@@ -202,6 +202,8 @@ def run_experiment_here(
                 comments=variant.get("comments", ""),
             )
             print("Logged to ml_runlog")
+    else:
+        logger.use_wandb = False
     set_seed(seed)
     from rlkit.torch.pytorch_util import set_gpu_mode
 
