@@ -363,6 +363,21 @@ def set_robot_based_on_ee_pos(
     ee_error = np.linalg.norm(env._eef_xpos - target_pos)
     return ee_error
 
+# in this case pos should be target pos
+def set_robot_based_on_joint_angles(
+    env, pos, joint_pos, ctrl, qpos, qvel
+):
+    gripper_qpos = env.sim.data.qpos[7:9]
+    gripper_qvel = env.sim.data.qvel[7:9]
+    env.sim.data.qpos[:] = qpos
+    env.sim.data.qvel[:] = qvel
+    env.sim.forward()
+
+    ctrl.sync_state()
+    env.robots[0].set_robot_joint_positions(joint_pos)
+    assert (env.sim.data.qpos[:7] - joint_pos).sum() < 1e-10
+    error = np.linalg.norm(env._eef_xpos - pos[:3])
+    return error
 
 def check_robot_string(string):
     if string is None:
@@ -399,6 +414,37 @@ def check_robot_collision(env, ignore_object_collision, obj_idx=0):
                 return True
     return False
 
+def backtracking_search_from_goal_joints(
+    env,
+    pos,
+    ik_ctrl,
+    ignore_object_collision,
+    start_angles,
+    goal_angles,
+    qpos,
+    qvel,
+    movement_fraction=0.001,
+    ee_to_object_translation=None,
+    is_grasped=False
+):
+    curr_angles = goal_angles.copy()
+    set_robot_based_on_joint_angles(
+        env, pos, goal_angles, ik_ctrl, qpos, qvel
+    )
+    collision = check_robot_collision(env, ignore_object_collision)
+    iters = 0
+    max_iters = int(1/movement_fraction)
+    while collision and iters < max_iters:
+        curr_angles = curr_angles - movement_fraction * (goal_angles - start_angles)
+        error = set_robot_based_on_joint_angles(
+            env, pos, curr_angles, ik_ctrl, qpos, qvel
+        )
+        collision = check_robot_collision(env, ignore_object_collision)
+        iters += 1
+    if collision:
+        return start_angles 
+    else:
+        return curr_angles
 
 def backtracking_search_from_goal(
     env,
@@ -755,6 +801,225 @@ def mp_to_point(
         env.num_failed_solves += 1
     env.intermediate_frames = intermediate_frames
     rebuild_controller(env, default_controller_configs)
+    return env._get_observations()
+
+def check_linear_interpolation(env, 
+                                pos, 
+                                target_angles, 
+                                qpos, 
+                                qvel, 
+                                ik_ctrl,
+                                qpos_curr,
+                                qvel_curr,
+                                checkpoint_frac=0.05,
+                                get_intermediate_frames=True):
+    curr_angles = qpos_curr[:7]
+    intermediate_frames = []
+    for i in range(1, int(1/checkpoint_frac) + 1):
+        curr_pos = curr_angles + (target_angles - curr_angles)*(i*checkpoint_frac)
+        set_robot_based_on_joint_angles(env, pos, curr_pos, ik_ctrl, qpos, qvel)
+        # fix ignore object collision to be the value passed in mp_to_point
+        valid = not check_robot_collision(env, ignore_object_collision=False)
+        if (not valid):
+            return False, None 
+    intermediate_frames = []
+    update_controller_config(env, env.jp_controller_config)
+    jp_ctrl = controller_factory("JOINT_POSITION", env.jp_controller_config)
+    env._wrapped_env.reset()
+    env.sim.data.qpos[:] = qpos_curr.copy()
+    env.sim.data.qvel[:] = qvel_curr.copy()
+    env.sim.forward()
+    for _ in range(50):
+        policy_step = True 
+        # change action action limits if this doesn't alaways work
+        action = np.concatenate([(target_angles - env.sim.data.qpos[:7]), [-1]])
+        if (np.linalg.norm(action) < 1e-3):
+            break
+        for i in range(int(env.control_timestep // env.model_timestep)):
+            env.sim.forward()
+            apply_controller(jp_ctrl, action, env.robots[0], policy_step)
+            env.sim.step()
+            env._update_observables()
+            policy_step = False 
+        if get_intermediate_frames:
+            im = env.get_image()
+            add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
+            intermediate_frames.append(im)
+    env.intermediate_frames = intermediate_frames
+    print(f"True target: {target_angles}")
+    print(f"Error: {np.linalg.norm(np.concatenate((env._eef_xpos, env._eef_xquat)) - pos)**2}")
+    print(f"XYZ distance: {np.linalg.norm(env._eef_xpos - pos[:3])}")
+    return env._get_observations(), None
+
+def mp_to_point_fast(
+    env,
+    ik_controller_config,
+    osc_controller_config,
+    pos,
+    qpos,
+    qvel,
+    grasp=False,
+    ignore_object_collision=False,
+    planning_time=1,
+    get_intermediate_frames=False,
+    backtrack_movement_fraction=0.001,
+):
+    qpos_curr = env.sim.data.qpos.copy()
+    qvel_curr = env.sim.data.qvel.copy()
+    og_eef_xpos = env._eef_xpos.copy()
+    og_eef_xquat = env._eef_xquat.copy()
+    target_xyz = pos[:3]
+    target_quat = pos[3:]
+
+    # get all controllers
+    jp_controller_config = {
+        "interpolation": None
+    } 
+    update_controller_config(env, ik_controller_config)
+    ik_ctrl = controller_factory("IK_POSE", ik_controller_config)
+    update_controller_config(env, osc_controller_config)
+    osc_ctrl = controller_factory("OSC_POSE", osc_controller_config)
+    update_controller_config(env, jp_controller_config)
+    jp_ctrl = controller_factory("JOINT_POSITION", jp_controller_config)
+    ik_ctrl.sync_state()
+
+    def isStateValid(state):
+        # set robot correctly
+        joint_pos = np.zeros(7)
+        for i in range(7):
+            joint_pos[i] = state[i]
+        set_robot_based_on_joint_angles(env, target_xyz, joint_pos, ik_ctrl, qpos, qvel)
+        valid = not check_robot_collision(env, ignore_object_collision=ignore_object_collision)
+        return valid
+    
+    # get target angles to achieve position
+    cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
+    rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
+    # ee_to_object_translation = (
+    #         env.sim.data.body_xpos[env.cube_body_id] - og_eef_xpos
+    #     )
+    target_angles = ik_ctrl.joint_positions_for_eef_command(target_xyz - env._eef_xpos, rot_diff)
+
+    # set up planning space for ompl
+    space = ob.RealVectorStateSpace(7)
+    bounds = ob.RealVectorBounds(7)
+    env_bounds = env.sim.model.jnt_range[:7, :]
+    for i in range(7):
+        bounds.setLow(i, env_bounds[i, 0])
+        bounds.setHigh(i, env_bounds[i, 1])
+    space.setBounds(bounds)
+    si = ob.SpaceInformation(space)
+    si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
+    start = ob.State(space)
+    for i in range(7):
+        start()[i] = env.sim.data.qpos[i]
+    goal = ob.State(space)
+    for i in range(7):
+        goal()[i] = target_angles[i]
+
+    # print is goal valid
+    goal_valid = isStateValid(goal)
+    #print(f"Goal valid: {goal_valid}")
+    goal_error = set_robot_based_on_joint_angles(
+        env, pos, target_angles, ik_ctrl, qpos, qvel
+    )
+    if not goal_valid:
+        # maybe modify later
+        target_angles = backtracking_search_from_goal_joints(
+            env, 
+            pos,
+            ik_ctrl,
+            ignore_object_collision,
+            qpos_curr[:7],
+            target_angles, 
+            qpos,
+            qvel,
+            movement_fraction=backtrack_movement_fraction
+        )
+        for i in range(7):
+            goal()[i] = target_angles[i]
+    goal_valid = isStateValid(goal)
+    #print(f"Updated goal valid: {goal_valid}")
+
+    success, state = check_linear_interpolation(env, pos, 
+                                            target_angles, qpos, 
+                                            qvel, ik_ctrl, 
+                                            qpos_curr,
+                                            qvel_curr,
+                                            checkpoint_frac=0.01, 
+                                            get_intermediate_frames=get_intermediate_frames)
+    if success:
+        print(f"Linear Interpolation Worked")
+        return state
+
+    # do planning
+    joint_pos = np.array([goal()[i] for i in range(7)])
+    # create a problem instance
+    pdef = ob.ProblemDefinition(si)
+    # set the start and goal states
+    pdef.setStartAndGoalStates(start, goal)
+    # create a planner for the defined space
+    planner = og.RRTConnect(si)
+    # set the problem we are trying to solve for the planner
+    planner.setProblemDefinition(pdef)
+    planner.setRange(0.05)
+    # perform setup steps for the planner
+    planner.setup()
+    solved = planner.solve(planning_time)
+    converted_path = []
+    if solved:
+        path = pdef.getSolutionPath()
+        init_p_len = len(path.getStates())
+        success = og.PathSimplifier(si).simplify(path, 1.0)
+        path = path.getStates()
+        # print(f"Length of path improvement: {init_p_len - len(path)}")
+        for i in range(len(path)):
+            converted_path.append(np.array([path[i][j] for j in range(7)]))
+        # reset environment
+        env._wrapped_env.reset()
+        env.sim.data.qpos[:] = qpos_curr.copy()
+        env.sim.data.qvel[:] = qvel_curr.copy()
+        env.sim.forward()
+
+        intermediate_frames = []
+
+        # now take path and execute
+        for state in converted_path:
+            for _ in range(200):
+                policy_step = True 
+                # change action action limits if this doesn't alaways work
+                if grasp:
+                    grip_val = env.grip_ctrl_scale
+                else:
+                    grip_val = -1
+                action = np.concatenate([(state - env.sim.data.qpos[:7])*10, [grip_val]])
+                if (np.linalg.norm(action) < 1e-3):
+                    break
+                for i in range(int(env.control_timestep // env.model_timestep)):
+                    env.sim.forward()
+                    apply_controller(jp_ctrl, action, env.robots[0], policy_step)
+                    env.sim.step()
+                    env._update_observables()
+                    policy_step = False 
+                #print(f"Checking collision: {check_robot_collision(env, False, True)}")
+                if get_intermediate_frames:
+                    im = env.get_image()
+                    add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
+                    intermediate_frames.append(im)
+        print(f"True target: {target_angles}")
+        print(f"Error: {np.linalg.norm(np.concatenate((env._eef_xpos, env._eef_xquat)) - pos)**2}")
+        print(f"XYZ distance: {np.linalg.norm(env._eef_xpos - pos[:3])}")
+        if get_intermediate_frames:
+            env.intermediate_frames = intermediate_frames
+    else:
+        print(f"Failed solve")
+        env._wrapped_env.reset()
+        env.sim.data.qpos[:] = qpos_curr.copy()
+        env.sim.data.qvel[:] = qvel_curr.copy()
+        env.sim.forward()
+        env.mp_mse = 0
+        env.goal_error = 0
+        env.num_failed_solves += 1
     return env._get_observations()
 
 
@@ -1127,6 +1392,24 @@ class MPEnv(RobosuiteEnv):
             "input_min": -1,
             "output_max": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
             "output_min": [-0.5, -0.5, -0.5, -0.5, -0.5, -0.5],
+            "kp": 150,
+            "damping_ratio": 1,
+            "impedance_mode": "fixed",
+            "kp_limits": [0, 300],
+            "damping_ratio_limits": [0, 10],
+            "position_limits": None,
+            "orientation_limits": None,
+            "uncouple_pos_ori": True,
+            "control_delta": True,
+            "interpolation": None,
+            "ramp_ratio": 0.2,
+        }
+        self.jp_controller_config = {
+            "type": "JOINT_POSITION",
+            "input_max": 1,
+            "input_min": -1,
+            "output_max": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            "output_min": [-0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5],
             "kp": 150,
             "damping_ratio": 1,
             "impedance_mode": "fixed",
