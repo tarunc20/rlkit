@@ -1195,6 +1195,7 @@ class MPEnv(RobosuiteEnv):
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    default_controller_configs=self.controller_configs,
                 )
             self.take_planner_step = False
         if self.reset_at_grasped_state:
@@ -1377,6 +1378,7 @@ class MPEnv(RobosuiteEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
+                        default_controller_configs=self.controller_configs,
                     )
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
