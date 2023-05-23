@@ -104,7 +104,7 @@ class Logger(object):
         self._log_tabular_only = False
         self._header_printed = False
         self.table_printer = TerminalTablePrinter()
-        
+
         self.use_wandb = use_wandb
 
     def reset(self):

@@ -1,15 +1,11 @@
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
-from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
-from rlkit.mprl.mp_env import MPEnv, mp_to_point, mp_to_point_fast
-from robosuite.controllers.controller_factory import load_controller_config
-from robosuite.wrappers.gym_wrapper import GymWrapper
 import robosuite as suite
 from robosuite.controllers import controller_factory
-from rlkit.core import logger
-from tqdm import tqdm 
-from robosuite.utils.control_utils import orientation_error
+from robosuite.controllers.controller_factory import load_controller_config
 from robosuite.controllers.ik import InverseKinematicsController
+from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import (
     axisangle2quat,
     euler2mat,
@@ -19,7 +15,13 @@ from robosuite.utils.transform_utils import (
     quat_distance,
     quat_multiply,
 )
-import matplotlib.pyplot as plt 
+from robosuite.wrappers.gym_wrapper import GymWrapper
+from tqdm import tqdm
+
+from rlkit.core import logger
+from rlkit.envs.wrappers.normalized_box_env import NormalizedBoxEnv
+from rlkit.mprl.mp_env import MPEnv, mp_to_point, mp_to_point_fast
+
 
 def make_video(frames, logdir, epoch):
     height, width, _ = frames[0].shape
@@ -32,6 +34,7 @@ def make_video(frames, logdir, epoch):
     for frame in frames:
         out.write(frame)
     out.release()
+
 
 def create_env():
     environment_kwargs = {
@@ -69,6 +72,7 @@ def create_env():
     env = MPEnv(NormalizedBoxEnv(GymWrapper(env)), **mp_env_kwargs)
     return env
 
+
 def update_controller_config(env, controller_config):
     controller_config["robot_name"] = env.robots[0].name
     controller_config["sim"] = env.robots[0].sim
@@ -83,6 +87,7 @@ def update_controller_config(env, controller_config):
     controller_config["policy_freq"] = env.robots[0].control_freq
     controller_config["ndim"] = len(env.robots[0].robot_joints)
 
+
 def check_valid(env, pos, quat):
     ik_controller_config = env.ik_controller_config.copy()
     update_controller_config(env, ik_controller_config)
@@ -96,10 +101,13 @@ def check_valid(env, pos, quat):
     error = np.linalg.norm(env._eef_xpos - pos)
     return error < 0.01
 
+
 """
 This is testing being able to do random positions on the lifting task
 - it should mostly work with linear interpolation.
 """
+
+
 def test_random_positions(num_tests):
     np.random.seed(0)
     env = create_env()
@@ -108,9 +116,9 @@ def test_random_positions(num_tests):
     valid_cnt = 0
     for _ in tqdm(range(num_tests)):
         rand_quat = env.reset_ori
-        rand_pos = env._eef_xpos + np.random.randn(3)/10
+        rand_pos = env._eef_xpos + np.random.randn(3) / 10
         if not check_valid(env, rand_pos, rand_quat):
-            continue 
+            continue
         valid_cnt += 1
         # do validity checking
         env.reset()
@@ -129,13 +137,15 @@ def test_random_positions(num_tests):
         )
         errors.append(np.linalg.norm(rand_pos - env._eef_xpos))
     plt.hist(errors)
-    plt.savefig('errors_lift.png')
+    plt.savefig("errors_lift.png")
     print(f"Valid cnt: {valid_cnt}")
     print(f"Average error: {np.mean(errors)}")
-    return 
+    return
+
 
 def test_pick_place(num_tests):
-    return 
+    return
+
 
 if __name__ == "__main__":
     environment_kwargs = {
@@ -146,10 +156,7 @@ if __name__ == "__main__":
         "ignore_done": True,
         "reward_scale": 1.0,
         "robots": "Panda",
-        "initialization_noise": {
-            "magnitude": 0,
-            "type": "gaussian"
-        }
+        "initialization_noise": {"magnitude": 0, "type": "gaussian"},
     }
     controller = environment_kwargs.pop("controller")
     controller_config = load_controller_config(default_controller=controller)
@@ -192,7 +199,9 @@ if __name__ == "__main__":
             # for _ in range(50):
             #     env.step(env.action_space.sample())
             target_pos = env.get_target_pos()
-            target_pos = env.sim.data.get_body_xpos("Bread_main") + np.array([0., 0., 0.02])
+            target_pos = env.sim.data.get_body_xpos("Bread_main") + np.array(
+                [0.0, 0.0, 0.02]
+            )
             # cube_pos = env.sim.data.get_body_xpos('cube_main')
             # target_pos = cube_pos + np.array([0., 0., 0.02])
             mp_to_point_fast(
@@ -208,7 +217,7 @@ if __name__ == "__main__":
                 # planning_time=env.planning_time,
                 get_intermediate_frames=True,
             )
-            og_xpos = env._eef_xpos.copy() + np.array([0., 0.6, 0.])
+            og_xpos = env._eef_xpos.copy() + np.array([0.0, 0.6, 0.0])
             mp_to_point_fast(
                 env,
                 env.ik_controller_config,
@@ -224,9 +233,11 @@ if __name__ == "__main__":
             )
             target_dist = np.linalg.norm(target_second_pos - env._eef_xpos)
             mp_fast_dists.append(target_dist)
-            print(f"Distance from target: {np.linalg.norm(target_second_pos - env._eef_xpos)}")
-            #make_video(env.intermediate_frames, '.', -3)
-    make_video(env.intermediate_frames, '.', 1)
+            print(
+                f"Distance from target: {np.linalg.norm(target_second_pos - env._eef_xpos)}"
+            )
+            # make_video(env.intermediate_frames, '.', -3)
+    make_video(env.intermediate_frames, ".", 1)
     env.intermediate_frames = []
     print(f"MP fast results: {np.mean(mp_fast_dists)}")
     np.random.seed(0)
@@ -253,7 +264,7 @@ if __name__ == "__main__":
                 # planning_time=env.planning_time,
                 get_intermediate_frames=True,
             )
-            og_xpos = env._eef_xpos.copy() + np.array([0., 0.6, 0.])
+            og_xpos = env._eef_xpos.copy() + np.array([0.0, 0.6, 0.0])
             mp_to_point(
                 env,
                 env.ik_controller_config,
@@ -269,9 +280,11 @@ if __name__ == "__main__":
             )
             target_dist = np.linalg.norm(target_second_pos - env._eef_xpos)
             mp_slow_dists.append(target_dist)
-            print(f"Distance from target: {np.linalg.norm(target_second_pos - env._eef_xpos)}")
-            #make_video(env.intermediate_frames, '.', -3)
-    make_video(env.intermediate_frames, '.', 2)
+            print(
+                f"Distance from target: {np.linalg.norm(target_second_pos - env._eef_xpos)}"
+            )
+            # make_video(env.intermediate_frames, '.', -3)
+    make_video(env.intermediate_frames, ".", 2)
     env.intermediate_frames = []
     print(f"MP slow results: {np.mean(mp_slow_dists)}")
-    #test_random_positions(500)
+    # test_random_positions(500)

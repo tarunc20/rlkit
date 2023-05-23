@@ -15,8 +15,8 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 from rlkit.mprl import module
-from rlkit.torch.model_based.dreamer.visualization import add_text
 from rlkit.mprl.inverse_kinematics import qpos_from_site_pose_kitchen
+from rlkit.torch.model_based.dreamer.visualization import add_text
 
 try:
     from ompl import base as ob
@@ -941,7 +941,7 @@ class MPEnv(KitchenEnv):
 
     @property
     def obj_idx(self):
-        return (self.high_level_step - 1)
+        return self.high_level_step - 1
 
     def check_grasp(self, verify_stable_grasp=False):
         is_grasped = check_object_grasp(self, obj_idx=self.obj_idx)

@@ -8,10 +8,10 @@ import random
 import time
 
 import numpy as np
-
 import robosuite
 import robosuite.utils.camera_utils as CU
 from robosuite.controllers import load_controller_config
+
 
 def get_camera_depth(sim, camera_name, camera_height, camera_width):
     """
@@ -25,9 +25,14 @@ def get_camera_depth(sim, camera_name, camera_height, camera_width):
     Return:
         im (np.array): the depth image b/w 0 and 1
     """
-    return sim.render(camera_name=camera_name, height=camera_height, width=camera_width, depth=True)[1][::-1]
+    return sim.render(
+        camera_name=camera_name, height=camera_height, width=camera_width, depth=True
+    )[1][::-1]
 
-def get_object_pose_from_seg(env, object_string, camera_name, camera_width, camera_height, sim):
+
+def get_object_pose_from_seg(
+    env, object_string, camera_name, camera_width, camera_height, sim
+):
     """
     Get the object pose from the segmentation map. This is done by finding the object id in the segmentation map,
     then finding the pixels that correspond to that object id. Then, we find project those pixels into 3D space
@@ -43,19 +48,31 @@ def get_object_pose_from_seg(env, object_string, camera_name, camera_width, came
     Return:
         estimated_obj_pos (np.array): estimated object position in world frame
     """
-    segmentation_map = CU.get_camera_segmentation(camera_name=camera_name, camera_width=camera_width, camera_height=camera_height, sim=sim)
+    segmentation_map = CU.get_camera_segmentation(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
     geom_ids = np.unique(segmentation_map[:, :, 1])
     object_id = None
     for geom_id in geom_ids:
         geom_name = sim.model.geom_id2name(geom_id)
-        if geom_name is None or geom_name.startswith('Visual'):
+        if geom_name is None or geom_name.startswith("Visual"):
             continue
         if object_string in sim.model.geom_id2name(geom_id):
             object_id = geom_id
             break
     cube_mask = segmentation_map[:, :, 1] == object_id
-    depth_map = get_camera_depth(sim=sim, camera_name=camera_name, camera_height=camera_height, camera_width=camera_width)
-    depth_map = np.expand_dims(CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1)
+    depth_map = get_camera_depth(
+        sim=sim,
+        camera_name=camera_name,
+        camera_height=camera_height,
+        camera_width=camera_width,
+    )
+    depth_map = np.expand_dims(
+        CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+    )
 
     # get camera matrices
     world_to_camera = CU.get_camera_transform_matrix(
@@ -79,6 +96,7 @@ def get_object_pose_from_seg(env, object_string, camera_name, camera_width, came
         obj_poses.append(estimated_obj_pos)
     estimated_obj_pos = np.mean(obj_poses, axis=0)
     return estimated_obj_pos
+
 
 def test_camera_transforms():
     # set seeds
@@ -111,8 +129,10 @@ def test_camera_transforms():
     obj_pos = obs_dict["object-state"][:3]
 
     # unnormalized depth map
-    object_string = 'Cereal'
-    estimated_obj_pos = get_object_pose_from_seg(env, object_string, camera_name, camera_width, camera_height, sim)
+    object_string = "Cereal"
+    estimated_obj_pos = get_object_pose_from_seg(
+        env, object_string, camera_name, camera_width, camera_height, sim
+    )
 
     z_err = np.abs(obj_pos[2] - estimated_obj_pos[2])
 
@@ -125,5 +145,4 @@ def test_camera_transforms():
 
 
 if __name__ == "__main__":
-
     test_camera_transforms()

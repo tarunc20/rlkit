@@ -1,15 +1,15 @@
-import cv2
 import time
+
+import cv2
 import d4rl  # Import to register d4rl environments to Gym
+import disrep4rl.environments.kitchen_custom_envs  # Import to register kitchen custom environments to Gym
 import dm_env
 import gym
 import numpy as np
 from dm_control.suite.wrappers import action_scale, pixels
 from dm_env import specs
 
-import disrep4rl.environments.kitchen_custom_envs  # Import to register kitchen custom environments to Gym
 from rlkit.mprl.mp_env_kitchen import MPEnv
-
 
 if __name__ == "__main__":
     np.random.seed(0)
