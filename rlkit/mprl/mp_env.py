@@ -733,7 +733,7 @@ def mp_to_point(
                 if hasattr(env, "num_steps"):
                     env.num_steps += 1
                 if get_intermediate_frames:
-                    im = env.get_image()
+                    im = np.flipud(env.sim.render(width=960, height=540, camera_name="frontview")).astype(np.uint8).copy()
                     add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
                     intermediate_frames.append(im)
         env.mp_mse = (
@@ -943,6 +943,7 @@ class MPEnv(RobosuiteEnv):
             steps_of_high_level_plan_to_complete
         )
         self.timeout_on_stage_failure = timeout_on_stage_failure
+        self.intermediate_frames = []
         if self.add_grasped_to_obs:
             # update observation space
             self.observation_space = gym.spaces.Box(
@@ -1195,6 +1196,7 @@ class MPEnv(RobosuiteEnv):
                     planning_time=self.planning_time,
                     get_intermediate_frames=get_intermediate_frames,
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    default_controller_configs=self.controller_configs,
                 )
             self.take_planner_step = False
         if self.reset_at_grasped_state:
@@ -1242,6 +1244,8 @@ class MPEnv(RobosuiteEnv):
         return action
 
     def step(self, action, get_intermediate_frames=False):
+        # clear intermediate frames
+        self.intermediate_frames = []
         if self.plan_to_learned_goals or self.planner_only_actions:
             if self.take_planner_step:
                 target_pos = self.get_target_pos()
@@ -1377,6 +1381,7 @@ class MPEnv(RobosuiteEnv):
                         planning_time=self.planning_time,
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
+                        default_controller_configs=self.controller_configs,
                     )
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
