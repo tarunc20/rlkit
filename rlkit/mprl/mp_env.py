@@ -366,9 +366,25 @@ def set_robot_based_on_ee_pos(
 
 
 # in this case pos should be target pos
-def set_robot_based_on_joint_angles(env, pos, joint_pos, ctrl, qpos, qvel):
-    gripper_qpos = env.sim.data.qpos[7:9]
-    gripper_qvel = env.sim.data.qvel[7:9]
+def set_robot_based_on_joint_angles(
+    env,
+    pos,
+    joint_pos,
+    ctrl,
+    qpos,
+    qvel,
+    is_grasped,
+    default_controller_configs,
+    obj_idx=0,
+    open_gripper_on_tp=False,
+):
+    object_pos, object_quat = get_object_pose(env, obj_idx=obj_idx)
+    object_pos = object_pos.copy()
+    object_quat = object_quat.copy()
+    gripper_qpos = env.sim.data.qpos[7:9].copy()
+    gripper_qvel = env.sim.data.qvel[7:9].copy()
+    old_eef_xquat = env._eef_xquat.copy()
+    old_eef_xpos = env._eef_xpos.copy()
     env.sim.data.qpos[:] = qpos
     env.sim.data.qvel[:] = qvel
     env.sim.forward()
@@ -377,6 +393,7 @@ def set_robot_based_on_joint_angles(env, pos, joint_pos, ctrl, qpos, qvel):
     env.robots[0].set_robot_joint_positions(joint_pos)
     assert (env.sim.data.qpos[:7] - joint_pos).sum() < 1e-10
     error = np.linalg.norm(env._eef_xpos - pos[:3])
+    rebuild_controller(env, default_controller_configs)
     return error
 
 
