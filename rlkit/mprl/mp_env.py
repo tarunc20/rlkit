@@ -282,6 +282,14 @@ def check_object_grasp(env, obj_idx=0):
         raise NotImplementedError()
     return is_grasped
 
+def rebuild_controller(env, default_controller_configs):
+    new_args = copy.deepcopy(default_controller_configs)
+    update_controller_config(env, new_args)
+    osc_ctrl = controller_factory("OSC_POSE", new_args)
+    osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
+    osc_ctrl.reset_goal()
+    env.robots[0].controller = osc_ctrl
+
 
 def set_robot_based_on_ee_pos(
     env,
@@ -350,12 +358,7 @@ def set_robot_based_on_ee_pos(
         env.sim.data.qvel[7:9] = gripper_qvel
         env.sim.forward()
     # teleporting the arm breaks the controller -> rebuilt it entirely
-    new_args = copy.deepcopy(default_controller_configs)
-    update_controller_config(env, new_args)
-    osc_ctrl = controller_factory("OSC_POSE", new_args)
-    osc_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
-    osc_ctrl.reset_goal()
-    env.robots[0].controller = osc_ctrl
+    rebuild_controller(env, default_controller_configs)
 
     ee_error = np.linalg.norm(env._eef_xpos - target_pos)
     return ee_error
@@ -566,6 +569,7 @@ def mp_to_point(
     si = ob.SpaceInformation(space)
     # set state validity checking for this space
     si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
+    si.setStateValidityCheckingResolution(0.001)  # default of 0.01 is too coarse
     # create a random start state
     start = ob.State(space)
     start().setXYZ(*og_eef_xpos)
@@ -750,6 +754,7 @@ def mp_to_point(
         env.goal_error = 0
         env.num_failed_solves += 1
     env.intermediate_frames = intermediate_frames
+    rebuild_controller(env, default_controller_configs)
     return env._get_observations()
 
 
