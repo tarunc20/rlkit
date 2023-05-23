@@ -1403,6 +1403,6 @@ class MPEnv(RobosuiteEnv):
         d = self.update_done_info_based_on_termination(i, d)
         if self.terminate_on_last_state:
             d = self.ep_step_ctr == self.horizon
-        if self.timeout_on_stage_failure and self.ep_step_ctr // 25 > self.high_level_step:
+        if self.timeout_on_stage_failure and (self.ep_step_ctr // 25) > self.high_level_step:
             d = True
         return o, r, d, i
