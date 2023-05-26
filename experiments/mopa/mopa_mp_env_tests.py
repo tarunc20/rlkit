@@ -15,7 +15,7 @@ from rlkit.mopa.mopa_env import *
 from rlkit.torch.model_based.dreamer.experiments.arguments import get_args
 import torch
 
-torch.set_float32_matmul_precision("medium")
+#torch.set_float32_matmul_precision("medium")
 import rlkit.torch.pytorch_util as ptu
 from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
 from rlkit.envs.wrappers.mujoco_vec_wrappers import (

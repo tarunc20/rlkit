@@ -120,6 +120,8 @@ def make_env(variant):
             )
         else:
             expl_env = MetaworldEnv(env)
+        # set env name 
+        env.name = env_name
     return expl_env
 
 
@@ -432,7 +434,7 @@ def load_policy(path):
 def get_trainer(variant, obs_dim, action_dim, eval_env, trainer_kwargs):
     import torch
 
-    torch.set_float32_matmul_precision("medium")
+    #torch.set_float32_matmul_precision("medium")
     from rlkit.torch.networks.mlp import ConcatMlp
     from rlkit.torch.sac.policies import MakeDeterministic, TanhGaussianPolicy
     from rlkit.torch.sac.sac import SACTrainer
@@ -473,7 +475,7 @@ def get_trainer(variant, obs_dim, action_dim, eval_env, trainer_kwargs):
 def experiment(variant):
     import torch
 
-    torch.set_float32_matmul_precision("medium")
+    #torch.set_float32_matmul_precision("medium")
     import rlkit.torch.pytorch_util as ptu
     from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
     from rlkit.envs.wrappers.mujoco_vec_wrappers import (

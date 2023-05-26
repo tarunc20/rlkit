@@ -17,6 +17,7 @@ from robosuite.utils.transform_utils import (
     quat2mat,
     quat_conjugate,
     quat_multiply,
+    convert_quat
 )
 
 from rlkit.core import logger
@@ -35,24 +36,68 @@ except ImportError:
     import sys
     from os.path import abspath, dirname, join
 
-    sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+    sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
+    #sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
     from ompl import base as ob
     from ompl import geometric as og
     from ompl import util as ou
 
+def get_obj_name(env):
+    if env.name == "hammer-v2":
+        obj_name = "hammer"
+    elif env.name == "assembly-v2" or env.name == "disassemble-v2":
+        obj_name = "asmbly_peg"
+    elif env.name == "peg-insert-side-v2":
+        obj_name = "peg"
+    else:
+        raise NotImplementedError
+    return obj_name
+
+ROBOT_BODIES = [
+    'right_hand', 'hand', 'rightclaw', 'rightpad', 'leftclaw', 'leftpad',
+]
+
+def save_img(env, filename):
+    import matplotlib.pyplot as plt 
+    frame = env.render("rgb_array")
+    plt.imshow(frame)
+    plt.savefig(filename)
+    plt.close()
 
 def get_object_pos(env):
     """
     Note this is only used for computing the target for MP
     this is NOT the true object pose
     """
-    object_pos = env._get_pos_objects().copy()
+    if env.name == "hammer-v2":
+        object_pos = env._get_pos_objects()[:3] + np.array([0.09, -0.02, 0.02])
+    elif env.name == "stick-pull-v2":
+        object_pos = env._get_pos_objects()[:3] + np.array([-0.02, -0.0, -0.01]),
+    elif env.name == "assembly-v2":
+        object_pos = env._get_pos_objects().copy() + np.array([0.00, 0.01, 0.]) # 0.01 is to fix shifted pos
+    elif env.name == "disassemble-v2":
+        object_pos = env._get_pos_objects().copy() + np.array([0., 0., -0.03])
+    elif env.name == "peg-insert-side-v2":
+        object_pos = env._get_pos_objects().copy() + np.array([0.08, -0.0, 0.0])
+    else:
+        #object_pos = env._get_pos_objects().copy()
+        #object_pos = env.sim.data.qpos[9:12].copy()
+        raise NotImplementedError
     return object_pos
 
 
 def get_object_pose(env):
-    object_pos = env._get_pos_objects().copy()
-    object_quat = env._get_quat_objects().copy()
+    if env.name == "hammer-v2" or env.name == "stick-pull-v2":
+        object_pos = env._get_pos_objects()[:3]
+        object_quat = env._get_quat_objects()[:4]
+    elif env.name == "assembly-v2" or env.name == "disassemble-v2":
+        object_pos = env._get_pos_objects().copy() - np.array([0.13, 0., 0.,])
+        object_quat = env._get_quat_objects().copy()
+    else:
+        object_pos = env._get_pos_objects().copy()
+        object_quat = env._get_quat_objects().copy()
+        # object_pos = env.sim.data.qpos[9:12].copy()
+        # object_quat = env.sim.data.qpos[12:16].copy()
     return np.concatenate((object_pos, object_quat))
 
 
@@ -66,7 +111,7 @@ def set_object_pose(env, object_pos, object_quat):
         object_quat (np.ndarray): 4D quaternion of the object (xyzw format)
 
     """
-    object_quat = T.convert_quat(object_quat, to="wxyz")
+    #object_quat = T.convert_quat(object_quat, to="wxyz")
     env._set_obj_pose(np.concatenate((object_pos, object_quat)))
 
 
@@ -93,13 +138,22 @@ def check_string(string, other_string):
     return string.startswith(other_string)
 
 
-def check_robot_collision(env, ignore_object_collision):
+def check_robot_collision(env, ignore_object_collision, verbose=False):
     obj_string = get_object_string(env)
+    obj_name = get_obj_name(env)
     d = env.sim.data
     for coni in range(d.ncon):
         con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
         con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
-        if check_robot_string(con1) ^ check_robot_string(con2):
+        body1 = env.sim.model.body_id2name(
+            env.sim.model.geom_bodyid[d.contact[coni].geom1]
+        )
+        body2 = env.sim.model.body_id2name(
+            env.sim.model.geom_bodyid[d.contact[coni].geom2]
+        )
+        if verbose:
+            print(f"Con1: {con1} Con2: {con2} Body1: {body1} Body2: {body2}")
+        if (check_robot_string(con1) ^ check_robot_string(con2)) or ((body1 in ROBOT_BODIES) ^ (body2 in ROBOT_BODIES)):
             if (
                 check_string(con1, obj_string)
                 or check_string(con2, obj_string)
@@ -107,6 +161,9 @@ def check_robot_collision(env, ignore_object_collision):
             ):
                 # if the robot and the object collide, then we can ignore the collision
                 continue
+            # check using bodies
+            if ((body1 == obj_name and body2 in ROBOT_BODIES) or (body2 == obj_name and body1 in ROBOT_BODIES)) and ignore_object_collision:
+                continue 
             return True
         elif ignore_object_collision:
             if check_string(con1, obj_string) or check_string(con2, obj_string):
@@ -114,6 +171,8 @@ def check_robot_collision(env, ignore_object_collision):
                 # robot is "joined" to the object. so if the object collides with any non-robot
                 # object, then we should call that a collision
                 return True
+            if (body1 == obj_name and body2 not in ROBOT_BODIES) or (body2 == obj_name and body1 not in ROBOT_BODIES):
+                return True 
     return False
 
 
@@ -132,16 +191,16 @@ def check_object_grasp(env):
     obj = obs[4:7]
     action = np.zeros(4)
     action[-1] = 1
-    object_grasped = env._gripper_caging_reward(
-        action,
-        obj,
-        obj_radius=0.015,
-        pad_success_thresh=0.05,
-        object_reach_radius=0.01,
-        xz_thresh=0.01,
-        desired_gripper_effort=0.7,
-        high_density=True,
-    )
+    # object_grasped = env._gripper_caging_reward(
+    #     action,
+    #     obj,
+    #     obj_radius=0.015,
+    #     pad_success_thresh=0.05,
+    #     object_reach_radius=0.01,
+    #     xz_thresh=0.01,
+    #     desired_gripper_effort=0.7,
+    #     high_density=True,
+    # )
     thresh = 0.9
     # also check that object is in contact with gripper
     object_gripper_contact = False
@@ -176,6 +235,37 @@ def check_object_grasp(env):
     # is_grasped = object_grasped > thresh and object_gripper_contact and object_lifted
     return is_grasped
 
+def body_check_grasp(env):
+    # get correct object name 
+    if env.name == "hammer-v2":
+        obj_name = "hammer"
+    elif env.name == "assembly-v2" or env.name == "disassemble-v2":
+        obj_name = "asmbly_peg"
+    elif env.name == "peg-insert-side-v2":
+        obj_name = "peg"
+    else:
+        return False
+    object_gripper_contact = False
+    d = env.sim.data
+    obj_string = get_object_string(env)
+    left_gripper_contact = False
+    right_gripper_contact = False
+    object_in_contact_with_env = False
+    pad_names = ["leftpad", "rightpad"]
+    for coni in range(d.ncon):
+        con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
+        con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
+        body1 = env.sim.model.body_id2name(
+            env.sim.model.geom_bodyid[d.contact[coni].geom1]
+        )
+        body2 = env.sim.model.body_id2name(
+            env.sim.model.geom_bodyid[d.contact[coni].geom2]
+        )
+        if body1 == "leftpad" and body2 == obj_name or body2 == "leftpad"and body1 == obj_name:
+            left_gripper_contact = True 
+        if body1 == "rightpad" and body2 == obj_name or body2 == "rightpad"and body1 == obj_name:
+            right_gripper_contact = True 
+    return left_gripper_contact and right_gripper_contact 
 
 def set_robot_based_on_ee_pos(
     env,
@@ -200,8 +290,7 @@ def set_robot_based_on_ee_pos(
     env.sim.data.qpos[:7] = qpos[:7]
     env.sim.data.qvel[:7] = qvel[:7]
     env.sim.forward()
-
-    qpos_from_site_pose(
+    result = qpos_from_site_pose(
         env,
         "endEffector",
         target_pos=target_pos,
@@ -309,6 +398,8 @@ def mp_to_point(
 
     og_eef_xpos = env._eef_xpos.copy()
     og_eef_xquat = env._eef_xquat.copy()
+    og_eef_xquat /= np.linalg.norm(og_eef_xquat)
+    og_eef_xpos = np.array([0., 0., 0.]).astype(np.float64)
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -325,7 +416,7 @@ def mp_to_point(
             return True
         else:
             # TODO; if it was grasping before ik and not after automatically set to invalid
-            set_robot_based_on_ee_pos(env, pos, quat, qpos, qvel, grasp)
+            set_robot_based_on_ee_pos(env, pos, og_eef_xquat, qpos, qvel, grasp)
             valid = not check_robot_collision(
                 env, ignore_object_collision=ignore_object_collision
             )
@@ -360,21 +451,27 @@ def mp_to_point(
     # create a random start state
     start = ob.State(space)
     start().setXYZ(*og_eef_xpos)
-    start().rotation().x = og_eef_xquat[0]
-    start().rotation().y = og_eef_xquat[1]
-    start().rotation().z = og_eef_xquat[2]
-    start().rotation().w = og_eef_xquat[3]
+    start().rotation().x = float(og_eef_xquat[0])
+    start().rotation().y = float(og_eef_xquat[1])
+    start().rotation().z = float(og_eef_xquat[2])
+    start().rotation().w = float(og_eef_xquat[3])
 
     goal = ob.State(space)
     goal().setXYZ(*pos[:3])
-    goal().rotation().x = pos[3]
-    goal().rotation().y = pos[4]
-    goal().rotation().z = pos[5]
-    goal().rotation().w = pos[6]
+    goal().rotation().x = float(og_eef_xquat[0])
+    goal().rotation().y = float(og_eef_xquat[1])
+    goal().rotation().z = float(og_eef_xquat[2])
+    goal().rotation().w = float(og_eef_xquat[3])
     goal_valid = isStateValid(goal())
-    goal_error = set_robot_based_on_ee_pos(env, pos[:3], pos[3:], qpos, qvel, grasp)
+    goal_error = set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat.copy(), qpos, qvel, grasp)
     print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {goal_error}")
+    print(f"Start valid: {isStateValid(start())}")
+    print(f"Start state: {start().getX(), start().getY(), start().getZ()}")
+    print(f"Space bounds: {space.getBounds().low[0], space.getBounds().low[1], space.getBounds().low[2]}")
+    print(f"Space bounds: {space.getBounds().high[0], space.getBounds().high[1], space.getBounds().high[2]}")
+    print(space.satisfiesBounds(start()))
+    #print(space.satisfiesBounds(goal()))
     if not goal_valid:
         pos = backtracking_search_from_goal(
             env,
@@ -390,10 +487,10 @@ def mp_to_point(
         )
         goal = ob.State(space)
         goal().setXYZ(*pos[:3])
-        goal().rotation().x = pos[3]
-        goal().rotation().y = pos[4]
-        goal().rotation().z = pos[5]
-        goal().rotation().w = pos[6]
+        goal().rotation().x = 0.
+        goal().rotation().y = 0.
+        goal().rotation().z = 0.
+        goal().rotation().w = 1.
         goal_error = set_robot_based_on_ee_pos(
             env,
             pos[:3],
@@ -555,7 +652,7 @@ class MetaworldEnv(ProxyEnv):
     def check_grasp(
         self,
     ):
-        return check_object_grasp(self)
+        return check_object_grasp(self) or body_check_grasp(self)
 
     def update_done_info_based_on_termination(self, i, d):
         if self.terminal:
@@ -588,7 +685,7 @@ class MetaworldEnv(ProxyEnv):
         # if self.num_steps == self.horizon:
         #     # TODO: remove this
         #     d = True
-        d = self.update_done_info_based_on_termination(i, d)
+        #d = self.update_done_info_based_on_termination(i, d)
         return o, r, d, i
 
     @property
@@ -847,7 +944,12 @@ class MPEnv(MetaworldEnv):
     def get_target_pos_no_planner(
         self,
     ):
-        pose = self._target_pos + np.array([0, 0, 0.15])
+        if self.name == "peg-insert-side-v2":
+            pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
+        elif self.name == "hammer-v2":
+            pose = self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05])
+        else:
+            pose = self._target_pos + np.array([0, 0, 0.15])
         return pose
 
     def clamp_planner_action_mp_space_bounds(self, action):
@@ -962,6 +1064,29 @@ class MPEnv(MetaworldEnv):
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
+            # hardcoded policy for metaworld environments 
+            # if self.name == "hammer-v2" and body_check_grasp(self) and self.hasnt_teleported:
+            #     set_robot_based_on_ee_pos(
+            #         self, 
+            #         self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05]),
+            #         self._eef_xquat,
+            #         self._wrapped_env.sim.data.qpos.copy(),
+            #         self._wrapped_env.sim.data.qvel.copy(),
+            #         True,
+            #     )
+            #     #r += self.compute_reward(action, self._get_obs())[0]
+            #     self.hasnt_teleported = False
+            # if self.name == "peg-insert-side-v2" and body_check_grasp(self) and self.hasnt_teleported:
+            #     set_robot_based_on_ee_pos(
+            #         self, 
+            #         self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045]),
+            #         self._eef_xquat,
+            #         self._wrapped_env.sim.data.qpos.copy(),
+            #         self._wrapped_env.sim.data.qvel.copy(),
+            #         True,
+            #     )
+            #     #r += self._wrapped_env.compute_reward(action, self._get_obs())[0]
+            #     self.hasnt_teleported = False
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_instead_of_mp:

@@ -2,6 +2,7 @@ import numpy as np
 import mujoco_py
 import gym
 from tqdm import tqdm
+from PIL import Image
 from gym import spaces
 import sys
 from rlkit.mprl.hierarchical_policies import StepBasedSwitchingPolicy
@@ -11,6 +12,15 @@ from mopa_rl.config.default_configs import LIFT_CONFIG, LIFT_OBSTACLE_CONFIG, AS
 from rlkit.mopa.mopa_env import *
 import collections 
 import cv2
+def save_img(env, filename):
+    frame = (env.render("rgb_array")*255.0).astype(np.uint8)
+    # plt.imshow(frame)
+    # plt.savefig(filename)
+    # plt.close()
+    img = Image.fromarray(frame, "RGB")
+    img.show()
+    img.save(filename)
+    return 
 
 def print_all_collisions(env):
     mjcontacts = env.sim.data.contact
@@ -62,7 +72,7 @@ def main():
     )
     print("Collisions at end")
     print_all_collisions(env)
-    save_img(env, "new.png")
+    #save_img(env, "new.png")
     # keep pushing towards object
     right_gripper, left_gripper = (
         env.sim.data.get_site_xpos("right_eef"),

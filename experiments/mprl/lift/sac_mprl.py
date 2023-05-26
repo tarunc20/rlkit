@@ -64,7 +64,6 @@ if __name__ == "__main__":
             grip_ctrl_scale=0.0025,
             planning_time=20,
             verify_stable_grasp=True,
-            teleport_on_grasp=True,
         ),
         policy_kwargs=dict(hidden_sizes=(256, 256)),
         qf_kwargs=dict(hidden_sizes=(256, 256)),
@@ -94,6 +93,7 @@ if __name__ == "__main__":
         seed=np.random.randint(0, 1000000),
         version="normal",
         plan_to_learned_goals=False,
+        debug=True,
         num_expl_envs=int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count())),
         planner_num_trains_per_train_loop=1000,
     )

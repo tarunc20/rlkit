@@ -15,8 +15,26 @@ from robosuite.utils.transform_utils import (
     quat_conjugate,
     quat_multiply,
 )
+import time
 from mopa_rl.env.inverse_kinematics import qpos_from_site_pose_sampling, qpos_from_site_pose
 import robosuite.utils.transform_utils as T
+from mopa_rl.config.default_configs import LIFT_CONFIG
+
+try:
+    from ompl import base as ob
+    from ompl import geometric as og
+    from ompl import util as ou
+except ImportError:
+    # if the ompl module is not in the PYTHONPATH assume it is installed in a
+    # subdirectory of the parent directory called "py-bindings."
+    import sys
+    from os.path import abspath, dirname, join
+
+    #sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+    sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
+    from ompl import base as ob
+    from ompl import geometric as og
+    from ompl import util as ou
 
 LIFT_ROBOT_BODIES = [
     'base', 'controller_box',
@@ -49,8 +67,8 @@ def save_img(env, filename="test.png"):
     plt.savefig(filename)
 
 def get_object_name(env_name):
-    if env_name == "SawyerLift-v0" or env_name == "SawyerLiftObstacle-v0":
-        return cube 
+    if env_name == "SawyerLift-v0" or env_name == "SawyerLiftObstacle-v0" or env_name == "SawyerPushObstacle-v0":
+        return "cube" 
     elif env_name == "SawyerAssemblyObstacle-v0":
         return None 
     else:
@@ -130,6 +148,8 @@ def check_grasp(env, name):
         return touch_left_finger and touch_right_finger 
     if name == "SawyerAssemblyObstacle-v0":
         return False # there is no sense of grasping in the assembly environment so return false
+    if name == "SawyerPushObstacle-v0":
+        return False
     else:
         raise NotImplementedError
 
@@ -144,6 +164,7 @@ def check_collisions(env, allowed_collision_pairs, env_name):
         b2 = env.sim.model.geom_bodyid[ct2]
         bn1 = env.sim.model.body_id2name(b1)
         bn2 = env.sim.model.body_id2name(b2)
+        #print(f"ct1:{ct1} ct2:{ct2} b1:{bn1} b2:{bn2}")
         # robot bodies checking allows robot to collide with itself
         # useful for going up when grasping
         if env_name == "SawyerLift-v0" or env_name == "SawyerLiftObstacle-v0":
@@ -154,6 +175,7 @@ def check_collisions(env, allowed_collision_pairs, env_name):
             ((ct2, ct1) in allowed_collision_pairs):
                 continue 
             else:
+                print("Returning true!")
                 return True
     else:
         return False 
@@ -176,7 +198,7 @@ def set_robot_based_on_ee_pos(
     Args:
         env: Gym environment
         ac: OrderedDict - should have keys 'default' and optionally 'quat'
-            corresponding to target xyz and quat
+            corresponding to target xyz and quat (where quat is in wxyz format)
         ik_env: Gym environment - copy of env where ik algorithm is run
         qpos: canonical pose to reset to when running IK
         qvel: same as above
@@ -186,14 +208,20 @@ def set_robot_based_on_ee_pos(
         (success, err_norm), where success is if ik is successful, err_norm
             is how far we are from desired target
     """
+    start = time.time()
     # keep track of gripper pos, etc
     gripper_qpos = env.sim.data.qpos[env.ref_gripper_joint_pos_indexes].copy()
     gripper_qvel = env.sim.data.qvel[env.ref_gripper_joint_pos_indexes].copy()
     old_eef_xpos, old_eef_xquat = get_site_pose(env, config['ik_target'])
     object_pose = get_object_pose(env, target_object).copy()
+    # target_cart = np.clip(
+    #     env.sim.data.get_site_xpos(config["ik_target"])[: len(env.min_world_size)]
+    #     + ac["default"],
+    #     env.min_world_size,
+    #     env.max_world_size,
+    # )
     target_cart = np.clip(
-        env.sim.data.get_site_xpos(config["ik_target"])[: len(env.min_world_size)]
-        + ac["default"],
+        ac["default"],
         env.min_world_size,
         env.max_world_size,
     )
@@ -201,7 +229,7 @@ def set_robot_based_on_ee_pos(
         target_quat = ac["quat"]
     else:
         target_quat = None
-    ik_env.set_state(env.sim.data.qpos.copy(), env.sim.data.qvel.copy())
+    ik_env.set_state(qpos, qvel) # check this doesn't break anything 
     result = qpos_from_site_pose(
         ik_env,
         config["ik_target"],
@@ -212,7 +240,7 @@ def set_robot_based_on_ee_pos(
         max_steps=100,
         tol=1e-2,
     )
-    # return false if stuff doesn't work
+    #save_img(ik_env, "set_state.png")
     if result.success == False or check_collisions(ik_env, allowed_collision_pairs, env_name):
         return result.success and not check_collisions(ik_env, allowed_collision_pairs, env_name), result.err_norm
     # set state here 
@@ -236,6 +264,174 @@ def set_robot_based_on_ee_pos(
         set_object_pose(env, target_object, new_object_pose[0], new_object_pose[1])
         env.sim.forward()
     return result.success, result.err_norm
+
+def mp_to_point(
+    env,
+    ac,
+    ik_env,
+    qpos,
+    qvel,
+    allowed_collision_pairs,
+    is_grasped=False,
+    ignore_object_collision=False,
+    planning_time=1,
+    get_intermediate_frames=False,
+    backtrack_movement_fraction=0.01,
+    env_name="SawyerLift-v0",
+):
+    qpos_curr = env.sim.data.qpos.copy()
+    qvel_curr = env.sim.data.qvel.copy()
+
+    # consider original xpos and xquat
+    og_eef_xpos, og_eef_xquat = get_site_pose(env, "grip_site")
+    #og_eef_xpos = np.zeros(3, dtype=np.float64) # og_eef_xpos.astype(np.float64)
+    og_eef_xquat /= np.linalg.norm(og_eef_xquat)
+    # convert quats 
+    og_eef_xquat = convert_quat(og_eef_xquat, to="wxyz").astype(np.float64)
+    if "quat" in ac.keys():
+        ac["quat"] = ac["quat"].astype(np.float64)
+        # ac["quat"] = convert_quat(ac["quat"], to="wxyz") -> ignore for now, already in wxyz format
+
+    # think about case where we don't have ac["quat"] -> maybe can just fix this for 
+    # the pusher task
+    def isStateValid(state):
+        # get pos
+        pos = np.array([state.getX(), state.getY(), state.getZ()])
+        # get quat
+        quat = np.array(
+            [
+                state.rotation().w,
+                state.rotation().x,
+                state.rotation().y,
+                state.rotation().z,
+            ]
+        )
+        if all(pos == og_eef_xpos) and all(quat == og_eef_xquat):
+            # start state is always valid.
+            return True
+        else:
+            # define action correctly in terms of state
+            action = collections.OrderedDict()
+            action["default"] = pos # pos should be a delta to the goal, not the goal itself 
+            action["quat"] = quat
+            #print(f"Action: {action['default']}")
+            result, err_norm = set_robot_based_on_ee_pos(
+                env,
+                action,
+                ik_env,
+                qpos,
+                qvel, 
+                is_grasped,
+                get_object_name(env_name),
+                LIFT_CONFIG, # change this later
+                allowed_collision_pairs,
+                env_name,
+            )
+            #save_img(ik_env, "test.png")
+            return result # note result also keeps track of whether there was a collision or not
+    
+    # create an SE3 state space
+    space = ob.SE3StateSpace()
+
+    # set lower and upper bounds
+    bounds = ob.RealVectorBounds(3)
+    # compare bounds to start state
+    bounds_low = env.min_world_size
+    bounds_high = env.max_world_size 
+    #bounds_low = np.minimum(bounds_low, og_eef_xpos)
+    #bounds_high = np.maximum(bounds_high, og_eef_xpos)
+    bounds_low = np.array([-5., -5., -5.])
+    bounds_high = np.array([5., 5., 5.])
+
+    bounds.setLow(0, bounds_low[0])
+    bounds.setLow(1, bounds_low[1])
+    bounds.setLow(2, bounds_low[2])
+    bounds.setHigh(0, bounds_high[0])
+    bounds.setHigh(1, bounds_high[1])
+    bounds.setHigh(2, bounds_high[2])
+    space.setBounds(bounds)
+
+     # construct an instance of space information from this state space
+    si = ob.SpaceInformation(space)
+    # set state validity checking for this space
+    si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
+    si.setStateValidityCheckingResolution(0.001)  # default of 0.01 is too coarse
+    # divide by norm again to make sure
+    og_eef_xquat /= np.linalg.norm(og_eef_xquat)
+    ac["quat"] /= np.linalg.norm(ac["quat"])
+    # create a random start state
+    start = ob.State(space)
+    start().setXYZ(*og_eef_xpos)
+    start().rotation().w = og_eef_xquat[0]
+    start().rotation().x = og_eef_xquat[1]
+    start().rotation().y = og_eef_xquat[2]
+    start().rotation().z = og_eef_xquat[3]
+
+    goal = ob.State(space)
+    goal().setXYZ(*ac["default"])
+    goal().rotation().w = ac["quat"][0]
+    goal().rotation().x = ac["quat"][1]
+    goal().rotation().y = ac["quat"][2]
+    goal().rotation().z = ac["quat"][3]
+    goal_valid = isStateValid(goal())
+    print(f"Start state: {[start().getX(), start().getY(), start().getZ()]}")
+    print(f"Start satisfies bounds: {space.satisfiesBounds(start())}")
+    print(f"Goal satisfies bounds: {space.satisfiesBounds(goal())}")
+    print(f"Start state is valid: {isStateValid(start())}")
+    print(f"Goal state is valid: {isStateValid(goal())}")
+    # implement if not goal_valid but ignoring for now 
+    # create a problem instance
+    pdef = ob.ProblemDefinition(si)
+    # set the start and goal states
+    pdef.setStartAndGoalStates(start, goal)
+    # create a planner for the defined space
+    planner = og.RRTConnect(si)
+    # set the problem we are trying to solve for the planner
+    planner.setProblemDefinition(pdef)
+    planner.setRange(0.05)
+    # perform setup steps for the planner
+    planner.setup()
+    # attempt to solve the problem within planning_time seconds of planning time
+    intermediate_frames = []
+    solved = planner.solve(planning_time)
+    print(f"Solved??: {solved}")
+    if solved:
+        path = pdef.getSolutionPath()
+        #success = og.PathSimplifier(si).simplify(path, 1.0)
+        print(f"Simplified path")
+        converted_path = []
+        for s, state in enumerate(path.getStates()):
+            new_state = [
+                state.getX(),
+                state.getY(),
+                state.getZ(),
+                state.rotation().w,
+                state.rotation().x,
+                state.rotation().y,
+                state.rotation().z,
+            ]
+            converted_path.append(new_state)
+        env.reset()
+        env.sim.data.qpos[:] = qpos_curr.copy()
+        env.sim.data.qvel[:] = qvel_curr.copy()
+        env.sim.forward()
+        for state in converted_path:
+            ac = collections.OrderedDict()
+            ac["default"] = state[:3]
+            print(f"State: {state}")
+            ac["quat"] = state[3:]
+            set_robot_based_on_ee_pos(
+                env,
+                ac,
+                ik_env,
+                env.sim.data.qpos.copy(),
+                env.sim.data.qvel.copy(),
+                False,
+                "cube",
+                LIFT_CONFIG,
+                allowed_collision_pairs
+            )
+
 
 def backtracking_search_from_goal(
     env, 
@@ -490,6 +686,30 @@ class MoPAMPEnv():
                 self.name,
             )
             return None
+        else:
+            right_gripper, left_gripper = (
+                self._wrapped_env.sim.data.get_site_xpos("right_eef"),
+                self._wrapped_env.sim.data.get_site_xpos("left_eef"),
+            )
+            gripper_site_pos = (right_gripper + left_gripper) / 2.0
+            cube_pos = np.array(self._wrapped_env.sim.data.body_xpos[self._wrapped_env.cube_body_id])
+            target_ac = cube_pos - gripper_site_pos + np.array([-0.05, 0.05, 0.06])
+            ac = collections.OrderedDict()
+            ac['default'] = target_ac 
+            result, err_norm = set_robot_based_on_ee_pos(
+                self._wrapped_env,
+                ac,
+                self.ik_env, 
+                self._wrapped_env.sim.data.qpos.copy(),
+                self._wrapped_env.sim.data.qvel.copy(),
+                False,
+                "cube",
+                self.config,
+                self.allowed_collision_pairs,
+                self.name,
+            )
+            assert result
+            return None
             
     def get_target_pos_no_planner(self):
         if self.name == "SawyerLift-v0":
@@ -500,7 +720,7 @@ class MoPAMPEnv():
             raise NotImplementedError
 
     def _check_success(self):
-        if self.name == "SawyerLift-v0":
+        if self.name == "SawyerLift-v0" or self.name == "SawyerLiftObstacle-v0":
             # copied from sawyer_lift_obstacle.py
             info = {}
             reward = 0
@@ -572,6 +792,11 @@ class MoPAMPEnv():
                 success = True
                 terminal = True
             return success
+        elif self.name == "SawyerPushObstacle-v0":
+            self._wrapped_env.compute_reward(None)
+            success = self._wrapped_env._success
+            return success
+
 
     def check_grasp(self):
         return check_grasp(self._wrapped_env, self.name)
