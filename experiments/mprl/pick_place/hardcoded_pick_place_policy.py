@@ -14,6 +14,7 @@ if __name__ == "__main__":
     mp_env_kwargs = dict(
         vertical_displacement=0.08,
         teleport_instead_of_mp=False,
+        use_joint_space_mp=True,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
         mp_bounds_high=(0.45, 0.85, 2.25),
@@ -27,7 +28,7 @@ if __name__ == "__main__":
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
-        hardcoded_orientations=True,
+        hardcoded_orientations=False,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -39,25 +40,6 @@ if __name__ == "__main__":
         # valid_obj_names=["Cereal", "Milk", "Can", "Bread"],
         reward_scale=4.0,
     )
-    # OSC controller spec
-    # controller_args = dict(
-    #     type="OSC_POSE",
-    #     input_max=1,
-    #     input_min=-1,
-    #     output_max=[0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
-    #     output_min=[-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
-    #     kp=150,
-    #     damping=1,
-    #     impedance_mode="fixed",
-    #     kp_limits=[0, 300],
-    #     damping_limits=[0, 10],
-    #     position_limits=None,
-    #     orientation_limits=None,
-    #     uncouple_pos_ori=True,
-    #     control_delta=True,
-    #     interpolation=None,
-    #     ramp_ratio=0.2,
-    # )
     controller_configs = dict(
         type="OSC_POSE",
         input_max=1,
@@ -91,11 +73,12 @@ if __name__ == "__main__":
     np.random.seed(0)
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
     # env = RobosuiteEnv(GymWrapper(env), terminate_on_success=True)
-    num_episodes = 1
+    num_episodes = 10
     total = 0
     ptu.device = torch.device("cuda")
     success_rate = 0
     frames = []
+    env.intermediate_frames = []
     for s in tqdm(range(num_episodes)):
         o = env.reset(get_intermediate_frames=True)
         print(env._eef_xpos, env._eef_xquat)
@@ -223,5 +206,6 @@ if __name__ == "__main__":
         # plt.show()
         success_rate += env._check_success()
         print(env._check_success())
+        print("Running Success Rate: ", success_rate / (s + 1))
     print(f"Success Rate: {success_rate/num_episodes}")
     make_video(frames, "videos", 0, use_wandb=False)
