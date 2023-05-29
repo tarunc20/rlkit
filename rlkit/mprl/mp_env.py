@@ -291,6 +291,22 @@ def rebuild_controller(env, default_controller_configs):
     osc_ctrl.reset_goal()
     env.robots[0].controller = osc_ctrl
 
+def compute_ik(env, target_pos, target_quat, ik, qpos, qvel, og_qpos, og_qvel):
+    # reset to canonical state before doing IK
+    env.sim.data.qpos[:7] = qpos[:7]
+    env.sim.data.qvel[:7] = qvel[:7]
+    env.sim.forward()
+
+    ik.sync_state()
+    cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
+    pos_diff = target_pos - env._eef_xpos
+    rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
+    joint_pos = np.array(ik.joint_positions_for_eef_command(pos_diff, rot_diff))
+
+    env.sim.data.qpos = og_qpos 
+    env.sim.data.qvel = og_qvel
+    env.sim.forward()
+    return joint_pos
 
 def set_robot_based_on_ee_pos(
     env,
@@ -316,17 +332,10 @@ def set_robot_based_on_ee_pos(
     gripper_qvel = env.sim.data.qvel[7:9].copy()
     old_eef_xquat = env._eef_xquat.copy()
     old_eef_xpos = env._eef_xpos.copy()
+    og_qpos = env.sim.data.qpos.copy()
+    og_qvel = env.sim.data.qvel.copy()
 
-    # reset to canonical state before doing IK
-    env.sim.data.qpos[:7] = qpos[:7]
-    env.sim.data.qvel[:7] = qvel[:7]
-    env.sim.forward()
-
-    ik.sync_state()
-    cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
-    pos_diff = target_pos - env._eef_xpos
-    rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
-    joint_pos = ik.joint_positions_for_eef_command(pos_diff, rot_diff)
+    joint_pos = compute_ik(env, target_pos, target_quat, ik, qpos, qvel, og_qpos, og_qvel)
     env.robots[0].set_robot_joint_positions(joint_pos)
     assert (
         env.sim.data.qpos[:7] - joint_pos
@@ -871,12 +880,12 @@ def check_linear_interpolation(
         if not valid:
             return False, None
     intermediate_frames = []
-    update_controller_config(env, env.jp_controller_config)
-    jp_ctrl = controller_factory("JOINT_POSITION", env.jp_controller_config)
     env._wrapped_env.reset()
     env.sim.data.qpos[:] = og_qpos.copy()
     env.sim.data.qvel[:] = og_qvel.copy()
     env.sim.forward()
+    update_controller_config(env, env.jp_controller_config)
+    jp_ctrl = controller_factory("JOINT_POSITION", env.jp_controller_config)
     for _ in range(50):
         policy_step = True
         # change action action limits if this doesn't always work
@@ -919,6 +928,7 @@ def mp_to_point_joint(
     get_intermediate_frames=False,
     backtrack_movement_fraction=0.001,
     default_controller_configs=None,
+    open_gripper=False,
 ):
     og_qpos = env.sim.data.qpos.copy()
     og_qvel = env.sim.data.qvel.copy()
@@ -957,12 +967,11 @@ def mp_to_point_joint(
             return valid
 
     # get target angles to achieve position
-    ik_ctrl.sync_state()
-    cur_rot_inv = quat_conjugate(env._eef_xquat.copy())
-    pos_diff = target_xyz - env._eef_xpos
-    rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
-    target_angles = ik_ctrl.joint_positions_for_eef_command(pos_diff, rot_diff)
-
+    target_angles = compute_ik(env, target_xyz, target_quat, ik_ctrl, qpos, qvel, og_qpos, og_qvel).astype(np.float64)
+    # print(target_xyz)
+    # print(target_quat)
+    # print(target_angles)
+    # print()
     # set up planning space for ompl
     space = ob.RealVectorStateSpace(7)
     bounds = ob.RealVectorBounds(7)
@@ -996,15 +1005,13 @@ def mp_to_point_joint(
         # maybe modify later
         target_angles = backtracking_search_from_goal_joints(
             env,
-            pos,
-            ik_ctrl,
             ignore_object_collision,
             og_qpos[:7],
             target_angles,
             qpos,
             qvel,
-            is_grasped=grasp,
             movement_fraction=backtrack_movement_fraction,
+            is_grasped=grasp,
             default_controller_configs=default_controller_configs,
         )
         for i in range(7):
@@ -1098,6 +1105,15 @@ def mp_to_point_joint(
                 action = np.concatenate([(state - env.sim.data.qpos[:7]), [grip_val]])
                 if np.linalg.norm(action) < 1e-3:
                     break
+                # tgt = start_angles + (state - start_angles) * (step / 50)
+                # set_robot_based_on_joint_angles(
+                #     env,
+                #     tgt,
+                #     qpos,
+                #     qvel,
+                #     is_grasped=grasp,
+                #     default_controller_configs=default_controller_configs,
+                # )
                 for i in range(int(env.control_timestep // env.model_timestep)):
                     env.sim.forward()
                     apply_controller(jp_ctrl, action, env.robots[0], policy_step)
@@ -1115,6 +1131,13 @@ def mp_to_point_joint(
         if get_intermediate_frames:
             env.intermediate_frames = intermediate_frames
         env.mp_mse = 0
+        if open_gripper:
+            for i in range(int(env.control_timestep // env.model_timestep)):
+                env.sim.forward()
+                action = np.array([0, 0, 0, 0, 0, 0, 0, -1])
+                apply_controller(jp_ctrl, action, env.robots[0], True)
+                env.sim.step()
+                env._update_observables()
     else:
         print(f"Failed solve")
         env._wrapped_env.reset()
@@ -1598,6 +1621,7 @@ class MPEnv(RobosuiteEnv):
                         get_intermediate_frames=get_intermediate_frames,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                         default_controller_configs=self.controller_configs,
+                        open_gripper=True,
                     )
                 else:
                     mp_to_point(
@@ -1791,7 +1815,7 @@ class MPEnv(RobosuiteEnv):
                             self,
                             self.ik_controller_config,
                             self.jp_controller_config,
-                            np.concatenate((target_pos, self.reset_ori)).astype(
+                            np.concatenate((target_pos, target_quat)).astype(
                                 np.float64
                             ),
                             qpos=self.reset_qpos,
@@ -1802,13 +1826,14 @@ class MPEnv(RobosuiteEnv):
                             get_intermediate_frames=get_intermediate_frames,
                             backtrack_movement_fraction=self.backtrack_movement_fraction,
                             default_controller_configs=self.controller_configs,
+                            open_gripper=open_gripper_on_tp,
                         )
                     else:
                         mp_to_point(
                             self,
                             self.ik_controller_config,
                             self.osc_controller_config,
-                            np.concatenate((target_pos, self.reset_ori)).astype(
+                            np.concatenate((target_pos, target_quat)).astype(
                                 np.float64
                             ),
                             qpos=self.reset_qpos,
