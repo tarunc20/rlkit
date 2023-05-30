@@ -303,6 +303,9 @@ def compute_ik(env, target_pos, target_quat, ik, qpos, qvel, og_qpos, og_qvel):
     rot_diff = quat2mat(quat_multiply(target_quat, cur_rot_inv))
     joint_pos = np.array(ik.joint_positions_for_eef_command(pos_diff, rot_diff))
 
+    # clip joint positions to be within joint limits
+    joint_pos = np.clip(joint_pos, env.sim.model.jnt_range[:7, 0], env.sim.model.jnt_range[:7, 1])
+
     env.sim.data.qpos = og_qpos 
     env.sim.data.qvel = og_qvel
     env.sim.forward()
@@ -473,20 +476,21 @@ def backtracking_search_from_goal_joints(
     movement_fraction,
     is_grasped,
     default_controller_configs,
+    obj_idx=0,
 ):
     curr_angles = goal_angles.copy()
     set_robot_based_on_joint_angles(
-        env, goal_angles, qpos, qvel, is_grasped, default_controller_configs
+        env, goal_angles, qpos, qvel, is_grasped, default_controller_configs, obj_idx=obj_idx
     )
-    collision = check_robot_collision(env, ignore_object_collision)
+    collision = check_robot_collision(env, ignore_object_collision, obj_idx=obj_idx)
     iters = 0
     max_iters = int(1 / movement_fraction)
     while collision and iters < max_iters:
         curr_angles = curr_angles - movement_fraction * (goal_angles - start_angles)
         error = set_robot_based_on_joint_angles(
-            env, curr_angles, qpos, qvel, is_grasped, default_controller_configs
+            env, curr_angles, qpos, qvel, is_grasped, default_controller_configs, obj_idx=obj_idx
         )
-        collision = check_robot_collision(env, ignore_object_collision)
+        collision = check_robot_collision(env, ignore_object_collision, obj_idx=obj_idx)
         iters += 1
     if collision:
         return start_angles
@@ -865,17 +869,18 @@ def check_linear_interpolation(
     default_controller_configs=None,
     ignore_object_collision=False,
     is_grasped=False,
+    obj_idx=0,
 ):
     curr_angles = og_qpos[:7]
     intermediate_frames = []
     for i in range(1, int(1 / checkpoint_frac) + 1):
         curr_pos = curr_angles + (target_angles - curr_angles) * (i * checkpoint_frac)
         set_robot_based_on_joint_angles(
-            env, curr_pos, qpos, qvel, is_grasped, default_controller_configs
+            env, curr_pos, qpos, qvel, is_grasped, default_controller_configs, obj_idx=obj_idx
         )
         # fix ignore object collision to be the value passed in mp_to_point
         valid = not check_robot_collision(
-            env, ignore_object_collision=ignore_object_collision
+            env, ignore_object_collision=ignore_object_collision, obj_idx=obj_idx
         )
         if not valid:
             return False, None
@@ -929,6 +934,7 @@ def mp_to_point_joint(
     backtrack_movement_fraction=0.001,
     default_controller_configs=None,
     open_gripper=False,
+    obj_idx=0,
 ):
     og_qpos = env.sim.data.qpos.copy()
     og_qvel = env.sim.data.qvel.copy()
@@ -948,26 +954,28 @@ def mp_to_point_joint(
         joint_pos = np.zeros(7)
         for i in range(7):
             joint_pos[i] = state[i]
-        if all(joint_pos == og_qpos[:7]):
-            # start state is always valid.
-            return True
-        else:
-            # TODO; if it was grasping before ik and not after automatically set to invalid
-            set_robot_based_on_joint_angles(
-                env,
-                joint_pos,
-                qpos,
-                qvel,
-                grasp,
-                default_controller_configs,
-            )
-            valid = not check_robot_collision(
-                env, ignore_object_collision=ignore_object_collision
-            )
-            return valid
+        # if all(joint_pos == og_qpos[:7]):
+        #     # start state is always valid.
+        #     return True
+        # else:
+        # TODO; if it was grasping before ik and not after automatically set to invalid
+        set_robot_based_on_joint_angles(
+            env,
+            joint_pos,
+            qpos,
+            qvel,
+            grasp,
+            default_controller_configs,
+            obj_idx=obj_idx,
+        )
+        valid = not check_robot_collision(
+            env, ignore_object_collision=ignore_object_collision, obj_idx=obj_idx
+        )
+        return valid
 
     # get target angles to achieve position
     target_angles = compute_ik(env, target_xyz, target_quat, ik_ctrl, qpos, qvel, og_qpos, og_qvel).astype(np.float64)
+    # clamp target angles to be within joint limits
     # print(target_xyz)
     # print(target_quat)
     # print(target_angles)
@@ -1000,6 +1008,7 @@ def mp_to_point_joint(
         qvel,
         is_grasped=grasp,
         default_controller_configs=default_controller_configs,
+        obj_idx=obj_idx,
     )
     if not goal_valid:
         # maybe modify later
@@ -1013,6 +1022,7 @@ def mp_to_point_joint(
             movement_fraction=backtrack_movement_fraction,
             is_grasped=grasp,
             default_controller_configs=default_controller_configs,
+            obj_idx=obj_idx,
         )
         for i in range(7):
             goal()[i] = target_angles[i]
@@ -1028,11 +1038,12 @@ def mp_to_point_joint(
         qvel,
         og_qpos,
         og_qvel,
-        checkpoint_frac=0.001,
+        checkpoint_frac=0.0001,
         get_intermediate_frames=get_intermediate_frames,
         default_controller_configs=default_controller_configs,
         ignore_object_collision=ignore_object_collision,
         is_grasped=grasp,
+        obj_idx=obj_idx,
     )
     if success:
         print(f"Linear Interpolation Worked")
@@ -1084,6 +1095,7 @@ def mp_to_point_joint(
                 qvel,
                 is_grasped=grasp,
                 default_controller_configs=default_controller_configs,
+                obj_idx=obj_idx,
             )
             im = env.get_image()
             cv2.imwrite("test_{i}.png".format(i=i), im)
@@ -1105,15 +1117,6 @@ def mp_to_point_joint(
                 action = np.concatenate([(state - env.sim.data.qpos[:7]), [grip_val]])
                 if np.linalg.norm(action) < 1e-3:
                     break
-                # tgt = start_angles + (state - start_angles) * (step / 50)
-                # set_robot_based_on_joint_angles(
-                #     env,
-                #     tgt,
-                #     qpos,
-                #     qvel,
-                #     is_grasped=grasp,
-                #     default_controller_configs=default_controller_configs,
-                # )
                 for i in range(int(env.control_timestep // env.model_timestep)):
                     env.sim.forward()
                     apply_controller(jp_ctrl, action, env.robots[0], policy_step)
@@ -1123,10 +1126,10 @@ def mp_to_point_joint(
                     im = env.get_image()
                     add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
                     intermediate_frames.append(im)
-        print(f"True target: {target_angles}")
-        print(
-            f"Error: {np.linalg.norm(np.concatenate((env._eef_xpos, env._eef_xquat)) - pos)**2}"
-        )
+        # print(f"True target: {target_angles}")
+        # print(
+        #     f"Error: {np.linalg.norm(np.concatenate((env._eef_xpos, env._eef_xquat)) - pos)**2}"
+        # )
         print(f"XYZ distance: {np.linalg.norm(env._eef_xpos - pos[:3])}")
         if get_intermediate_frames:
             env.intermediate_frames = intermediate_frames
@@ -1146,6 +1149,7 @@ def mp_to_point_joint(
         env.sim.forward()
         env.goal_error = 0
         env.num_failed_solves += 1
+        intermediate_frames = []
     env.intermediate_frames = intermediate_frames
     rebuild_controller(env, default_controller_configs)
     return env._get_observations()
@@ -1770,17 +1774,17 @@ class MPEnv(RobosuiteEnv):
                         )
                         take_planner_step = (
                             bool(self.objects_in_bins[new_obj_idx])
-                            and not self.check_grasp()
+                            and not is_grasped and not check_robot_collision(self, False)
                         )
                     elif "NutAssembly" in self.name:
                         # only take planner step if current nut is full placed on the peg
                         take_planner_step = (
                             bool(self.objects_on_pegs[1 - self.obj_idx])
-                            and not self.check_grasp()
+                            and not is_grasped and not check_robot_collision(self, False)
                         )
                     else:
                         take_planner_step = (
-                            not self.check_grasp()
+                            not is_grasped and not check_robot_collision(self, False)
                         )  # want to move on only after we are not in contact at all anymore
                     if take_planner_step:
                         open_gripper_on_tp = True
@@ -1827,6 +1831,7 @@ class MPEnv(RobosuiteEnv):
                             backtrack_movement_fraction=self.backtrack_movement_fraction,
                             default_controller_configs=self.controller_configs,
                             open_gripper=open_gripper_on_tp,
+                            obj_idx=self.obj_idx,
                         )
                     else:
                         mp_to_point(
