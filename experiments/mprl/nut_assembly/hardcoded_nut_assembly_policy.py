@@ -38,7 +38,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="NutAssemblyRound",
+        env_name="NutAssembly",
         reward_scale=2.0,
         horizon=500,
     )
@@ -118,48 +118,53 @@ if __name__ == "__main__":
             frames.append(env.get_image())
         for i in range(10):
             a = np.concatenate(([0, 0, 0], [0, 0, 0, -1]))
-            o, r, d, info = env.step(a)
+            o, r, d, info = env.step(a, get_intermediate_frames=True)
+            if len(env.intermediate_frames) > 0:
+                for frame in env.intermediate_frames:
+                    frames.append(frame)
+                env.intermediate_frames = []
             rs.append(r)
             # env.render()
             frames.append(env.get_image())
 
-        # for i in range(25):
-        #     a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     # env.render()
-        #     frames.append(env.get_image())
-        # for i in range(15):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     # env.render()
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a, get_intermediate_frames=True)
-        #     if len(env.intermediate_frames) > 0:
-        #         for frame in env.intermediate_frames:
-        #             frames.append(frame)
-        #         env.intermediate_frames = []
-        #     rs.append(r)
-        #     # env.render()
-        #     frames.append(env.get_image())
-        # for i in range(40):
-        #     a = np.concatenate(([0, 0, -0.3], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     # env.render()
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     # env.render()
-        #     frames.append(env.get_image())
+        for i in range(25):
+            a = np.concatenate(([0, 0, -0.2], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(15):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a, get_intermediate_frames=True)
+            if len(env.intermediate_frames) > 0:
+                for frame in env.intermediate_frames:
+                    frames.append(frame)
+                env.intermediate_frames = []
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(40):
+            a = np.concatenate(([0, 0, -0.3], [0, 0, 0, 1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
+        for i in range(10):
+            a = np.concatenate(([0, 0, 0], [0, 0, 0, -1]))
+            o, r, d, info = env.step(a)
+            rs.append(r)
+            # env.render()
+            frames.append(env.get_image())
         print(env._check_success())
         plt.plot(rs)
         # plt.savefig(f"plots/{s}.png")
         success_rate += env._check_success()
+        print("Running success rate: ", success_rate / (s + 1))
     print(f"Success Rate: {success_rate/num_episodes}")
     make_video(frames, "videos", 1, use_wandb=False)
