@@ -203,10 +203,11 @@ class MetaworldWrapper(gym.Wrapper):
                 use_wrist_cam=self.use_wrist_cam,
             )
         else:
-            img = self.env.sim.render(
-                imwidth=self.imwidth,
-                imheight=self.imheight,
-            )
+            # img = self.env.sim.render(
+            #     # imwidth=self.imwidth,
+            #     # imheight=self.imheight,
+            # )
+            img = np.zeros((self.imheight, self.imwidth, 3))
 
         img = img.transpose(2, 0, 1).flatten()
         return img
@@ -569,11 +570,16 @@ class SawyerXYZEnvMetaworldPrimitives(SawyerXYZEnv):
         if self.render_every_step:
             if self.render_mode == "rgb_array":
                 self.img_array.append(
+                    # self.render(
+                    #     self.render_mode,
+                    #     self.render_im_shape[0],
+                    #     self.render_im_shape[1],
+                    #     use_wrist_cam=self.use_wrist_cam,
+                    # )
                     self.render(
-                        self.render_mode,
-                        self.render_im_shape[0],
-                        self.render_im_shape[1],
-                        use_wrist_cam=self.use_wrist_cam,
+                        "rgb_array",
+                        camera_name="gripperPOV" if self.use_wrist_cam else "corner",
+                        resolution=(self.render_im_shape[0], self.render_im_shape[1])
                     )
                 )
             else:
