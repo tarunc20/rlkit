@@ -749,8 +749,12 @@ class RobosuiteWrapper(GymWrapper):
 
     def reset(self):
         o = super().reset()
-        o = self.env.render(
-            render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
+        # o = self.env.render(
+        #     render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
+        # )
+        o = self.env.sim.render(
+            height=self.imheight,
+            width=self.imwidth,
         )
         o = (
             o.reshape(self.imwidth, self.imheight, 3)[:, :, ::-1]
@@ -768,8 +772,12 @@ class RobosuiteWrapper(GymWrapper):
     ):
         self.env.set_render_every_step(render_every_step, render_mode, render_im_shape)
         obs, reward, done, info = super().step(action)
-        o = self.env.render(
-            render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
+        # o = self.env.render(
+        #     render_mode="rgb_array", imheight=self.imheight, imwidth=self.imwidth
+        # )
+        o = self.env.sim.render(
+            height=self.imheight,
+            width=self.imwidth,
         )
         self.env.unset_render_every_step()
         new_info = {}
@@ -967,10 +975,14 @@ class RobosuitePrimitives(DMControlBackendRobosuiteEnv):
         if self.render_every_step:
             if self.render_mode == "rgb_array":
                 self.img_array.append(
-                    self.render(
-                        self.render_mode,
-                        self.render_im_shape[0],
-                        self.render_im_shape[1],
+                    # self.render(
+                    #     self.render_mode,
+                    #     self.render_im_shape[0],
+                    #     self.render_im_shape[1],
+                    # )
+                    self.sim.render(
+                        height=self.render_im_shape[0],
+                        width=self.render_im_shape[1],
                     )
                 )
             else:
@@ -1092,7 +1104,7 @@ class RobosuitePrimitives(DMControlBackendRobosuiteEnv):
     def break_apart_action(self, action):
         broken_a = {}
         for key, value in self.primitive_name_to_action_idx.items():
-            broken_a[key] = a[value]
+            broken_a[key] = action[value]
         return broken_a
 
     def act(self, action):

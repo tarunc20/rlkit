@@ -15,7 +15,8 @@ def make_base_robosuite_env(env_name, kwargs, use_dm_backend=True):
         suite.environments.robot_env.RobotEnv.__bases__ = (RobosuitePrimitives,)
     RobosuitePrimitives._use_dm_backend = use_dm_backend
     if kwargs["has_offscreen_renderer"]:
-        keys = ["image-state"]
+        #keys = ["image-state"]
+        keys = None # image state is outdated
     else:
         keys = None
     reset_action_space_kwargs = kwargs.get("reset_action_space_kwargs", {})
