@@ -2,7 +2,7 @@ import copy
 import io
 import os
 import xml.etree.ElementTree as ET
-
+from plantcv import plantcv as pcv
 import cv2
 import gym
 import numpy as np
@@ -17,6 +17,7 @@ from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
 import open3d as o3d
 from urdfpy import URDF
+from plantcv import plantcv as pcv
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
@@ -83,6 +84,119 @@ def compute_correct_obj_idx(env, obj_idx=0):
     return obj_idx
 
 
+def compute_object_pcd(
+    env,
+    grasp_pose=True,
+    obj_idx=0,
+):
+    name = env.name.split("_")[1]
+    object_pts = []
+    camera_names = ["agentview", "sideview"]
+    for camera_name in camera_names:
+        camera_height = 480
+        camera_width = 640
+        sim = env.sim
+        segmentation_map = CU.get_camera_segmentation(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        depth_map = get_camera_depth(
+            sim=sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        depth_map = np.expand_dims(
+            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+        )
+
+        # get camera matrices
+        world_to_camera = CU.get_camera_transform_matrix(
+            sim=env.sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        camera_to_world = np.linalg.inv(world_to_camera)
+
+        # get robot segmentation mask
+        geom_ids = np.unique(segmentation_map[:, :, 1])
+        object_ids = []
+        if grasp_pose:
+            object_string = get_object_string(env, obj_idx=obj_idx)
+            if "Door" in name:
+                object_string = "handle"
+        else:
+            if "NutAssembly" in name:
+                if name.endswith("Square"):
+                    object_string = "peg1"
+                elif name.endswith("Round"):
+                    object_string = "peg2"
+                else:
+                    if obj_idx == 0:
+                        object_string = "peg2"
+                    else:
+                        object_string = "peg1"
+            if "PickPlace" in name:
+                object_string = "full_bin"
+        for i, geom_id in enumerate(geom_ids):
+            geom_name = sim.model.geom_id2name(geom_id)
+            if geom_name is None or geom_name.startswith("Visual"):
+                continue
+            if object_string in geom_name:
+                if "NutAssembly" in name and grasp_pose:
+                    if name.endswith("Square"):
+                        target_geom_id = "g4_visual"
+                    elif name.endswith("Round"):
+                        target_geom_id = "g8_visual"
+                    elif name.endswith("NutAssembly"):
+                        if obj_idx == 0:
+                            target_geom_id = "g8_visual"
+                        else:
+                            target_geom_id = "g4_visual"
+                    if geom_name.endswith(target_geom_id):
+                        object_ids.append(geom_id)
+                else:
+                    object_ids.append(geom_id)
+
+        if len(object_ids) > 0:
+            if not grasp_pose and "PickPlace" in name:
+                full_bin_mask = segmentation_map[:, :, 1] == object_ids[0]
+                clust_img, clust_masks = pcv.spatial_clustering(
+                    full_bin_mask.astype(np.uint8) * 255,
+                    algorithm="DBSCAN",
+                    min_cluster_size=5,
+                    max_distance=None,
+                )
+                obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+                object_mask = clust_masks[obj_idx]
+            else:
+                object_mask = np.any(
+                    [
+                        segmentation_map[:, :, 1] == object_id
+                        for object_id in object_ids
+                    ],
+                    axis=0,
+                )
+            object_pixels = np.argwhere(object_mask)
+            object_pointcloud = CU.transform_from_pixels_to_world(
+                pixels=object_pixels,
+                depth_map=depth_map[..., 0],
+                camera_to_world_transform=camera_to_world,
+            )
+            object_pts.append(object_pointcloud)
+
+    object_pointcloud = np.concatenate(object_pts, axis=0)
+    object_pcd = o3d.geometry.PointCloud()
+    object_pcd.points = o3d.utility.Vector3dVector(object_pointcloud)
+    cl, ind = object_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+    object_pcd = object_pcd.select_by_index(ind)
+    object_xyz = np.array(object_pcd.points)
+    return object_xyz
+
+
 def get_object_pose_mp(env, obj_idx=0):
     """
     Note this is only used for computing the target for MP
@@ -133,7 +247,41 @@ def get_object_pose_mp(env, obj_idx=0):
         )
     else:
         raise NotImplementedError()
+    if env.use_vision_pose_estimation:
+        object_pcd = compute_object_pcd(env, obj_idx=obj_idx)
+        object_pos = np.mean(object_pcd, axis=0)
+        if name.startswith("Door"):
+            object_pos[0] -= 0.15
+            object_pos[1] += 0.05
     return object_pos, object_quat
+
+
+def get_placement_pose_mp(env, obj_idx=0):
+    name = env.name.split("_")[1]
+    target_quat = env.reset_ori
+    if "PickPlace" in name:
+        obj_idx = compute_correct_obj_idx(env, obj_idx)
+        target_pos = env.target_bin_placements[obj_idx].copy()
+        target_pos[2] += 0.125
+    if "NutAssembly" in name:
+        if name.endswith("Square") or obj_idx == 1:
+            target_pos = np.array(env.sim.data.body_xpos[env.peg1_body_id])
+        elif name.endswith("Round") or obj_idx == 0:
+            target_pos = np.array(env.sim.data.body_xpos[env.peg2_body_id])
+        target_pos[2] += 0.15
+        target_pos[0] -= 0.065
+    if env.name.endswith("Lift"):
+        target_pos = np.array([0, 0, 0.1]) + env.initial_object_pos
+    else:
+        if env.use_vision_pose_estimation:
+            target_pcd = compute_object_pcd(env, grasp_pose=False, obj_idx=obj_idx)
+            target_pos = np.mean(target_pcd, axis=0)
+            if "NutAssembly" in name:
+                target_pos[2] += 0.1
+                target_pos[0] -= 0.065
+            elif "PickPlace" in name:
+                target_pos[2] += 0.125
+    return target_pos, target_quat
 
 
 def get_object_pose(env, obj_idx=0):
@@ -655,7 +803,7 @@ def pcd_collision_check(
     env.robots[0].set_robot_joint_positions(old_qpos[:7])
 
     # Create a scene and add the triangle mesh
-    
+
     if is_grasped:
         object_pts = object_pts @ transform[:3, :3].T + transform[:3, 3]
         object_pcd = o3d.geometry.PointCloud()
@@ -1002,7 +1150,7 @@ def mp_to_point(
     intermediate_frames = []
     if solved:
         path = pdef.getSolutionPath()
-        success = og.PathSimplifier(si).simplify(path, .01)
+        success = og.PathSimplifier(si).simplify(path, 0.01)
         converted_path = []
         for s, state in enumerate(path.getStates()):
             new_state = [
@@ -1504,9 +1652,9 @@ class RobosuiteEnv(ProxyEnv):
             i["bad_mask"] = 1
         else:
             i["bad_mask"] = 0
-        if i["grasped"] and not self.was_in_hand:
+        if self.terminate_on_drop and i["grasped"] and not self.was_in_hand:
             self.was_in_hand = True
-        if self.was_in_hand and not i["grasped"] and self.terminate_on_drop:
+        if self.was_in_hand and self.terminate_on_drop and not i["grasped"]:
             # if we've dropped the object, terminate
             self.terminal = True
         if i["success"] and self.terminate_on_success:
@@ -1554,6 +1702,7 @@ class MPEnv(RobosuiteEnv):
         backtrack_movement_fraction=0.001,
         use_joint_space_mp=False,
         use_pcd_collision_check=False,
+        use_vision_pose_estimation=False,
         # teleport
         vertical_displacement=0.03,
         teleport_instead_of_mp=True,
@@ -1615,6 +1764,7 @@ class MPEnv(RobosuiteEnv):
         self.timeout_on_stage_failure = timeout_on_stage_failure
         self.use_joint_space_mp = use_joint_space_mp
         self.use_pcd_collision_check = use_pcd_collision_check
+        self.use_vision_pose_estimation = use_vision_pose_estimation
         self.robot = URDF.load(
             robosuite.__file__[: -len("/__init__.py")]
             + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
@@ -1683,25 +1833,16 @@ class MPEnv(RobosuiteEnv):
 
         pose_list.append((target_pos, target_quat))
         # final target positions, depending on the task
-        if self.name.endswith("Lift"):
-            target_pos = np.array([0, 0, 0.1]) + self.initial_object_pos
-            target_quat = self.reset_ori
-            pose_list.append((target_pos, target_quat))
-        elif self.name.endswith("PickPlaceBread"):
-            target_pos = np.array([0.2, 0.15, self.initial_object_pos[-1] + 0.125])
-            target_quat = self.reset_ori
-            pose_list.append((target_pos, target_quat))
-        elif self.name.endswith("PickPlaceCan"):
-            target_pos = np.array([0.2, 0.4, self.initial_object_pos[-1] + 0.125])
-            target_quat = self.reset_ori
-            pose_list.append((target_pos, target_quat))
-        elif self.name.endswith("PickPlaceCereal"):
-            target_pos = np.array([0.0, 0.4, self.initial_object_pos[-1] + 0.125])
-            target_quat = self.reset_ori
-            pose_list.append((target_pos, target_quat))
-        elif self.name.endswith("PickPlaceMilk"):
-            target_pos = np.array([0.0, 0.15, self.initial_object_pos[-1] + 0.125])
-            target_quat = self.reset_ori
+        if (
+            self.name.endswith("Lift")
+            or self.name.endswith("PickPlaceBread")
+            or self.name.endswith("PickPlaceCereal")
+            or self.name.endswith("PickPlaceCan")
+            or self.name.endswith("PickPlaceMilk")
+            or self.name.endswith("NutAssemblyRound")
+            or self.name.endswith("NutAssemblySquare")
+        ):
+            target_pos, target_quat = self.object_placement_poses
             pose_list.append((target_pos, target_quat))
         elif self.name.endswith("PickPlace"):
             pose_list = []
@@ -1721,10 +1862,8 @@ class MPEnv(RobosuiteEnv):
                 else:
                     target_quat = self.reset_ori
                 pose_list.append((pos, target_quat))
-                obj_idx = compute_correct_obj_idx(self, obj_idx)
-                target_pos = self.target_bin_placements[obj_idx].copy()
-                target_pos[2] += 0.125
-                target_quat = self.reset_ori
+
+                target_pos, target_quat = self.object_placement_poses[obj_idx]
                 pose_list.append((target_pos, target_quat))
                 if (
                     len(pose_list) >= self.steps_of_high_level_plan_to_complete
@@ -1732,9 +1871,9 @@ class MPEnv(RobosuiteEnv):
                 ):
                     break
         elif "NutAssembly" in self.name:
-            if self.name.endswith("NutAssembly"):
-                pose_list = []
-                pos, quat = get_object_pose_mp(self, obj_idx=0)
+            pose_list = []
+            for obj_idx in range(2):
+                pos, quat = get_object_pose_mp(self, obj_idx=obj_idx)
                 pos = pos + np.array([0, 0, self.vertical_displacement])
                 if self.hardcoded_orientations:
                     # compute perpendicular top grasps for the object, pick one that has less error
@@ -1743,40 +1882,14 @@ class MPEnv(RobosuiteEnv):
                     target_quat = self.reset_ori
                 pose_list.append((pos, target_quat))
 
-                peg_pos = np.array(self.sim.data.body_xpos[self.peg2_body_id])
-                peg_pos[2] += 0.15
-                peg_pos[0] -= 0.065
-                pose_list.append((peg_pos, self.reset_ori))
+                target_pos, target_quat = self.object_placement_poses[obj_idx]
+                pose_list.append((target_pos, target_quat))
 
                 if (
-                    self.steps_of_high_level_plan_to_complete >= 2
-                    or self.steps_of_high_level_plan_to_complete == -1
+                    len(pose_list) >= self.steps_of_high_level_plan_to_complete
+                    and self.steps_of_high_level_plan_to_complete > 0
                 ):
-                    pos, quat = get_object_pose_mp(self, obj_idx=1)
-                    pos = pos + np.array([0, 0, self.vertical_displacement])
-                    if self.hardcoded_orientations:
-                        # compute perpendicular top grasps for the object, pick one that has less error
-                        target_quat = self.compute_hardcoded_orientation(
-                            target_pos, quat
-                        )
-                    else:
-                        target_quat = self.reset_ori
-
-                    pose_list.append((pos, target_quat))
-                    peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
-                    peg_pos[2] += 0.15
-                    peg_pos[0] -= 0.065
-                    pose_list.append((peg_pos, self.reset_ori))
-            else:
-                if self.name.endswith("Round"):
-                    peg_pos = np.array(self.sim.data.body_xpos[self.peg2_body_id])
-                elif self.name.endswith("Square"):
-                    peg_pos = np.array(self.sim.data.body_xpos[self.peg1_body_id])
-                peg_pos[2] += 0.15
-                peg_pos[0] -= 0.065
-                target_pos = peg_pos
-                target_quat = self.reset_ori
-                pose_list.append((target_pos, target_quat))
+                    break
         return pose_list
 
     def get_target_pos(self):
@@ -1836,6 +1949,7 @@ class MPEnv(RobosuiteEnv):
             "interpolation": None,
             "ramp_ratio": 0.2,
         }
+
         self.ep_step_ctr = 0
         self.high_level_step = 0
         self.num_failed_solves = 0
@@ -1847,6 +1961,30 @@ class MPEnv(RobosuiteEnv):
         self.reset_qpos = self.sim.data.qpos.copy()
         self.reset_qvel = self.sim.data.qvel.copy()
         self.initial_object_pos = get_object_pose_mp(self)[0].copy()
+
+        # pre-compute placement poses
+        if (
+            self.name.endswith("Lift")
+            or self.name.endswith("PickPlaceBread")
+            or self.name.endswith("PickPlaceCereal")
+            or self.name.endswith("PickPlaceCan")
+            or self.name.endswith("PickPlaceMilk")
+            or self.name.endswith("NutAssemblyRound")
+            or self.name.endswith("NutAssemblySquare")
+        ):
+            self.object_placement_poses = get_placement_pose_mp(self)
+        elif "PickPlace" in self.name:
+            self.object_placement_poses = []
+            for obj_idx in range(len(self.valid_obj_names)):
+                self.object_placement_poses.append(
+                    get_placement_pose_mp(self, obj_idx=obj_idx)
+                )
+        elif "NutAssembly" in self.name:
+            self.object_placement_poses = []
+            for obj_idx in range(2):
+                self.object_placement_poses.append(
+                    get_placement_pose_mp(self, obj_idx=obj_idx)
+                )
 
         if self.name.endswith("PickPlace"):
             self.initial_object_pos = []
@@ -1930,6 +2068,7 @@ class MPEnv(RobosuiteEnv):
         obs = self.get_observation()
         if self.add_grasped_to_obs:
             obs = np.concatenate((obs, np.array([0])))
+
         return obs
 
     @property
@@ -1957,7 +2096,9 @@ class MPEnv(RobosuiteEnv):
                 if type(self.initial_object_pos) is list
                 else self.initial_object_pos
             )
-            is_grasped = is_grasped and (pos[2] - init_object_pos[2]) > 0.01
+            is_grasped = (
+                is_grasped and (pos[2] - init_object_pos[2]) > 0.005
+            )  # changed from 0.01 to 0.005 because vision is not as accurate
         return is_grasped
 
     def clamp_planner_action_mp_space_bounds(self, action):
@@ -2068,7 +2209,9 @@ class MPEnv(RobosuiteEnv):
                         self.teleport_on_grasp = True
             else:
                 take_planner_step = self.take_planner_step
-            if self.high_level_step >= len(self.get_target_pose_list()):
+            if take_planner_step and self.high_level_step >= len(
+                self.get_target_pose_list()
+            ):
                 # at the final stage of the high level plan
                 take_planner_step = False
             if take_planner_step:
@@ -2136,7 +2279,7 @@ class MPEnv(RobosuiteEnv):
                 self.current_ll_policy_steps = 0
 
         i["success"] = float(self._check_success())
-        i["grasped"] = float(self.check_grasp())
+        i["grasped"] = float(is_grasped)
         i["num_steps"] = self.num_steps
         if not self.teleport_instead_of_mp:
             # add in planner logs
