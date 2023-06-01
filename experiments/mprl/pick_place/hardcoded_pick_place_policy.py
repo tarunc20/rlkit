@@ -22,13 +22,14 @@ if __name__ == "__main__":
         clamp_actions=True,
         update_with_true_state=True,
         grip_ctrl_scale=0.0025,
-        planning_time=20,
+        planning_time=0.5 * 100,
         hardcoded_high_level_plan=True,
         terminate_on_success=False,
         plan_to_learned_goals=False,
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
         hardcoded_orientations=False,
+        use_pcd_collision_check=True,
     )
     robosuite_args = dict(
         robots="Panda",

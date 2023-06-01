@@ -87,13 +87,11 @@ def get_object_pose_from_seg(
     # transform from camera pixel back to world position
     # can we do this batched somehow...
     obj_poses = []
-    for obj_pixel in obj_pixels:
-        estimated_obj_pos = CU.transform_from_pixels_to_world(
-            pixels=obj_pixel,
-            depth_map=depth_map,
-            camera_to_world_transform=camera_to_world,
-        )
-        obj_poses.append(estimated_obj_pos)
+    obj_poses = CU.transform_from_pixels_to_world(
+        pixels=obj_pixels,
+        depth_map=depth_map[..., 0],
+        camera_to_world_transform=camera_to_world,
+    )
     estimated_obj_pos = np.mean(obj_poses, axis=0)
     return estimated_obj_pos
 
