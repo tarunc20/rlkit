@@ -1,16 +1,22 @@
 import copy
 import io
+import os
 import xml.etree.ElementTree as ET
 
 import cv2
 import gym
 import numpy as np
+import robosuite
+import trimesh
 import robosuite.utils.transform_utils as T
+import robosuite.utils.camera_utils as CU
 from gym import spaces
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
+import open3d as o3d
+from urdfpy import URDF
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
@@ -472,6 +478,208 @@ def check_robot_collision(env, ignore_object_collision, obj_idx=0):
     return False
 
 
+def get_camera_depth(sim, camera_name, camera_height, camera_width):
+    """
+    Obtains depth image.
+
+    Args:
+        sim (MjSim): simulator instance
+        camera_name (str): name of camera
+        camera_height (int): height of camera images in pixels
+        camera_width (int): width of camera images in pixels
+    Return:
+        im (np.array): the depth image b/w 0 and 1
+    """
+    return sim.render(
+        camera_name=camera_name, height=camera_height, width=camera_width, depth=True
+    )[1][::-1]
+
+
+def compute_pcd(
+    env,
+    obj_idx=0,
+    is_grasped=False,
+):
+    pts = []
+    object_pts = []
+    camera_names = ["agentview", "birdview"]
+    for camera_name in camera_names:
+        camera_height = 480
+        camera_width = 640
+        sim = env.sim
+        segmentation_map = CU.get_camera_segmentation(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        depth_map = get_camera_depth(
+            sim=sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        depth_map = np.expand_dims(
+            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+        )
+
+        # get camera matrices
+        world_to_camera = CU.get_camera_transform_matrix(
+            sim=env.sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        camera_to_world = np.linalg.inv(world_to_camera)
+
+        # get robot segmentation mask
+        geom_ids = np.unique(segmentation_map[:, :, 1])
+        robot_ids = []
+        object_ids = []
+        object_string = get_object_string(env, obj_idx=obj_idx)
+        for geom_id in geom_ids:
+            geom_name = sim.model.geom_id2name(geom_id)
+            if geom_name is None or geom_name.startswith("Visual"):
+                continue
+            if geom_name.startswith("robot0") or geom_name.startswith("gripper"):
+                robot_ids.append(geom_id)
+            if object_string in geom_name:
+                object_ids.append(geom_id)
+        robot_mask = np.any(
+            [segmentation_map[:, :, 1] == robot_id for robot_id in robot_ids], axis=0
+        )
+        if is_grasped and len(object_ids) > 0:
+            object_mask = np.any(
+                [segmentation_map[:, :, 1] == object_id for object_id in object_ids],
+                axis=0,
+            )
+            cv2.imwrite(
+                f"object_mask_{camera_name}.png", object_mask.astype(np.uint8) * 255
+            )
+            # only remove object from scene if it is grasped
+            all_img_pixels = np.argwhere(
+                1 - robot_mask - object_mask
+            )  # remove robot from scene pcd
+            object_pixels = np.argwhere(object_mask)
+            object_pointcloud = CU.transform_from_pixels_to_world(
+                pixels=object_pixels,
+                depth_map=depth_map[..., 0],
+                camera_to_world_transform=camera_to_world,
+            )
+            object_pts.append(object_pointcloud)
+        else:
+            all_img_pixels = np.argwhere(1 - robot_mask)
+        # transform from camera pixel back to world position
+        pointcloud = CU.transform_from_pixels_to_world(
+            pixels=all_img_pixels,
+            depth_map=depth_map[..., 0],
+            camera_to_world_transform=camera_to_world,
+        )
+        pts.append(pointcloud)
+
+    pointcloud = np.concatenate(pts, axis=0)
+    pointcloud = pointcloud[pointcloud[:, -1] > 0.75]
+    pointcloud = pointcloud[pointcloud[:, -1] < 1.0]
+    pointcloud = pointcloud[pointcloud[:, 0] > -0.3]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pointcloud)
+    pcd = pcd.voxel_down_sample(voxel_size=0.005)
+    cl, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+    pcd = pcd.select_by_index(ind)
+    xyz = np.array(pcd.points)
+    if is_grasped and len(object_pts) > 0:
+        object_pointcloud = np.concatenate(object_pts, axis=0)
+        object_pcd = o3d.geometry.PointCloud()
+        object_pcd.points = o3d.utility.Vector3dVector(object_pointcloud)
+        cl, ind = object_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+        object_pcd = object_pcd.select_by_index(ind)
+        object_xyz = np.array(object_pcd.points)
+    else:
+        object_xyz = None
+
+    return xyz, object_xyz
+
+
+def pcd_collision_check(
+    env,
+    target_angles,
+    gripper_qpos,
+    is_grasped,
+):
+    xyz, object_pts = env.xyz, env.object_pcd
+    robot = env.robot
+    joints = [
+        "panda_joint1",
+        "panda_joint2",
+        "panda_joint3",
+        "panda_joint4",
+        "panda_joint5",
+        "panda_joint6",
+        "panda_joint7",
+        "panda_finger_joint1",
+        "panda_finger_joint2",
+    ]
+    combined = []
+    qpos = np.concatenate([target_angles, gripper_qpos])
+    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("robot0_link0")]
+    fk = robot.collision_trimesh_fk(dict(zip(joints, qpos)))
+    link_fk = robot.link_fk(dict(zip(joints, qpos)))
+    mesh_base_xpos = link_fk[robot.links[0]][:3, 3]
+    for mesh, pose in fk.items():
+        pose[:3, 3] = pose[:3, 3] + (base_xpos - mesh_base_xpos)
+        homogenous_vertices = np.concatenate(
+            [mesh.vertices, np.ones((mesh.vertices.shape[0], 1))], axis=1
+        ).astype(np.float32)
+        transformed = np.matmul(pose.astype(np.float32), homogenous_vertices.T).T[:, :3]
+        mesh_new = trimesh.Trimesh(transformed, mesh.faces)
+        combined.append(mesh_new)
+
+    combined_mesh = trimesh.util.concatenate(combined)
+    robot_mesh = combined_mesh.as_open3d
+    # transform object pcd by amount rotated/moved by eef link
+    # compute the transform between the old and new eef poses
+
+    # note: this is just to get the forward kinematics using the sim,
+    # faster/easier that way than using trimesh fk
+    # implementation detail, not important
+    old_eef_xquat = env._eef_xquat.copy()
+    old_eef_xpos = env._eef_xpos.copy()
+    old_qpos = env.sim.data.qpos.copy()
+
+    env.robots[0].set_robot_joint_positions(target_angles)
+
+    ee_old_mat = pose2mat((old_eef_xpos, old_eef_xquat))
+    ee_new_mat = pose2mat((env._eef_xpos, env._eef_xquat))
+    transform = ee_new_mat @ np.linalg.inv(ee_old_mat)
+
+    env.robots[0].set_robot_joint_positions(old_qpos[:7])
+
+    # Create a scene and add the triangle mesh
+    
+    if is_grasped:
+        object_pts = object_pts @ transform[:3, :3].T + transform[:3, 3]
+        object_pcd = o3d.geometry.PointCloud()
+        object_pcd.points = o3d.utility.Vector3dVector(object_pts)
+        hull, _ = object_pcd.compute_convex_hull()
+        # compute pcd distance to xyz
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+        scene = o3d.t.geometry.RaycastingScene()
+        _ = scene.add_triangles(
+            o3d.t.geometry.TriangleMesh.from_legacy(hull + robot_mesh)
+        )  # we do not need the geometry ID for mesh
+        occupancy = scene.compute_occupancy(xyz.astype(np.float32), nthreads=32)
+        collision = sum(occupancy.numpy()) > 5
+    else:
+        scene = o3d.t.geometry.RaycastingScene()
+        _ = scene.add_triangles(
+            o3d.t.geometry.TriangleMesh.from_legacy(robot_mesh)
+        )  # we do not need the geometry ID for mesh
+        occupancy = scene.compute_occupancy(xyz.astype(np.float32), nthreads=32)
+        collision = sum(occupancy.numpy()) > 5
+    return collision
+
+
 def backtracking_search_from_goal_joints(
     env,
     ignore_object_collision,
@@ -485,30 +693,32 @@ def backtracking_search_from_goal_joints(
     obj_idx=0,
 ):
     curr_angles = goal_angles.copy()
-    set_robot_based_on_joint_angles(
+    valid = check_state_validity_joint(
         env,
         goal_angles,
         qpos,
         qvel,
         is_grasped,
         default_controller_configs,
-        obj_idx=obj_idx,
+        obj_idx,
+        ignore_object_collision=ignore_object_collision,
     )
-    collision = check_robot_collision(env, ignore_object_collision, obj_idx=obj_idx)
+    collision = not valid
     iters = 0
     max_iters = int(1 / movement_fraction)
     while collision and iters < max_iters:
         curr_angles = curr_angles - movement_fraction * (goal_angles - start_angles)
-        error = set_robot_based_on_joint_angles(
+        valid = check_state_validity_joint(
             env,
             curr_angles,
             qpos,
             qvel,
             is_grasped,
             default_controller_configs,
-            obj_idx=obj_idx,
+            obj_idx,
+            ignore_object_collision=ignore_object_collision,
         )
-        collision = check_robot_collision(env, ignore_object_collision, obj_idx=obj_idx)
+        collision = not valid
         iters += 1
     if collision:
         return start_angles
@@ -792,7 +1002,7 @@ def mp_to_point(
     intermediate_frames = []
     if solved:
         path = pdef.getSolutionPath()
-        success = og.PathSimplifier(si).simplify(path, 1.0)
+        success = og.PathSimplifier(si).simplify(path, .01)
         converted_path = []
         for s, state in enumerate(path.getStates()):
             new_state = [
@@ -874,6 +1084,41 @@ def mp_to_point(
     return env._get_observations()
 
 
+def check_state_validity_joint(
+    env,
+    curr_pos,
+    qpos,
+    qvel,
+    is_grasped,
+    default_controller_configs,
+    obj_idx,
+    ignore_object_collision=False,
+):
+    if env.use_pcd_collision_check:
+        collision = pcd_collision_check(
+            env,
+            curr_pos,
+            qpos[7:9],
+            is_grasped,
+        )
+        valid = not collision
+    else:
+        set_robot_based_on_joint_angles(
+            env,
+            curr_pos,
+            qpos,
+            qvel,
+            is_grasped,
+            default_controller_configs,
+            obj_idx=obj_idx,
+        )
+        # fix ignore object collision to be the value passed in mp_to_point
+        valid = not check_robot_collision(
+            env, ignore_object_collision=ignore_object_collision, obj_idx=obj_idx
+        )
+    return valid
+
+
 def check_linear_interpolation(
     env,
     pos,
@@ -893,18 +1138,15 @@ def check_linear_interpolation(
     intermediate_frames = []
     for i in range(1, int(1 / checkpoint_frac) + 1):
         curr_pos = curr_angles + (target_angles - curr_angles) * (i * checkpoint_frac)
-        set_robot_based_on_joint_angles(
+        valid = check_state_validity_joint(
             env,
             curr_pos,
             qpos,
             qvel,
             is_grasped,
             default_controller_configs,
-            obj_idx=obj_idx,
-        )
-        # fix ignore object collision to be the value passed in mp_to_point
-        valid = not check_robot_collision(
-            env, ignore_object_collision=ignore_object_collision, obj_idx=obj_idx
+            obj_idx,
+            ignore_object_collision=ignore_object_collision,
         )
         if not valid:
             return False, None
@@ -960,6 +1202,7 @@ def mp_to_point_joint(
     open_gripper=False,
     obj_idx=0,
 ):
+    env.xyz, env.object_pcd = compute_pcd(env, obj_idx=obj_idx, is_grasped=grasp)
     og_qpos = env.sim.data.qpos.copy()
     og_qvel = env.sim.data.qvel.copy()
     target_xyz = pos[:3]
@@ -983,17 +1226,15 @@ def mp_to_point_joint(
         #     return True
         # else:
         # TODO; if it was grasping before ik and not after automatically set to invalid
-        set_robot_based_on_joint_angles(
+        valid = check_state_validity_joint(
             env,
             joint_pos,
             qpos,
             qvel,
             grasp,
             default_controller_configs,
-            obj_idx=obj_idx,
-        )
-        valid = not check_robot_collision(
-            env, ignore_object_collision=ignore_object_collision, obj_idx=obj_idx
+            obj_idx,
+            ignore_object_collision=ignore_object_collision,
         )
         return valid
 
@@ -1016,7 +1257,7 @@ def mp_to_point_joint(
     space.setBounds(bounds)
     si = ob.SpaceInformation(space)
     si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
-    si.setStateValidityCheckingResolution(0.0001)  # default of 0.01 is too coarse
+    si.setStateValidityCheckingResolution(0.01)  # default of 0.01 is too coarse
     start = ob.State(space)
     for i in range(7):
         start()[i] = env.sim.data.qpos[i]
@@ -1026,16 +1267,6 @@ def mp_to_point_joint(
 
     # print is goal valid
     goal_valid = isStateValid(goal)
-    # print(f"Goal valid: {goal_valid}")
-    goal_error = set_robot_based_on_joint_angles(
-        env,
-        target_angles,
-        qpos,
-        qvel,
-        is_grasped=grasp,
-        default_controller_configs=default_controller_configs,
-        obj_idx=obj_idx,
-    )
     if not goal_valid:
         # maybe modify later
         target_angles = backtracking_search_from_goal_joints(
@@ -1054,7 +1285,6 @@ def mp_to_point_joint(
             goal()[i] = target_angles[i]
     goal_valid = isStateValid(goal)
     print(f"Updated goal valid: {goal_valid}")
-    print(f"Goal Error {goal_error}")
 
     success, state = check_linear_interpolation(
         env,
@@ -1064,7 +1294,7 @@ def mp_to_point_joint(
         qvel,
         og_qpos,
         og_qvel,
-        checkpoint_frac=0.0001,
+        checkpoint_frac=0.01,
         get_intermediate_frames=get_intermediate_frames,
         default_controller_configs=default_controller_configs,
         ignore_object_collision=ignore_object_collision,
@@ -1143,6 +1373,18 @@ def mp_to_point_joint(
                 action = np.concatenate([(state - env.sim.data.qpos[:7]), [grip_val]])
                 if np.linalg.norm(action) < 1e-3:
                     break
+                # linearly interpolate states
+                # action = start_angles + (state - start_angles) * (step / 50)
+                # set_robot_based_on_joint_angles(
+                #     env,
+                #     action,
+                #     qpos,
+                #     qvel,
+                #     is_grasped=grasp,
+                #     default_controller_configs=default_controller_configs,
+                #     obj_idx=obj_idx,
+                # )
+                # valid = not check_robot_collision(env, ignore_object_collision)
                 for i in range(int(env.control_timestep // env.model_timestep)):
                     env.sim.forward()
                     apply_controller(jp_ctrl, action, env.robots[0], policy_step)
@@ -1311,6 +1553,7 @@ class MPEnv(RobosuiteEnv):
         grip_ctrl_scale=1,
         backtrack_movement_fraction=0.001,
         use_joint_space_mp=False,
+        use_pcd_collision_check=False,
         # teleport
         vertical_displacement=0.03,
         teleport_instead_of_mp=True,
@@ -1371,6 +1614,11 @@ class MPEnv(RobosuiteEnv):
         self.steps_of_high_level_plan_to_complete = steps_of_high_level_plan_to_complete
         self.timeout_on_stage_failure = timeout_on_stage_failure
         self.use_joint_space_mp = use_joint_space_mp
+        self.use_pcd_collision_check = use_pcd_collision_check
+        self.robot = URDF.load(
+            robosuite.__file__[: -len("/__init__.py")]
+            + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
+        )
         if self.add_grasped_to_obs:
             # update observation space
             self.observation_space = gym.spaces.Box(
