@@ -39,6 +39,7 @@ except ImportError:
     from ompl import geometric as og
     from ompl import util as ou
 
+
 ################## VISION PIPELINE ##################
 def get_camera_depth(sim, camera_name, camera_height, camera_width):
     """
@@ -55,6 +56,7 @@ def get_camera_depth(sim, camera_name, camera_height, camera_width):
     return sim.render(
         camera_name=camera_name, height=camera_height, width=camera_width, depth=True
     )[1][::-1]
+
 
 def compute_object_pcd(
     env,
@@ -164,13 +166,17 @@ def compute_object_pcd(
                 camera_to_world_transform=camera_to_world,
             )
             object_pts.append(object_pointcloud)
-        
+
     # if object_pts is empty, return the value from the last time this function was called with the same args
     # this is a bit of a hack, but necessary since the object may be occluded sometimes
     if len(object_pts) > 0:
-        env.cache[(camera_height, camera_width, grasp_pose, target_obj, obj_idx)] = object_pts
+        env.cache[
+            (camera_height, camera_width, grasp_pose, target_obj, obj_idx)
+        ] = object_pts
     else:
-        object_pts = env.cache[(camera_height, camera_width, grasp_pose, target_obj, obj_idx)]
+        object_pts = env.cache[
+            (camera_height, camera_width, grasp_pose, target_obj, obj_idx)
+        ]
     object_pointcloud = np.concatenate(object_pts, axis=0)
     object_pcd = o3d.geometry.PointCloud()
     object_pcd.points = o3d.utility.Vector3dVector(object_pointcloud)
@@ -364,6 +370,7 @@ def pcd_collision_check(
         collision = sum(occupancy.numpy()) > 5
     return collision
 
+
 def grasp_pcd_collision_check(
     env,
     obj_idx=0,
@@ -419,7 +426,9 @@ def grasp_pcd_collision_check(
     collision = np.any(sdf < 0.001)
     return collision
 
+
 ################## VISION PIPELINE ##################
+
 
 def get_object_string(env, obj_idx=0):
     name = env.name.split("_")[1]
@@ -463,6 +472,7 @@ def compute_correct_obj_idx(env, obj_idx=0):
             idx += 1
     obj_idx = obj_string_to_idx[get_object_string(env, obj_idx=obj_idx)]
     return obj_idx
+
 
 def get_object_pose_mp(env, obj_idx=0):
     """
