@@ -2,22 +2,22 @@ import copy
 import io
 import os
 import xml.etree.ElementTree as ET
-from plantcv import plantcv as pcv
+
 import cv2
 import gym
 import numpy as np
+import open3d as o3d
 import robosuite
-import trimesh
-import robosuite.utils.transform_utils as T
 import robosuite.utils.camera_utils as CU
+import robosuite.utils.transform_utils as T
+import trimesh
 from gym import spaces
+from plantcv import plantcv as pcv
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
-import open3d as o3d
 from urdfpy import URDF
-from plantcv import plantcv as pcv
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv

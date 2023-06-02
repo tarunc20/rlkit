@@ -7,9 +7,7 @@ from robosuite.wrappers.gym_wrapper import GymWrapper
 from tqdm import tqdm
 
 import rlkit.torch.pytorch_util as ptu
-from rlkit.mprl.mp_env import (
-    MPEnv,
-)
+from rlkit.mprl.mp_env import MPEnv
 from rlkit.torch.model_based.dreamer.visualization import make_video
 
 if __name__ == "__main__":
