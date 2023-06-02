@@ -288,9 +288,6 @@ def compute_pcd(
                 [segmentation_map[:, :, 1] == object_id for object_id in object_ids],
                 axis=0,
             )
-            cv2.imwrite(
-                f"object_mask_{camera_name}.png", object_mask.astype(np.uint8) * 255
-            )
             # only remove object from scene if it is grasped
             all_img_pixels = np.argwhere(
                 1 - robot_mask - object_mask
