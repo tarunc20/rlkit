@@ -40,6 +40,50 @@ except ImportError:
     from ompl import util as ou
 
 
+def get_object_string(env, obj_idx=0):
+    name = env.name.split("_")[1]
+    if name.endswith("Lift"):
+        obj_string = "cube"
+    elif name.startswith("PickPlace"):
+        if name.endswith("Bread"):
+            obj_string = "Bread"
+        elif name.endswith("Can"):
+            obj_string = "Can"
+        elif name.endswith("Milk"):
+            obj_string = "Milk"
+        elif name.endswith("Cereal"):
+            obj_string = "Cereal"
+        else:
+            obj_string = env.valid_obj_names[obj_idx]
+    elif name.endswith("Door"):
+        obj_string = "latch"
+    elif name.endswith("Wipe"):
+        obj_string = ""
+    elif "NutAssembly" in name:
+        if name.endswith("Square"):
+            nut = env.nuts[0]
+        elif name.endswith("Round"):
+            nut = env.nuts[1]
+        elif name.endswith("NutAssembly"):
+            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
+        obj_string = nut.name
+    else:
+        raise NotImplementedError()
+    return obj_string
+
+
+def compute_correct_obj_idx(env, obj_idx=0):
+    valid_obj_names = env.valid_obj_names
+    obj_string_to_idx = {}
+    idx = 0
+    for obj_name in ["Milk", "Bread", "Cereal", "Can"]:
+        if obj_name in valid_obj_names:
+            obj_string_to_idx[obj_name] = idx
+            idx += 1
+    obj_idx = obj_string_to_idx[get_object_string(env, obj_idx=obj_idx)]
+    return obj_idx
+
+
 ################## VISION PIPELINE ##################
 def get_camera_depth(sim, camera_name, camera_height, camera_width):
     """
@@ -428,50 +472,6 @@ def grasp_pcd_collision_check(
 
 
 ################## VISION PIPELINE ##################
-
-
-def get_object_string(env, obj_idx=0):
-    name = env.name.split("_")[1]
-    if name.endswith("Lift"):
-        obj_string = "cube"
-    elif name.startswith("PickPlace"):
-        if name.endswith("Bread"):
-            obj_string = "Bread"
-        elif name.endswith("Can"):
-            obj_string = "Can"
-        elif name.endswith("Milk"):
-            obj_string = "Milk"
-        elif name.endswith("Cereal"):
-            obj_string = "Cereal"
-        else:
-            obj_string = env.valid_obj_names[obj_idx]
-    elif name.endswith("Door"):
-        obj_string = "latch"
-    elif name.endswith("Wipe"):
-        obj_string = ""
-    elif "NutAssembly" in name:
-        if name.endswith("Square"):
-            nut = env.nuts[0]
-        elif name.endswith("Round"):
-            nut = env.nuts[1]
-        elif name.endswith("NutAssembly"):
-            nut = env.nuts[1 - obj_idx]  # first nut is round, second nut is square
-        obj_string = nut.name
-    else:
-        raise NotImplementedError()
-    return obj_string
-
-
-def compute_correct_obj_idx(env, obj_idx=0):
-    valid_obj_names = env.valid_obj_names
-    obj_string_to_idx = {}
-    idx = 0
-    for obj_name in ["Milk", "Bread", "Cereal", "Can"]:
-        if obj_name in valid_obj_names:
-            obj_string_to_idx[obj_name] = idx
-            idx += 1
-    obj_idx = obj_string_to_idx[get_object_string(env, obj_idx=obj_idx)]
-    return obj_idx
 
 
 def get_object_pose_mp(env, obj_idx=0):
