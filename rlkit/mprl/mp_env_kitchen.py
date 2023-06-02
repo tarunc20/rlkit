@@ -39,16 +39,394 @@ def get_object_string(env, obj_idx=0):
     return element
 
 
-def compute_correct_obj_idx(env, obj_idx=0):
-    valid_obj_names = env.valid_obj_names
-    obj_string_to_idx = {}
-    idx = 0
-    for obj_name in ["Milk", "Bread", "Cereal", "Can"]:
-        if obj_name in valid_obj_names:
-            obj_string_to_idx[obj_name] = idx
-            idx += 1
-    obj_idx = obj_string_to_idx[get_object_string(env, obj_idx=obj_idx)]
-    return obj_idx
+################## VISION PIPELINE ##################
+def get_camera_depth(sim, camera_name, camera_height, camera_width):
+    """
+    Obtains depth image.
+
+    Args:
+        sim (MjSim): simulator instance
+        camera_name (str): name of camera
+        camera_height (int): height of camera images in pixels
+        camera_width (int): width of camera images in pixels
+    Return:
+        im (np.array): the depth image b/w 0 and 1
+    """
+    return sim.render(
+        camera_name=camera_name, height=camera_height, width=camera_width, depth=True
+    )[1][::-1]
+
+
+def compute_object_pcd(
+    env,
+    camera_height=480,
+    camera_width=640,
+    grasp_pose=True,
+    target_obj=False,
+    obj_idx=0,
+):
+    name = env.name.split("_")[1]
+    object_pts = []
+    if target_obj:
+        camera_names = ["agentview", "birdview"]
+        # need birdview to properly estimate bin position
+    else:
+        camera_names = ["agentview", "sideview"]
+    for camera_name in camera_names:
+        sim = env.sim
+        segmentation_map = CU.get_camera_segmentation(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        depth_map = get_camera_depth(
+            sim=sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        depth_map = np.expand_dims(
+            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+        )
+
+        # get camera matrices
+        world_to_camera = CU.get_camera_transform_matrix(
+            sim=env.sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        camera_to_world = np.linalg.inv(world_to_camera)
+
+        # get robot segmentation mask
+        geom_ids = np.unique(segmentation_map[:, :, 1])
+        object_ids = []
+        if grasp_pose or not target_obj:
+            object_string = get_object_string(env, obj_idx=obj_idx)
+            if "Door" in name:
+                object_string = "handle"
+        else:
+            if "NutAssembly" in name:
+                if name.endswith("Square"):
+                    object_string = "peg1"
+                elif name.endswith("Round"):
+                    object_string = "peg2"
+                else:
+                    if obj_idx == 0:
+                        object_string = "peg2"
+                    else:
+                        object_string = "peg1"
+            if "PickPlace" in name:
+                object_string = "full_bin"
+        for i, geom_id in enumerate(geom_ids):
+            geom_name = sim.model.geom_id2name(geom_id)
+            if geom_name is None or geom_name.startswith("Visual"):
+                continue
+            if object_string in geom_name:
+                if "NutAssembly" in name and grasp_pose:
+                    if name.endswith("Square"):
+                        target_geom_id = "g4_visual"
+                    elif name.endswith("Round"):
+                        target_geom_id = "g8_visual"
+                    elif name.endswith("NutAssembly"):
+                        if obj_idx == 0:
+                            target_geom_id = "g8_visual"
+                        else:
+                            target_geom_id = "g4_visual"
+                    if geom_name.endswith(target_geom_id):
+                        object_ids.append(geom_id)
+                else:
+                    object_ids.append(geom_id)
+        if len(object_ids) > 0:
+            if target_obj and "PickPlace" in name:
+                full_bin_mask = segmentation_map[:, :, 1] == object_ids[0]
+                clust_img, clust_masks = pcv.spatial_clustering(
+                    full_bin_mask.astype(np.uint8) * 255,
+                    algorithm="DBSCAN",
+                    min_cluster_size=5,
+                    max_distance=None,
+                )
+                new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+                clust_masks = [clust_masks[i] for i in [0, 2, 1, 3]]
+                object_mask = clust_masks[new_obj_idx]
+            else:
+                object_mask = np.any(
+                    [
+                        segmentation_map[:, :, 1] == object_id
+                        for object_id in object_ids
+                    ],
+                    axis=0,
+                )
+            object_pixels = np.argwhere(object_mask)
+            object_pointcloud = CU.transform_from_pixels_to_world(
+                pixels=object_pixels,
+                depth_map=depth_map[..., 0],
+                camera_to_world_transform=camera_to_world,
+            )
+            object_pts.append(object_pointcloud)
+
+    # if object_pts is empty, return the value from the last time this function was called with the same args
+    # this is a bit of a hack, but necessary since the object may be occluded sometimes
+    if len(object_pts) > 0:
+        env.cache[
+            (camera_height, camera_width, grasp_pose, target_obj, obj_idx)
+        ] = object_pts
+    else:
+        object_pts = env.cache[
+            (camera_height, camera_width, grasp_pose, target_obj, obj_idx)
+        ]
+    object_pointcloud = np.concatenate(object_pts, axis=0)
+    object_pcd = o3d.geometry.PointCloud()
+    object_pcd.points = o3d.utility.Vector3dVector(object_pointcloud)
+    cl, ind = object_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+    object_pcd = object_pcd.select_by_index(ind)
+    object_xyz = np.array(object_pcd.points)
+    return object_xyz
+
+
+def compute_pcd(
+    env,
+    obj_idx=0,
+    camera_height=480,
+    camera_width=640,
+    is_grasped=False,
+):
+    pts = []
+    object_pts = []
+    camera_names = ["agentview", "birdview"]
+    for camera_name in camera_names:
+        sim = env.sim
+        segmentation_map = CU.get_camera_segmentation(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        depth_map = get_camera_depth(
+            sim=sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        depth_map = np.expand_dims(
+            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+        )
+
+        # get camera matrices
+        world_to_camera = CU.get_camera_transform_matrix(
+            sim=env.sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        camera_to_world = np.linalg.inv(world_to_camera)
+
+        # get robot segmentation mask
+        geom_ids = np.unique(segmentation_map[:, :, 1])
+        robot_ids = []
+        object_ids = []
+        object_string = get_object_string(env, obj_idx=obj_idx)
+        for geom_id in geom_ids:
+            geom_name = sim.model.geom_id2name(geom_id)
+            if geom_name is None or geom_name.startswith("Visual"):
+                continue
+            if geom_name.startswith("robot0") or geom_name.startswith("gripper"):
+                robot_ids.append(geom_id)
+            if object_string in geom_name:
+                object_ids.append(geom_id)
+        robot_mask = np.any(
+            [segmentation_map[:, :, 1] == robot_id for robot_id in robot_ids], axis=0
+        )
+        if is_grasped and len(object_ids) > 0:
+            object_mask = np.any(
+                [segmentation_map[:, :, 1] == object_id for object_id in object_ids],
+                axis=0,
+            )
+            cv2.imwrite(
+                f"object_mask_{camera_name}.png", object_mask.astype(np.uint8) * 255
+            )
+            # only remove object from scene if it is grasped
+            all_img_pixels = np.argwhere(
+                1 - robot_mask - object_mask
+            )  # remove robot from scene pcd
+            object_pixels = np.argwhere(object_mask)
+            object_pointcloud = CU.transform_from_pixels_to_world(
+                pixels=object_pixels,
+                depth_map=depth_map[..., 0],
+                camera_to_world_transform=camera_to_world,
+            )
+            object_pts.append(object_pointcloud)
+        else:
+            all_img_pixels = np.argwhere(1 - robot_mask)
+        # transform from camera pixel back to world position
+        pointcloud = CU.transform_from_pixels_to_world(
+            pixels=all_img_pixels,
+            depth_map=depth_map[..., 0],
+            camera_to_world_transform=camera_to_world,
+        )
+        pts.append(pointcloud)
+
+    pointcloud = np.concatenate(pts, axis=0)
+    pointcloud = pointcloud[pointcloud[:, -1] > 0.75]
+    pointcloud = pointcloud[pointcloud[:, -1] < 1.0]
+    pointcloud = pointcloud[pointcloud[:, 0] > -0.3]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pointcloud)
+    pcd = pcd.voxel_down_sample(voxel_size=0.005)
+    cl, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+    pcd = pcd.select_by_index(ind)
+    xyz = np.array(pcd.points)
+    if is_grasped and len(object_pts) > 0:
+        object_pointcloud = np.concatenate(object_pts, axis=0)
+        object_pcd = o3d.geometry.PointCloud()
+        object_pcd.points = o3d.utility.Vector3dVector(object_pointcloud)
+        cl, ind = object_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+        object_pcd = object_pcd.select_by_index(ind)
+        object_xyz = np.array(object_pcd.points)
+    else:
+        object_xyz = None
+
+    return xyz, object_xyz
+
+
+def pcd_collision_check(
+    env,
+    target_angles,
+    gripper_qpos,
+    is_grasped,
+):
+    xyz, object_pts = env.xyz, env.object_pcd
+    robot = env.robot
+    joints = [
+        "panda_joint1",
+        "panda_joint2",
+        "panda_joint3",
+        "panda_joint4",
+        "panda_joint5",
+        "panda_joint6",
+        "panda_joint7",
+        "panda_finger_joint1",
+        "panda_finger_joint2",
+    ]
+    combined = []
+    qpos = np.concatenate([target_angles, gripper_qpos])
+    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("robot0_link0")]
+    fk = robot.collision_trimesh_fk(dict(zip(joints, qpos)))
+    link_fk = robot.link_fk(dict(zip(joints, qpos)))
+    mesh_base_xpos = link_fk[robot.links[0]][:3, 3]
+    for mesh, pose in fk.items():
+        pose[:3, 3] = pose[:3, 3] + (base_xpos - mesh_base_xpos)
+        homogenous_vertices = np.concatenate(
+            [mesh.vertices, np.ones((mesh.vertices.shape[0], 1))], axis=1
+        ).astype(np.float32)
+        transformed = np.matmul(pose.astype(np.float32), homogenous_vertices.T).T[:, :3]
+        mesh_new = trimesh.Trimesh(transformed, mesh.faces)
+        combined.append(mesh_new)
+
+    combined_mesh = trimesh.util.concatenate(combined)
+    robot_mesh = combined_mesh.as_open3d
+    # transform object pcd by amount rotated/moved by eef link
+    # compute the transform between the old and new eef poses
+
+    # note: this is just to get the forward kinematics using the sim,
+    # faster/easier that way than using trimesh fk
+    # implementation detail, not important
+    old_eef_xquat = env._eef_xquat.copy()
+    old_eef_xpos = env._eef_xpos.copy()
+    old_qpos = env.sim.data.qpos.copy()
+
+    env.robots[0].set_robot_joint_positions(target_angles)
+
+    ee_old_mat = pose2mat((old_eef_xpos, old_eef_xquat))
+    ee_new_mat = pose2mat((env._eef_xpos, env._eef_xquat))
+    transform = ee_new_mat @ np.linalg.inv(ee_old_mat)
+
+    env.robots[0].set_robot_joint_positions(old_qpos[:7])
+
+    # Create a scene and add the triangle mesh
+
+    if is_grasped:
+        object_pts = object_pts @ transform[:3, :3].T + transform[:3, 3]
+        object_pcd = o3d.geometry.PointCloud()
+        object_pcd.points = o3d.utility.Vector3dVector(object_pts)
+        hull, _ = object_pcd.compute_convex_hull()
+        # compute pcd distance to xyz
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+        scene = o3d.t.geometry.RaycastingScene()
+        _ = scene.add_triangles(
+            o3d.t.geometry.TriangleMesh.from_legacy(hull + robot_mesh)
+        )  # we do not need the geometry ID for mesh
+        occupancy = scene.compute_occupancy(xyz.astype(np.float32), nthreads=32)
+        collision = sum(occupancy.numpy()) > 5
+    else:
+        scene = o3d.t.geometry.RaycastingScene()
+        _ = scene.add_triangles(
+            o3d.t.geometry.TriangleMesh.from_legacy(robot_mesh)
+        )  # we do not need the geometry ID for mesh
+        occupancy = scene.compute_occupancy(xyz.astype(np.float32), nthreads=32)
+        collision = sum(occupancy.numpy()) > 5
+    return collision
+
+
+def grasp_pcd_collision_check(
+    env,
+    obj_idx=0,
+):
+    xyz = compute_object_pcd(
+        env,
+        obj_idx=obj_idx,
+        grasp_pose=False,
+        target_obj=False,
+        camera_height=256,
+        camera_width=256,
+    )
+    robot = env.robot
+    joints = [
+        "panda_joint1",
+        "panda_joint2",
+        "panda_joint3",
+        "panda_joint4",
+        "panda_joint5",
+        "panda_joint6",
+        "panda_joint7",
+        "panda_finger_joint1",
+        "panda_finger_joint2",
+    ]
+    combined = []
+
+    # compute floating gripper mesh at the correct pose
+    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("robot0_link0")]
+    link_fk = robot.link_fk(dict(zip(joints, env.sim.data.qpos[:9])))
+    mesh_base_xpos = link_fk[robot.links[0]][:3, 3]
+    combined = []
+    for link in robot.links[-2:]:
+        pose = link_fk[link]
+        pose[:3, 3] = pose[:3, 3] + (base_xpos - mesh_base_xpos)
+        homogenous_vertices = np.concatenate(
+            [
+                link.collision_mesh.vertices,
+                np.ones((link.collision_mesh.vertices.shape[0], 1)),
+            ],
+            axis=1,
+        )
+        transformed = np.matmul(pose, homogenous_vertices.T).T[:, :3]
+        mesh_new = trimesh.Trimesh(transformed, link.collision_mesh.faces)
+        combined.append(mesh_new)
+    robot_mesh = trimesh.util.concatenate(combined).as_open3d
+
+    # Create a scene and add the triangle mesh
+    scene = o3d.t.geometry.RaycastingScene()
+    _ = scene.add_triangles(
+        o3d.t.geometry.TriangleMesh.from_legacy(robot_mesh)
+    )  # we do not need the geometry ID for mesh
+    sdf = scene.compute_signed_distance(xyz.astype(np.float32), nthreads=32).numpy()
+    collision = np.any(sdf < 0.001)
+    return collision
+
+
+################## VISION PIPELINE ##################
 
 
 def get_object_pose_mp(env, obj_idx=0):

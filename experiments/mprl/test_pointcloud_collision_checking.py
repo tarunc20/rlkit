@@ -6,20 +6,21 @@ that the values are close.
 """
 import random
 import time
-import cv2
 
+import cv2
 import numpy as np
+import robosuite
+import robosuite.utils.camera_utils as CU
+from robosuite.controllers import load_controller_config
+from robosuite.wrappers.gym_wrapper import GymWrapper
+from urdfpy import URDF
+
 from rlkit.mprl.mp_env import (
     RobosuiteEnv,
     check_robot_collision,
     compute_pcd,
     pcd_collision_check,
 )
-import robosuite
-import robosuite.utils.camera_utils as CU
-from robosuite.controllers import load_controller_config
-from robosuite.wrappers.gym_wrapper import GymWrapper
-from urdfpy import URDF
 
 
 def test_camera_transforms():

@@ -1,9 +1,10 @@
 import os
+import time
+
+import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
-import matplotlib.pyplot as plt
 import trimesh
-import time
 
 qpos = [
     -0.00302714,
@@ -25,8 +26,8 @@ xyz = xyz[xyz[:, -1] < 1.5]
 xyz = xyz[xyz[:, 0] > -0.1]
 pcd.points = o3d.utility.Vector3dVector(xyz)
 
-from urdfpy import URDF
 import robosuite
+from urdfpy import URDF
 
 robot = URDF.load(
     os.path.join(
