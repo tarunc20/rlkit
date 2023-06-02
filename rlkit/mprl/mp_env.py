@@ -192,7 +192,13 @@ def compute_object_pcd(
                 camera_to_world_transform=camera_to_world,
             )
             object_pts.append(object_pointcloud)
-
+        
+    # if object_pts is empty, return the value from the last time this function was called with the same args
+    # this is a bit of a hack, but necessary since the object may be occluded sometimes
+    if len(object_pts) > 0:
+        env.cache[(camera_height, camera_width, grasp_pose, target_obj, obj_idx)] = object_pts
+    else:
+        object_pts = env.cache[(camera_height, camera_width, grasp_pose, target_obj, obj_idx)]
     object_pointcloud = np.concatenate(object_pts, axis=0)
     object_pcd = o3d.geometry.PointCloud()
     object_pcd.points = o3d.utility.Vector3dVector(object_pointcloud)
@@ -1908,6 +1914,7 @@ class MPEnv(RobosuiteEnv):
             robosuite.__file__[: -len("/__init__.py")]
             + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
         )
+        self.cache = {}
         if self.add_grasped_to_obs:
             # update observation space
             self.observation_space = gym.spaces.Box(
