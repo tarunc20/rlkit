@@ -56,6 +56,14 @@ ROBOT_BODIES = [
     'right_hand', 'hand', 'rightclaw', 'rightpad', 'leftclaw', 'leftpad',
 ]
 
+ENV_CAMERAS = {
+    "assembly-v2":"corner",
+    "hammer-v2":"corner3",
+    "disassemble-v2":"corner",
+    "stick-pull-v2":"corner2",
+    "peg-insert-side-v2":"corner2"
+}
+
 def save_img(env, filename):
     import matplotlib.pyplot as plt 
     frame = env.render("rgb_array")
