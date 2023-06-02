@@ -86,15 +86,20 @@ def compute_correct_obj_idx(env, obj_idx=0):
 
 def compute_object_pcd(
     env,
+    camera_height=480,
+    camera_width=640,
     grasp_pose=True,
+    target_obj=False,
     obj_idx=0,
 ):
     name = env.name.split("_")[1]
     object_pts = []
-    camera_names = ["agentview", "sideview"]
+    if target_obj:
+        camera_names = ["agentview", "birdview"]
+        # need birdview to properly estimate bin position
+    else:
+        camera_names = ["agentview", "sideview"]
     for camera_name in camera_names:
-        camera_height = 480
-        camera_width = 640
         sim = env.sim
         segmentation_map = CU.get_camera_segmentation(
             camera_name=camera_name,
@@ -124,7 +129,7 @@ def compute_object_pcd(
         # get robot segmentation mask
         geom_ids = np.unique(segmentation_map[:, :, 1])
         object_ids = []
-        if grasp_pose:
+        if grasp_pose or not target_obj:
             object_string = get_object_string(env, obj_idx=obj_idx)
             if "Door" in name:
                 object_string = "handle"
@@ -160,9 +165,8 @@ def compute_object_pcd(
                         object_ids.append(geom_id)
                 else:
                     object_ids.append(geom_id)
-
         if len(object_ids) > 0:
-            if not grasp_pose and "PickPlace" in name:
+            if target_obj and "PickPlace" in name:
                 full_bin_mask = segmentation_map[:, :, 1] == object_ids[0]
                 clust_img, clust_masks = pcv.spatial_clustering(
                     full_bin_mask.astype(np.uint8) * 255,
@@ -170,8 +174,9 @@ def compute_object_pcd(
                     min_cluster_size=5,
                     max_distance=None,
                 )
-                obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
-                object_mask = clust_masks[obj_idx]
+                new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+                clust_masks = [clust_masks[i] for i in [0, 2, 1, 3]]
+                object_mask = clust_masks[new_obj_idx]
             else:
                 object_mask = np.any(
                     [
@@ -260,8 +265,8 @@ def get_placement_pose_mp(env, obj_idx=0):
     name = env.name.split("_")[1]
     target_quat = env.reset_ori
     if "PickPlace" in name:
-        obj_idx = compute_correct_obj_idx(env, obj_idx)
-        target_pos = env.target_bin_placements[obj_idx].copy()
+        new_obj_idx = compute_correct_obj_idx(env, obj_idx)
+        target_pos = env.target_bin_placements[new_obj_idx].copy()
         target_pos[2] += 0.125
     if "NutAssembly" in name:
         if name.endswith("Square") or obj_idx == 1:
@@ -274,13 +279,17 @@ def get_placement_pose_mp(env, obj_idx=0):
         target_pos = np.array([0, 0, 0.1]) + env.initial_object_pos
     else:
         if env.use_vision_pose_estimation:
-            target_pcd = compute_object_pcd(env, grasp_pose=False, obj_idx=obj_idx)
-            target_pos = np.mean(target_pcd, axis=0)
+            target_pcd = compute_object_pcd(
+                env, grasp_pose=False, target_obj=True, obj_idx=obj_idx
+            )
+            env.target_pcd = target_pcd
+            target_pos_pcd = np.mean(target_pcd, axis=0)
             if "NutAssembly" in name:
-                target_pos[2] += 0.1
-                target_pos[0] -= 0.065
+                target_pos_pcd[2] += 0.1
+                target_pos_pcd[0] -= 0.065
             elif "PickPlace" in name:
-                target_pos[2] += 0.125
+                target_pos_pcd[2] += 0.125
+            target_pos = target_pos_pcd
     return target_pos, target_quat
 
 
@@ -389,6 +398,62 @@ def set_object_pose(env, object_pos, object_quat, obj_idx=0):
         raise NotImplementedError()
 
 
+def grasp_pcd_collision_check(
+    env,
+    obj_idx=0,
+):
+    xyz = compute_object_pcd(
+        env,
+        obj_idx=obj_idx,
+        grasp_pose=False,
+        target_obj=False,
+        camera_height=256,
+        camera_width=256,
+    )
+    robot = env.robot
+    joints = [
+        "panda_joint1",
+        "panda_joint2",
+        "panda_joint3",
+        "panda_joint4",
+        "panda_joint5",
+        "panda_joint6",
+        "panda_joint7",
+        "panda_finger_joint1",
+        "panda_finger_joint2",
+    ]
+    combined = []
+
+    # compute floating gripper mesh at the correct pose
+    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("robot0_link0")]
+    link_fk = robot.link_fk(dict(zip(joints, env.sim.data.qpos[:9])))
+    mesh_base_xpos = link_fk[robot.links[0]][:3, 3]
+    combined = []
+    for link in robot.links[-2:]:
+        pose = link_fk[link]
+        pose[:3, 3] = pose[:3, 3] + (base_xpos - mesh_base_xpos)
+        homogenous_vertices = np.concatenate(
+            [
+                link.collision_mesh.vertices,
+                np.ones((link.collision_mesh.vertices.shape[0], 1)),
+            ],
+            axis=1,
+        )
+        transformed = np.matmul(pose, homogenous_vertices.T).T[:, :3]
+        mesh_new = trimesh.Trimesh(transformed, link.collision_mesh.faces)
+        combined.append(mesh_new)
+    robot_mesh = trimesh.util.concatenate(combined).as_open3d
+
+    # Create a scene and add the triangle mesh
+    scene = o3d.t.geometry.RaycastingScene()
+    _ = scene.add_triangles(
+        o3d.t.geometry.TriangleMesh.from_legacy(robot_mesh)
+    )  # we do not need the geometry ID for mesh
+    sdf = scene.compute_signed_distance(xyz.astype(np.float32), nthreads=32).numpy()
+    collision = np.any(sdf < 0.001)
+    return collision
+
+
 def check_object_grasp(env, obj_idx=0):
     name = env.name.split("_")[1]
     if name.endswith("Lift"):
@@ -434,7 +499,77 @@ def check_object_grasp(env, obj_idx=0):
         is_grasped = False
     else:
         raise NotImplementedError()
-    return is_grasped
+    # collision check robot with object (naive version)
+    if env.use_vision_grasp_check:
+        is_grasped_pcd = grasp_pcd_collision_check(env, obj_idx=obj_idx)
+        return is_grasped_pcd
+    else:
+        return is_grasped
+
+
+def check_object_placement(env, obj_idx=0):
+    if "PickPlace" in env.name:
+        new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+        placed = env.objects_in_bins[new_obj_idx]
+    elif "NutAssembly" in env.name:
+        # only take planner step if current nut is full placed on the peg
+        placed = env.objects_on_pegs[1 - obj_idx]
+    else:
+        placed = True  # just dummy value if not pickplace/nut
+    if env.use_vision_placement_check:
+        obj_xyz = compute_object_pcd(
+            env,
+            obj_idx=obj_idx,
+            grasp_pose=False,
+            target_obj=False,
+            camera_height=256,
+            camera_width=256,
+        )
+        obj_pos = np.mean(obj_xyz, axis=0)
+        if "PickPlace" in env.name:
+            # get bin pcd
+            # get extent of pcd (min/max x/y) - bin size
+            # get avg of pcd - bin pos
+            xyz = env.target_pcd
+            new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
+            bin_size = np.array([max(xyz[0]) - min(xyz[0]), max(xyz[1]) - min(xyz[1])])
+            bin2_pos = np.mean(xyz, axis=0)
+            bin_x_low = bin2_pos[0]
+            bin_y_low = bin2_pos[1]
+            if new_obj_idx == 0 or new_obj_idx == 2:
+                bin_x_low -= bin_size[0] / 2
+            if new_obj_idx < 2:
+                bin_y_low -= bin_size[1] / 2
+
+            bin_x_high = bin_x_low + bin_size[0] / 2
+            bin_y_high = bin_y_low + bin_size[1] / 2
+
+            new_placed = False
+            if (
+                bin_x_low < obj_pos[0] < bin_x_high
+                and bin_y_low < obj_pos[1] < bin_y_high
+                and bin2_pos[2] < obj_pos[2] < bin2_pos[2] + 0.1
+            ):
+                new_placed = True
+        elif "NutAssembly" in env.name:
+            if env.name.endswith("Square") or env.name.endswith("Round"):
+                peg_pos = env.object_placement_poses[0].copy()
+            else:
+                peg_pos = env.object_placement_poses[obj_idx][0].copy()
+            # basically undo the peg pos target pose
+            peg_pos[2] -= 0.15
+            peg_pos[0] += 0.065
+            placed = False
+            if (
+                abs(obj_pos[0] - peg_pos[0]) < 0.03
+                and abs(obj_pos[1] - peg_pos[1]) < 0.03
+                and obj_pos[2]
+                < env.table_offset[2] + 0.05  # TODO: don't hardcode table offset
+            ):
+                placed = True
+        else:
+            placed = True
+    return placed
 
 
 def rebuild_controller(env, default_controller_configs):
@@ -646,14 +781,14 @@ def get_camera_depth(sim, camera_name, camera_height, camera_width):
 def compute_pcd(
     env,
     obj_idx=0,
+    camera_height=480,
+    camera_width=640,
     is_grasped=False,
 ):
     pts = []
     object_pts = []
     camera_names = ["agentview", "birdview"]
     for camera_name in camera_names:
-        camera_height = 480
-        camera_width = 640
         sim = env.sim
         segmentation_map = CU.get_camera_segmentation(
             camera_name=camera_name,
@@ -1703,6 +1838,8 @@ class MPEnv(RobosuiteEnv):
         use_joint_space_mp=False,
         use_pcd_collision_check=False,
         use_vision_pose_estimation=False,
+        use_vision_placement_check=False,
+        use_vision_grasp_check=False,
         # teleport
         vertical_displacement=0.03,
         teleport_instead_of_mp=True,
@@ -1765,6 +1902,8 @@ class MPEnv(RobosuiteEnv):
         self.use_joint_space_mp = use_joint_space_mp
         self.use_pcd_collision_check = use_pcd_collision_check
         self.use_vision_pose_estimation = use_vision_pose_estimation
+        self.use_vision_placement_check = use_vision_placement_check
+        self.use_vision_grasp_check = use_vision_grasp_check
         self.robot = URDF.load(
             robosuite.__file__[: -len("/__init__.py")]
             + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
@@ -2183,26 +2322,12 @@ class MPEnv(RobosuiteEnv):
                         self.teleport_on_grasp = False
                         self.teleport_on_place = True
                 elif self.teleport_on_place:
-                    if "PickPlace" in self.name:
-                        new_obj_idx = compute_correct_obj_idx(
-                            self, obj_idx=self.obj_idx
-                        )
-                        take_planner_step = (
-                            bool(self.objects_in_bins[new_obj_idx])
-                            and not is_grasped
-                            and not check_robot_collision(self, False)
-                        )
-                    elif "NutAssembly" in self.name:
-                        # only take planner step if current nut is full placed on the peg
-                        take_planner_step = (
-                            bool(self.objects_on_pegs[1 - self.obj_idx])
-                            and not is_grasped
-                            and not check_robot_collision(self, False)
-                        )
-                    else:
-                        take_planner_step = not is_grasped and not check_robot_collision(
-                            self, False
-                        )  # want to move on only after we are not in contact at all anymore
+                    placed = check_object_placement(self, self.obj_idx)
+                    take_planner_step = (
+                        placed
+                        and not is_grasped
+                        and not check_robot_collision(self, False)
+                    )  # want to move on only after we are not in contact at all anymore
                     if take_planner_step:
                         open_gripper_on_tp = True
                         self.teleport_on_place = False
