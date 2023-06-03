@@ -132,7 +132,8 @@ def compute_object_pcd(
                 min_cluster_size=5,
                 max_distance=None,
             )
-            object_mask = clust_masks[0]
+            if len(clust_masks) > 0:
+                object_mask = clust_masks[0]
             object_pixels = np.argwhere(object_mask)
             object_pointcloud = CU.transform_from_pixels_to_world(
                 pixels=object_pixels,
