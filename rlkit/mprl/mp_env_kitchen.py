@@ -5,12 +5,18 @@ import xml.etree.ElementTree as ET
 import cv2
 import gym
 import numpy as np
+import open3d as o3d
+import robosuite
 import robosuite.utils.transform_utils as T
+import robosuite.utils.camera_utils as CU
+import trimesh
 from gym import spaces
+from plantcv import plantcv as pcv
 from robosuite.controllers import controller_factory
 from robosuite.utils.control_utils import orientation_error
 from robosuite.utils.transform_utils import *
 from robosuite.wrappers.gym_wrapper import GymWrapper
+from urdfpy import URDF
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
@@ -65,15 +71,10 @@ def compute_object_pcd(
     target_obj=False,
     obj_idx=0,
 ):
-    name = env.name.split("_")[1]
     object_pts = []
-    if target_obj:
-        camera_names = ["agentview", "birdview"]
-        # need birdview to properly estimate bin position
-    else:
-        camera_names = ["agentview", "sideview"]
+    camera_names = ["leftview"]
     for camera_name in camera_names:
-        sim = env.sim
+        sim = env._wrapped_env.mjpy_sim
         segmentation_map = CU.get_camera_segmentation(
             camera_name=camera_name,
             camera_width=camera_width,
@@ -87,12 +88,11 @@ def compute_object_pcd(
             camera_width=camera_width,
         )
         depth_map = np.expand_dims(
-            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+            CU.get_real_depth_map(sim=sim, depth_map=depth_map), -1
         )
-
         # get camera matrices
         world_to_camera = CU.get_camera_transform_matrix(
-            sim=env.sim,
+            sim=sim,
             camera_name=camera_name,
             camera_height=camera_height,
             camera_width=camera_width,
@@ -102,62 +102,37 @@ def compute_object_pcd(
         # get robot segmentation mask
         geom_ids = np.unique(segmentation_map[:, :, 1])
         object_ids = []
-        if grasp_pose or not target_obj:
-            object_string = get_object_string(env, obj_idx=obj_idx)
-            if "Door" in name:
-                object_string = "handle"
-        else:
-            if "NutAssembly" in name:
-                if name.endswith("Square"):
-                    object_string = "peg1"
-                elif name.endswith("Round"):
-                    object_string = "peg2"
-                else:
-                    if obj_idx == 0:
-                        object_string = "peg2"
-                    else:
-                        object_string = "peg1"
-            if "PickPlace" in name:
-                object_string = "full_bin"
+        object_string = get_object_string(env, obj_idx=obj_idx)
+        object_string_to_geom_string = {
+            "kettle": "kettlehandle",
+            "top burner": "tlb_handle",
+            "light switch": "lshandle",
+            "microwave": "mchandle",
+            "slide cabinet": "schandle",
+            "hinge cabinet": "hchandle",
+        }
+        geom_string = object_string_to_geom_string[object_string]
         for i, geom_id in enumerate(geom_ids):
+            if geom_id == -1:
+                continue
             geom_name = sim.model.geom_id2name(geom_id)
             if geom_name is None or geom_name.startswith("Visual"):
                 continue
-            if object_string in geom_name:
-                if "NutAssembly" in name and grasp_pose:
-                    if name.endswith("Square"):
-                        target_geom_id = "g4_visual"
-                    elif name.endswith("Round"):
-                        target_geom_id = "g8_visual"
-                    elif name.endswith("NutAssembly"):
-                        if obj_idx == 0:
-                            target_geom_id = "g8_visual"
-                        else:
-                            target_geom_id = "g4_visual"
-                    if geom_name.endswith(target_geom_id):
-                        object_ids.append(geom_id)
-                else:
-                    object_ids.append(geom_id)
+            if geom_string in geom_name:
+                object_ids.append(geom_id)
         if len(object_ids) > 0:
-            if target_obj and "PickPlace" in name:
-                full_bin_mask = segmentation_map[:, :, 1] == object_ids[0]
-                clust_img, clust_masks = pcv.spatial_clustering(
-                    full_bin_mask.astype(np.uint8) * 255,
-                    algorithm="DBSCAN",
-                    min_cluster_size=5,
-                    max_distance=None,
-                )
-                new_obj_idx = compute_correct_obj_idx(env, obj_idx=obj_idx)
-                clust_masks = [clust_masks[i] for i in [0, 2, 1, 3]]
-                object_mask = clust_masks[new_obj_idx]
-            else:
-                object_mask = np.any(
-                    [
-                        segmentation_map[:, :, 1] == object_id
-                        for object_id in object_ids
-                    ],
-                    axis=0,
-                )
+            object_mask = np.any(
+                [segmentation_map[:, :, 1] == object_id for object_id in object_ids],
+                axis=0,
+            )
+            # take largest cluster (if segmentation is noisy)
+            clust_img, clust_masks = pcv.spatial_clustering(
+                object_mask.astype(np.uint8) * 255,
+                algorithm="DBSCAN",
+                min_cluster_size=5,
+                max_distance=None,
+            )
+            object_mask = clust_masks[0]
             object_pixels = np.argwhere(object_mask)
             object_pointcloud = CU.transform_from_pixels_to_world(
                 pixels=object_pixels,
@@ -194,9 +169,9 @@ def compute_pcd(
 ):
     pts = []
     object_pts = []
-    camera_names = ["agentview", "birdview"]
+    camera_names = ["leftview"]
     for camera_name in camera_names:
-        sim = env.sim
+        sim = env._wrapped_env.mjpy_sim
         segmentation_map = CU.get_camera_segmentation(
             camera_name=camera_name,
             camera_width=camera_width,
@@ -209,29 +184,31 @@ def compute_pcd(
             camera_height=camera_height,
             camera_width=camera_width,
         )
+
         depth_map = np.expand_dims(
-            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+            CU.get_real_depth_map(sim=sim, depth_map=depth_map), -1
         )
 
         # get camera matrices
         world_to_camera = CU.get_camera_transform_matrix(
-            sim=env.sim,
+            sim=sim,
             camera_name=camera_name,
             camera_height=camera_height,
             camera_width=camera_width,
         )
         camera_to_world = np.linalg.inv(world_to_camera)
-
         # get robot segmentation mask
         geom_ids = np.unique(segmentation_map[:, :, 1])
         robot_ids = []
         object_ids = []
         object_string = get_object_string(env, obj_idx=obj_idx)
         for geom_id in geom_ids:
+            if geom_id == -1:
+                continue
             geom_name = sim.model.geom_id2name(geom_id)
             if geom_name is None or geom_name.startswith("Visual"):
                 continue
-            if geom_name.startswith("robot0") or geom_name.startswith("gripper"):
+            if geom_name.startswith("panda0") or geom_name.startswith("gripper"):
                 robot_ids.append(geom_id)
             if object_string in geom_name:
                 object_ids.append(geom_id)
@@ -242,9 +219,6 @@ def compute_pcd(
             object_mask = np.any(
                 [segmentation_map[:, :, 1] == object_id for object_id in object_ids],
                 axis=0,
-            )
-            cv2.imwrite(
-                f"object_mask_{camera_name}.png", object_mask.astype(np.uint8) * 255
             )
             # only remove object from scene if it is grasped
             all_img_pixels = np.argwhere(
@@ -266,11 +240,10 @@ def compute_pcd(
             camera_to_world_transform=camera_to_world,
         )
         pts.append(pointcloud)
-
     pointcloud = np.concatenate(pts, axis=0)
-    pointcloud = pointcloud[pointcloud[:, -1] > 0.75]
-    pointcloud = pointcloud[pointcloud[:, -1] < 1.0]
-    pointcloud = pointcloud[pointcloud[:, 0] > -0.3]
+    # pointcloud = pointcloud[pointcloud[:, -1] > 0.75]
+    # pointcloud = pointcloud[pointcloud[:, -1] < 1.0]
+    # pointcloud = pointcloud[pointcloud[:, 0] > -2.5]
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pointcloud)
     pcd = pcd.voxel_down_sample(voxel_size=0.005)
@@ -286,7 +259,6 @@ def compute_pcd(
         object_xyz = np.array(object_pcd.points)
     else:
         object_xyz = None
-
     return xyz, object_xyz
 
 
@@ -311,7 +283,7 @@ def pcd_collision_check(
     ]
     combined = []
     qpos = np.concatenate([target_angles, gripper_qpos])
-    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("robot0_link0")]
+    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("panda0_link0")]
     fk = robot.collision_trimesh_fk(dict(zip(joints, qpos)))
     link_fk = robot.link_fk(dict(zip(joints, qpos)))
     mesh_base_xpos = link_fk[robot.links[0]][:3, 3]
@@ -397,7 +369,7 @@ def grasp_pcd_collision_check(
     combined = []
 
     # compute floating gripper mesh at the correct pose
-    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("robot0_link0")]
+    base_xpos = env.sim.data.body_xpos[env.sim.model.body_name2id("panda0_link0")]
     link_fk = robot.link_fk(dict(zip(joints, env.sim.data.qpos[:9])))
     mesh_base_xpos = link_fk[robot.links[0]][:3, 3]
     combined = []
@@ -453,6 +425,11 @@ def get_object_pose_mp(env, obj_idx=0):
     elif element == "kettle":
         object_pos = env.get_site_xpos("khandle1")
         object_quat = np.zeros(4)  # doesn't really matter
+    if env.use_vision_pose_estimation:
+        object_pcd = compute_object_pcd(env, obj_idx=obj_idx)
+        object_pcd_pos = np.mean(object_pcd, axis=0)
+        object_pos = object_pcd_pos
+
     return object_pos, object_quat
 
 
@@ -579,13 +556,13 @@ def set_robot_based_on_ee_pos(
         target_pos=target_pos,
         target_quat=target_quat.astype(np.float64),
         joint_names=[
-            "panda0_joint0",
-            "panda0_joint1",
-            "panda0_joint2",
-            "panda0_joint3",
-            "panda0_joint4",
-            "panda0_joint5",
-            "panda0_joint6",
+            "panda_joint0",
+            "panda_joint1",
+            "panda_joint2",
+            "panda_joint3",
+            "panda_joint4",
+            "panda_joint5",
+            "panda_joint6",
         ],
         tol=1e-14,
         rot_weight=1.0,
@@ -1019,7 +996,7 @@ class KitchenEnv:
             self.observation_space.low.shape
         )  # only going to train from images
 
-    def render(self, imwidth, imheight, mode="rgb_array"):
+    def render(self, imwidth, imheight, mode="rgb_array", camera_name="leftview"):
         return self._wrapped_env.render(mode=mode)
 
     def get_image(self):
@@ -1122,6 +1099,10 @@ class MPEnv(KitchenEnv):
         update_with_true_state=False,
         grip_ctrl_scale=1,
         backtrack_movement_fraction=0.001,
+        use_pcd_collision_check=False,
+        use_vision_pose_estimation=False,
+        use_vision_placement_check=False,
+        use_vision_grasp_check=False,
         # teleport
         vertical_displacement=0.03,
         teleport_instead_of_mp=True,
@@ -1175,6 +1156,15 @@ class MPEnv(KitchenEnv):
         self.terminate_on_last_state = terminate_on_last_state
         self.hardcoded_orientations = hardcoded_orientations
         self.hardcoded_high_level_plan = hardcoded_high_level_plan
+        self.use_pcd_collision_check = use_pcd_collision_check
+        self.use_vision_pose_estimation = use_vision_pose_estimation
+        self.use_vision_placement_check = use_vision_placement_check
+        self.use_vision_grasp_check = use_vision_grasp_check
+        self.robot = URDF.load(
+            robosuite.__file__[: -len("/__init__.py")]
+            + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
+        )
+        self.cache = {}
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -1241,13 +1231,13 @@ class MPEnv(KitchenEnv):
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             elif element == "hinge cabinet":
-                target_pos = object_pos + np.array([0, -0.05, 0])
+                target_pos = object_pos + np.array([0, -0.025, 0])
                 target_quat = self.reset_ori
             elif element == "light switch":
                 target_pos = object_pos + np.array([0, -0.05, 0])
                 target_quat = self.reset_ori
             elif element == "microwave":
-                target_pos = object_pos + np.array([0, -0.05, 0])
+                target_pos = object_pos + np.array([0, -0.025, 0])
                 target_quat = self.reset_ori
             elif element == "kettle":
                 target_pos = object_pos + np.array([0, -0.05, 0])
