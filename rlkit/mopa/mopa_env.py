@@ -174,10 +174,11 @@ def check_collisions(env, allowed_collision_pairs, env_name):
             ((ct2, ct1) in allowed_collision_pairs):
                 continue 
             else:
-                print("Returning true!")
                 return True
-    else:
-        return False 
+        elif env_name == "SawyerAssemblyObstacle-v0":
+            if ((ct1, ct2) not in allowed_collision_pairs) and ((ct2, ct1) not in allowed_collision_pairs):
+                return True 
+    return False 
 
 def set_robot_based_on_ee_pos(
     env,
@@ -212,7 +213,10 @@ def set_robot_based_on_ee_pos(
     gripper_qpos = env.sim.data.qpos[env.ref_gripper_joint_pos_indexes].copy()
     gripper_qvel = env.sim.data.qvel[env.ref_gripper_joint_pos_indexes].copy()
     old_eef_xpos, old_eef_xquat = get_site_pose(env, config['ik_target'])
-    object_pose = get_object_pose(env, target_object).copy()
+    try:
+        object_pose = get_object_pose(env, target_object).copy()
+    except:
+        pass
     # target_cart = np.clip(
     #     env.sim.data.get_site_xpos(config["ik_target"])[: len(env.min_world_size)]
     #     + ac["default"],
@@ -239,7 +243,6 @@ def set_robot_based_on_ee_pos(
         max_steps=100,
         tol=1e-2,
     )
-    #save_img(ik_env, "set_state.png")
     if result.success == False or check_collisions(ik_env, allowed_collision_pairs, env_name):
         return result.success and not check_collisions(ik_env, allowed_collision_pairs, env_name), result.err_norm
     # set state here 
@@ -523,6 +526,58 @@ def cart2joint_ac(
     converted_ac = collections.OrderedDict([("default", pre_converted_ac)])
     return converted_ac
 
+################## VISION PIPELINE ##################
+import robosuite.utils.camera_utils as CU
+def get_camera_depth(sim, camera_name, camera_height, camera_width):
+    """
+    Obtains depth image.
+
+    Args:
+        sim (MjSim): simulator instance
+        camera_name (str): name of camera
+        camera_height (int): height of camera images in pixels
+        camera_width (int): width of camera images in pixels
+    Return:
+        im (np.array): the depth image b/w 0 and 1
+    """
+    return sim.render(
+        camera_name=camera_name, height=camera_height, width=camera_width, depth=True
+    )[1][::-1]
+
+def get_object_pose_from_seg(env, object_string, camera_name, camera_width, camera_height, sim):
+    segmentation_map = CU.get_camera_segmentation(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    obj_id = sim.model.geom_name2id(object_string)
+    obj_mask = segmentation_map == obj_id 
+    depth_map = get_camera_depth(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    depth_map = np.expand_dims(
+        CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+    )
+    world_to_camera = CU.get_camera_transform_matrix(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    camera_to_world = np.linalg.inv(world_to_camera)
+    obj_pointcloud = CU.transform_from_pixels_to_world(
+        pixels=np.argwhere(obj_mask),
+        depth_map=depth_map[..., 0],
+        camera_to_world_transform=camera_to_world,
+    )
+    assert len(obj_pointcloud) > 0
+    return np.mean(obj_pointcloud, axis = 0)
+################## VISION PIPELINE ##################
+
 class MoPAMPEnv():
     
     def __init__(
@@ -539,6 +594,8 @@ class MoPAMPEnv():
         vertical_displacement=0.07,
         teleport_instead_of_mp=True,
         teleport_on_grasp=True,
+        # vision 
+        use_vision_pose_estimation=False,
         # config for mopa-rl
         config=None,
         horizon=50,
@@ -570,7 +627,8 @@ class MoPAMPEnv():
         # more planner stuff
         self.take_planner_step = True
         self.learn_residual = False
-        self.no_mprl = True
+        self.no_mprl = no_mprl
+        self.use_vision_pose_estimation = use_vision_pose_estimation
         # collision checking 
         self.allowed_collision_pairs = []
         for manipulation_geom_id in self._wrapped_env.manipulation_geom_ids:
@@ -623,13 +681,22 @@ class MoPAMPEnv():
         qpos, qvel = self._wrapped_env.sim.data.qpos.copy(), self._wrapped_env.sim.data.qvel.copy()
         if self.name == "SawyerLift-v0" or self.name == "SawyerLiftObstacle-v0":
             # get cube position 
-            cube_pos = get_object_pose(self._wrapped_env, "cube")[:3].copy() + np.array([0., 0.00, self.vertical_displacement])
+            if self.use_vision_pose_estimation:
+                cube_pos = get_object_pose_from_seg(
+                    env=self._wrapped_env, 
+                    object_string="cube", 
+                    camera_name="topview", 
+                    camera_width=500, 
+                    camera_height=500, 
+                    sim=self._wrapped_env.sim)
+                cube_pos += np.array([0., 0., 0.07]) # double check with 0.05, etc
+            else:
+                cube_pos = get_object_pose(self._wrapped_env, "cube")[:3].copy() + np.array([0., 0.00, self.vertical_displacement])
             quat = np.array([-0.1268922, 0.21528646, 0.96422245, -0.08846001])
             quat /= np.linalg.norm(quat)
             # get gripper position
-            gripper_pos = get_site_pose(self._wrapped_env, "grip_site")[0]
             ac = collections.OrderedDict()
-            ac['default'] = cube_pos - gripper_pos 
+            ac['default'] = cube_pos 
             ac['quat'] = quat
             result, err_norm = set_robot_based_on_ee_pos(
                 self._wrapped_env,
@@ -650,14 +717,15 @@ class MoPAMPEnv():
             return cube_pos
         elif self.name == "SawyerAssemblyObstacle-v0":
             # teleport close to peg
-            hole_pos = get_site_pose(self._wrapped_env, "hole")[0]
-            gripper_pos = get_site_pose(self._wrapped_env, "grip_site")[0]
-            desired_pos = hole_pos + np.array([0.15, 0.10, 0.3])
+            if self.use_vision_pose_estimation:
+                hole_pos = get_object_pose_from_seg(self._wrapped_env, "4_part4_mesh", "topview", 500, 500, self._wrapped_env.sim) + np.array([0.0, -0.3, 0.5])
+            else:
+                hole_pos = get_site_pose(self._wrapped_env, "hole")[0] + np.array([0.15, 0.10, 0.3])
             teleport_ac = collections.OrderedDict() 
-            teleport_ac['default'] = desired_pos - gripper_pos 
+            teleport_ac['default'] = hole_pos
             # rotation so that it can get in between back legs of table 
             teleport_ac['quat'] = np.array([-0.69904332, -0.35891423, -0.60671187,  0.12008213])
-            set_robot_based_on_ee_pos(
+            result, err_norm = set_robot_based_on_ee_pos(
                 self._wrapped_env,
                 teleport_ac,
                 self.ik_env,
@@ -666,37 +734,24 @@ class MoPAMPEnv():
                 False,
                 "0_part0",
                 self.config,
-                None,
+                self.allowed_collision_pairs,
                 self.name,
             )
-            # second teleportation -> get it closer to the hole, can be removed to make task harder
-            gripper_pos = get_site_pose(self._wrapped_env, "grip_site")[0]
-            desired_pos = hole_pos - gripper_pos + np.array([-0.12, 0.07, 0.30])
-            teleport_ac = collections.OrderedDict()
-            teleport_ac['default'] = desired_pos
-            set_robot_based_on_ee_pos(
-                self._wrapped_env,
-                teleport_ac,
-                self.ik_env,
-                self._wrapped_env.sim.data.qpos.copy(),
-                self._wrapped_env.sim.data.qvel.copy(), 
-                False, # is grasped is ignored 
-                "0_part0",
-                self.config,
-                None,
-                self.name,
-            )
+            frame = self._wrapped_env.sim.render(camera_name="zoomview", width=500, height=500)
             return None
         else:
-            right_gripper, left_gripper = (
-                self._wrapped_env.sim.data.get_site_xpos("right_eef"),
-                self._wrapped_env.sim.data.get_site_xpos("left_eef"),
-            )
-            gripper_site_pos = (right_gripper + left_gripper) / 2.0
-            cube_pos = np.array(self._wrapped_env.sim.data.body_xpos[self._wrapped_env.cube_body_id])
-            target_ac = cube_pos - gripper_site_pos + np.array([-0.05, 0.05, 0.06])
+            if self.use_vision_pose_estimation:
+                cube_pos = get_object_pose_from_seg(
+                    self._wrapped_env, "cube", "frontview", 500, 500, self._wrapped_env.sim) + np.array([-0.1, 0.04, 0.06])
+            else:
+                right_gripper, left_gripper = (
+                    self._wrapped_env.sim.data.get_site_xpos("right_eef"),
+                    self._wrapped_env.sim.data.get_site_xpos("left_eef"),
+                )
+                gripper_site_pos = (right_gripper + left_gripper) / 2.0
+                cube_pos = np.array(self._wrapped_env.sim.data.body_xpos[self._wrapped_env.cube_body_id]) + np.array([-0.1, 0.05, 0.06])
             ac = collections.OrderedDict()
-            ac['default'] = target_ac 
+            ac['default'] = cube_pos 
             result, err_norm = set_robot_based_on_ee_pos(
                 self._wrapped_env,
                 ac,
@@ -709,7 +764,6 @@ class MoPAMPEnv():
                 self.allowed_collision_pairs,
                 self.name,
             )
-            assert result
             return None
             
     def get_target_pos_no_planner(self):
