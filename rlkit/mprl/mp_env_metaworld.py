@@ -19,12 +19,14 @@ from robosuite.utils.transform_utils import (
     quat_multiply,
     convert_quat
 )
+import robosuite.utils.camera_utils as CU
 
 from rlkit.core import logger
 from rlkit.envs.proxy_env import ProxyEnv
 from rlkit.mprl import module
 from rlkit.mprl.inverse_kinematics import qpos_from_site_pose
 from rlkit.torch.model_based.dreamer.visualization import add_text
+import matplotlib.pyplot as plt
 
 try:
     from ompl import base as ob
@@ -79,7 +81,7 @@ def get_object_pos(env):
     if env.name == "hammer-v2":
         object_pos = env._get_pos_objects()[:3] + np.array([0.09, -0.02, 0.02])
     elif env.name == "stick-pull-v2":
-        object_pos = env._get_pos_objects()[:3] + np.array([-0.02, -0.0, -0.01]),
+        object_pos = env._get_pos_objects()[:3] + np.array([-0.02, -0.0, -0.01])
     elif env.name == "assembly-v2":
         object_pos = env._get_pos_objects().copy() + np.array([0.00, 0.01, 0.]) # 0.01 is to fix shifted pos
     elif env.name == "disassemble-v2":
@@ -87,9 +89,7 @@ def get_object_pos(env):
     elif env.name == "peg-insert-side-v2":
         object_pos = env._get_pos_objects().copy() + np.array([0.08, -0.0, 0.0])
     else:
-        #object_pos = env._get_pos_objects().copy()
-        #object_pos = env.sim.data.qpos[9:12].copy()
-        raise NotImplementedError
+        object_pos = env._get_pos_objects().copy()
     return object_pos
 
 
@@ -250,6 +250,8 @@ def body_check_grasp(env):
         obj_name = "asmbly_peg"
     elif env.name == "peg-insert-side-v2":
         obj_name = "peg"
+    elif env.name == "stick-pull-v2":
+        obj_name = None # hacky sol since the geoms and bodies are messed up for this environment
     else:
         return False
     object_gripper_contact = False
@@ -385,6 +387,127 @@ def backtracking_search_from_goal(
     else:
         return np.concatenate((curr_pos, ori))
 
+################## VISION PIPELINE ##################
+def get_camera_depth(sim, camera_name, camera_height, camera_width):
+    """
+    Obtains depth image.
+
+    Args:
+        sim (MjSim): simulator instance
+        camera_name (str): name of camera
+        camera_height (int): height of camera images in pixels
+        camera_width (int): width of camera images in pixels
+    Return:
+        im (np.array): the depth image b/w 0 and 1
+    """
+    return sim.render(
+        camera_name=camera_name, height=camera_height, width=camera_width, depth=True
+    )[1][::-1]
+
+def get_object_pose_from_seg(env, object_string, camera_name, camera_width, camera_height, sim):
+    segmentation_map = CU.get_camera_segmentation(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    obj_id = sim.model.geom_name2id(object_string)
+    obj_mask = segmentation_map == obj_id 
+    depth_map = get_camera_depth(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    depth_map = np.expand_dims(
+        CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+    )
+    world_to_camera = CU.get_camera_transform_matrix(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    camera_to_world = np.linalg.inv(world_to_camera)
+    obj_pointcloud = CU.transform_from_pixels_to_world(
+        pixels=np.argwhere(obj_mask),
+        depth_map=depth_map[..., 0],
+        camera_to_world_transform=camera_to_world,
+    )
+    return np.mean(obj_pointcloud, axis = 0)
+
+# same as previous, but using geom id in case there is no geom name (needed for assembly task)
+def get_geom_pose_from_seg(env, geom, camera_name, camera_width, camera_height, sim):
+    segmentation_map = CU.get_camera_segmentation(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    obj_mask = segmentation_map == geom
+    depth_map = get_camera_depth(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    depth_map = np.expand_dims(
+        CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+    )
+    world_to_camera = CU.get_camera_transform_matrix(
+        camera_name=camera_name,
+        camera_width=camera_width,
+        camera_height=camera_height,
+        sim=sim,
+    )
+    camera_to_world = np.linalg.inv(world_to_camera)
+    obj_pointcloud = CU.transform_from_pixels_to_world(
+        pixels=np.argwhere(obj_mask),
+        depth_map=depth_map[..., 0],
+        camera_to_world_transform=camera_to_world,
+    )
+    return np.mean(obj_pointcloud, axis = 0)
+
+def geom_pointcloud(env, geom, camera_names, camera_width, camera_height, sim):
+    all_pts = []
+    for camera_name in camera_names:
+        sim = env.sim
+        segmentation_map = CU.get_camera_segmentation(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        obj_mask = segmentation_map == geom
+        depth_map = get_camera_depth(
+            sim=sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        depth_map = np.expand_dims(
+            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+        )
+
+        # get camera matrices
+        world_to_camera = CU.get_camera_transform_matrix(
+            sim=env.sim,
+            camera_name=camera_name,
+            camera_height=camera_height,
+            camera_width=camera_width,
+        )
+        camera_to_world = np.linalg.inv(world_to_camera)
+        obj_pointcloud = CU.transform_from_pixels_to_world(
+            pixels=np.argwhere(obj_mask),
+            depth_map=depth_map[..., 0],
+            camera_to_world_transform=camera_to_world,
+        )
+        all_pts.append(obj_pointcloud)
+    return np.concatenate(all_pts)
+
+
+
+################## VISION PIPELINE ##################
 
 def mp_to_point(
     env,
@@ -708,6 +831,7 @@ class MPEnv(MetaworldEnv):
     def __init__(
         self,
         env,
+        name,
         controller_configs=None,
         recompute_reward_post_teleport=False,
         num_ll_actions_per_hl_action=25,
@@ -731,6 +855,8 @@ class MPEnv(MetaworldEnv):
         randomize_init_target_pos_range=(0.04, 0.06),
         teleport_on_grasp=False,
         use_teleports_in_step=True,
+        # vision stuff
+        use_vision_pose_estimation=True,
         # upstream env
         slack_reward=0,
         predict_done_actions=False,
@@ -749,6 +875,7 @@ class MPEnv(MetaworldEnv):
             terminate_on_success=terminate_on_success,
             terminate_on_drop=terminate_on_drop,
         )
+        self.name = name
         self.num_steps = 0
         self.vertical_displacement = vertical_displacement
         self.teleport_instead_of_mp = teleport_instead_of_mp
@@ -777,6 +904,7 @@ class MPEnv(MetaworldEnv):
         self.terminate_on_last_state = terminate_on_last_state
         self.planner_command_orientation = False
         self.max_path_length = max_path_length
+        self.use_vision_pose_estimation = use_vision_pose_estimation
 
         if self.add_grasped_to_obs:
             # update observation space
@@ -837,15 +965,102 @@ class MPEnv(MetaworldEnv):
                     self.sim.data.qvel[:] = qvel
                     self.sim.forward()
         else:
-            shifted_pos = pos + np.array([0, -0.01, self.vertical_displacement])
-            set_robot_based_on_ee_pos(
-                self,
-                shifted_pos.copy(),
-                self._eef_xquat,
-                qpos,
-                qvel,
-                is_grasped=False,
-            )
+            if not self.use_vision_pose_estimation:
+                shifted_pos = pos + np.array([0, -0.01, self.vertical_displacement])
+                set_robot_based_on_ee_pos(
+                    self,
+                    shifted_pos.copy(),
+                    self._eef_xquat,
+                    qpos,
+                    qvel,
+                    is_grasped=False,
+                )
+            else:
+                if self.name == "assembly-v2" or self.name == "disassemble-v2":
+                    pos = get_geom_pose_from_seg(
+                        self, 
+                        self.sim.model.geom_name2id("WrenchHandle"), 
+                        "corner", 
+                        640, 
+                        480, 
+                        self.sim
+                        ) + np.array([0., 0., 0.02])
+                    set_robot_based_on_ee_pos(
+                        self,
+                        pos, 
+                        self._eef_xquat,
+                        qpos, 
+                        qvel,
+                        is_grasped=False,
+                    ) 
+                if self.name == "hammer-v2":
+                    obj_pose = get_geom_pose_from_seg(
+                        self, 
+                        self.sim.model.geom_name2id("HammerHandle"),
+                        "topview",
+                        480,
+                        640,
+                        self.sim        
+                    ) + np.array([0., 0., 0.02])
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        obj_pose,
+                        self._eef_xquat,
+                        qpos,
+                        qvel,
+                        False,
+                    )
+                if self.name == "peg-insert-side-v2":
+                    obj_pose = get_geom_pose_from_seg(
+                        self, 
+                        self.sim.model.geom_name2id("peg"),
+                        "topview",
+                        480,
+                        640,
+                        self.sim        
+                    )
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        obj_pose + np.array([0.07, 0., 0.02]),
+                        self._eef_xquat,
+                        self.sim.data.qpos.copy(),
+                        self.sim.data.qvel.copy(),
+                        False,
+                    )
+                if self.name == "stick-pull-v2":
+                    stick_pos = get_geom_pose_from_seg(
+                        self, 
+                        36,
+                        "corner2",
+                        500,
+                        500,
+                        self.sim        
+                    ) + np.array([-0.05, 0., 0.02])
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        stick_pos,
+                        self._eef_xquat,
+                        qpos,
+                        qvel,
+                        False,
+                    )
+                if self.name == "bin-picking-v2":
+                    obj_pose = get_geom_pose_from_seg(
+                        self, 
+                        36,
+                        "topview",
+                        480,
+                        640,
+                        self.sim        
+                    ) + np.array([0., 0.0, 0.02])
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        obj_pose,
+                        self._eef_xquat,
+                        qpos,
+                        qvel,
+                        False,
+                    )
         return pos
 
     def reset(self, get_intermediate_frames=False, **kwargs):
@@ -946,16 +1161,54 @@ class MPEnv(MetaworldEnv):
                 return True
             else:
                 return False
-        return is_grasped and not self.check_com_grasp
+        return (is_grasped and not self.check_com_grasp) and \
+                get_object_pos(self)[2] - self.initial_object_pos[2] > 0.05
 
     def get_target_pos_no_planner(
         self,
     ):
         if self.name == "peg-insert-side-v2":
-            pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
+            if self.use_vision_pose_estimation:
+                pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
+            else:
+                pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
         elif self.name == "hammer-v2":
-            pose = self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05])
-        else:
+            if self.use_vision_pose_estimation:
+                pose = get_geom_pose_from_seg(
+                    self,
+                    53,
+                    "corner",
+                    500,
+                    500,
+                    self.sim
+                ) 
+                pose += np.array([-0.03, -0.25, 0.05])
+            else:
+                pose = self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05])
+        elif self.name == "assembly-v2":
+            if self.use_vision_pose_estimation:
+                pose = get_geom_pose_from_seg(
+                    self,
+                    49,
+                    "corner",
+                    500,
+                    500,
+                    self.sim
+                ) 
+                pose += np.array([0.12, 0.0, 0.15])
+            else:
+                raise NotImplementedError
+        elif self.name == "stick-pull-v2":
+            pail_pos = stick_pos = get_geom_pose_from_seg(
+                env, 
+                39,
+                "corner2",
+                500,
+                500,
+                env.sim        
+            )
+            pose = pail_pose + np.array([-0.13, -0.05, -0.02])
+        else: # bin picking 
             pose = self._target_pos + np.array([0, 0, 0.15])
         return pose
 
@@ -1033,12 +1286,15 @@ class MPEnv(MetaworldEnv):
             self.num_steps += 1
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
+                verify_stable_grasp = True
                 is_grasped = self.check_grasp(
                     verify_stable_grasp=self.verify_stable_grasp
                 )
+                print(f"Is grasped :{is_grasped}")
             else:
                 is_grasped = False
             if (self.teleport_on_grasp and is_grasped) and self.use_teleports_in_step:
+                frame = self.sim.render(camera_name="corner", width=500, height=500)
                 target_pos = self.get_target_pos_no_planner()
                 if self.teleport_instead_of_mp:
                     set_robot_based_on_ee_pos(
