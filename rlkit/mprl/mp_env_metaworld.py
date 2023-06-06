@@ -1290,7 +1290,7 @@ class MPEnv(MetaworldEnv):
                 is_grasped = self.check_grasp(
                     verify_stable_grasp=self.verify_stable_grasp
                 )
-                print(f"Is grasped :{is_grasped}")
+                #print(f"Is grasped :{is_grasped}")
             else:
                 is_grasped = False
             if (self.teleport_on_grasp and is_grasped) and self.use_teleports_in_step:
