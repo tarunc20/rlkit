@@ -1273,6 +1273,7 @@ class MPEnv(KitchenEnv):
 
         self.teleport_on_grasp = True
         self.teleport_on_place = False
+        self.num_hl_actions = len(self.get_target_pose_list())
         if not self.plan_to_learned_goals and not self.planner_only_actions:
             target_pos, target_quat = self.get_target_pos()
             if self.teleport_instead_of_mp:
@@ -1412,7 +1413,7 @@ class MPEnv(KitchenEnv):
                     take_planner_step = False
             else:
                 take_planner_step = self.take_planner_step
-            if self.high_level_step >= len(self.get_target_pose_list()):
+            if self.high_level_step >= self.num_hl_actions:
                 # at the final stage of the high level plan
                 take_planner_step = False
             if take_planner_step:
