@@ -1872,6 +1872,8 @@ class MPEnv(RobosuiteEnv):
         reset_at_grasped_state=False,
         steps_of_high_level_plan_to_complete=-1,
         timeout_on_stage_failure=True,
+        pose_sigma=0,
+        noisy_pose_estimates=False,
     ):
         super().__init__(
             env,
@@ -1915,6 +1917,7 @@ class MPEnv(RobosuiteEnv):
         self.use_vision_pose_estimation = use_vision_pose_estimation
         self.use_vision_placement_check = use_vision_placement_check
         self.use_vision_grasp_check = use_vision_grasp_check
+        self.noisy_pose_estimates=noisy_pose_estimates
         self.robot = URDF.load(
             robosuite.__file__[: -len("/__init__.py")]
             + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
@@ -2046,8 +2049,12 @@ class MPEnv(RobosuiteEnv):
     def get_target_pos(self):
         target_pose_list = self.get_target_pose_list()
         if self.high_level_step > len(target_pose_list) - 1:
-            return target_pose_list[-1]
-        return self.get_target_pose_list()[self.high_level_step]
+            target_pos = target_pose_list[-1]
+        else:
+            target_pos = self.get_target_pose_list()[self.high_level_step]
+        if self.noisy_pose_estimates:
+            target_pos[0] += np.random.normal(0, self.pose_sigma, 3)
+        return target_pos
 
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
