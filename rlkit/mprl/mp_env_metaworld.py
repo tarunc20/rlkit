@@ -39,6 +39,7 @@ except ImportError:
     from os.path import abspath, dirname, join
 
     sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+    #sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
     from ompl import base as ob
     from ompl import geometric as og
     from ompl import util as ou
@@ -1184,7 +1185,7 @@ class MPEnv(MetaworldEnv):
                     pose = get_geom_pose_from_seg(
                         self,
                         53,
-                        ["corner", "corner2"],
+                        ["corner", "corner2","topview", "corner3"],
                         500,
                         500,
                         self.sim
