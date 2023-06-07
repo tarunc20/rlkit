@@ -981,8 +981,8 @@ class MPEnv(MetaworldEnv):
                         self, 
                         self.sim.model.geom_name2id("WrenchHandle"), 
                         "corner", 
-                        640, 
-                        480, 
+                        500, 
+                        500, 
                         self.sim
                         ) + np.array([0., 0., 0.02])
                     set_robot_based_on_ee_pos(
@@ -998,8 +998,8 @@ class MPEnv(MetaworldEnv):
                         self, 
                         self.sim.model.geom_name2id("HammerHandle"),
                         "topview",
-                        480,
-                        640,
+                        500,
+                        500,
                         self.sim        
                     ) + np.array([0., 0., 0.02])
                     set_robot_based_on_ee_pos(
@@ -1015,8 +1015,8 @@ class MPEnv(MetaworldEnv):
                         self, 
                         self.sim.model.geom_name2id("peg"),
                         "topview",
-                        480,
-                        640,
+                        500,
+                        500,
                         self.sim        
                     )
                     set_robot_based_on_ee_pos(
@@ -1049,8 +1049,8 @@ class MPEnv(MetaworldEnv):
                         self, 
                         36,
                         "topview",
-                        480,
-                        640,
+                        500,
+                        500,
                         self.sim        
                     ) + np.array([0., 0.0, 0.02])
                     set_robot_based_on_ee_pos(
@@ -1200,14 +1200,14 @@ class MPEnv(MetaworldEnv):
                 raise NotImplementedError
         elif self.name == "stick-pull-v2":
             pail_pos = stick_pos = get_geom_pose_from_seg(
-                env, 
+                self, 
                 39,
                 "corner2",
                 500,
                 500,
-                env.sim        
+                self.sim        
             )
-            pose = pail_pose + np.array([-0.13, -0.05, -0.02])
+            pose = pail_pos + np.array([-0.13, -0.05, -0.02])
         else: # bin picking 
             pose = self._target_pos + np.array([0, 0, 0.15])
         return pose
@@ -1282,11 +1282,11 @@ class MPEnv(MetaworldEnv):
             # print(self.take_planner_step, self.ep_step_ctr)
             self.ep_step_ctr += 1
         else:
+            curr_len = self._wrapped_env.curr_path_length
             o, r, d, i = self._wrapped_env.step(action)
             self.num_steps += 1
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
-                verify_stable_grasp = True
                 is_grasped = self.check_grasp(
                     verify_stable_grasp=self.verify_stable_grasp
                 )
@@ -1327,6 +1327,7 @@ class MPEnv(MetaworldEnv):
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
+            assert self._wrapped_env.curr_path_length == curr_len + 1
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_instead_of_mp:
