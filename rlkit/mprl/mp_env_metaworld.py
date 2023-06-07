@@ -437,36 +437,39 @@ def get_object_pose_from_seg(env, object_string, camera_name, camera_width, came
     return np.mean(obj_pointcloud, axis = 0)
 
 # same as previous, but using geom id in case there is no geom name (needed for assembly task)
-def get_geom_pose_from_seg(env, geom, camera_name, camera_width, camera_height, sim):
-    segmentation_map = CU.get_camera_segmentation(
-        camera_name=camera_name,
-        camera_width=camera_width,
-        camera_height=camera_height,
-        sim=sim,
-    )
-    obj_mask = segmentation_map == geom
-    depth_map = get_camera_depth(
-        camera_name=camera_name,
-        camera_width=camera_width,
-        camera_height=camera_height,
-        sim=sim,
-    )
-    depth_map = np.expand_dims(
-        CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
-    )
-    world_to_camera = CU.get_camera_transform_matrix(
-        camera_name=camera_name,
-        camera_width=camera_width,
-        camera_height=camera_height,
-        sim=sim,
-    )
-    camera_to_world = np.linalg.inv(world_to_camera)
-    obj_pointcloud = CU.transform_from_pixels_to_world(
-        pixels=np.argwhere(obj_mask),
-        depth_map=depth_map[..., 0],
-        camera_to_world_transform=camera_to_world,
-    )
-    return np.mean(obj_pointcloud, axis = 0)
+def get_geom_pose_from_seg(env, geom, camera_names, camera_width, camera_height, sim):
+    pointclouds = []
+    for camera_name in camera_names:
+        segmentation_map = CU.get_camera_segmentation(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        obj_mask = segmentation_map == geom
+        depth_map = get_camera_depth(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        depth_map = np.expand_dims(
+            CU.get_real_depth_map(sim=env.sim, depth_map=depth_map), -1
+        )
+        world_to_camera = CU.get_camera_transform_matrix(
+            camera_name=camera_name,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            sim=sim,
+        )
+        camera_to_world = np.linalg.inv(world_to_camera)
+        obj_pointcloud = CU.transform_from_pixels_to_world(
+            pixels=np.argwhere(obj_mask),
+            depth_map=depth_map[..., 0],
+            camera_to_world_transform=camera_to_world,
+        )
+        pointclouds.append(obj_pointcloud)
+    return np.mean(np.concatenate(pointclouds, axis=0), axis = 0)
 
 def geom_pointcloud(env, geom, camera_names, camera_width, camera_height, sim):
     all_pts = []
@@ -976,91 +979,94 @@ class MPEnv(MetaworldEnv):
                     is_grasped=False,
                 )
             else:
-                if self.name == "assembly-v2" or self.name == "disassemble-v2":
-                    pos = get_geom_pose_from_seg(
-                        self, 
-                        self.sim.model.geom_name2id("WrenchHandle"), 
-                        "corner", 
-                        500, 
-                        500, 
-                        self.sim
+                try:
+                    if self.name == "assembly-v2" or self.name == "disassemble-v2":
+                        pos = get_geom_pose_from_seg(
+                            self, 
+                            self.sim.model.geom_name2id("WrenchHandle"), 
+                            ["corner", "corner2"], 
+                            500, 
+                            500, 
+                            self.sim
+                            ) + np.array([0., 0., 0.02])
+                        set_robot_based_on_ee_pos(
+                            self,
+                            pos, 
+                            self._eef_xquat,
+                            qpos, 
+                            qvel,
+                            is_grasped=False,
+                        ) 
+                    if self.name == "hammer-v2":
+                        obj_pose = get_geom_pose_from_seg(
+                            self, 
+                            self.sim.model.geom_name2id("HammerHandle"),
+                            ["topview", "corner2"],
+                            500,
+                            500,
+                            self.sim        
                         ) + np.array([0., 0., 0.02])
-                    set_robot_based_on_ee_pos(
-                        self,
-                        pos, 
-                        self._eef_xquat,
-                        qpos, 
-                        qvel,
-                        is_grasped=False,
-                    ) 
-                if self.name == "hammer-v2":
-                    obj_pose = get_geom_pose_from_seg(
-                        self, 
-                        self.sim.model.geom_name2id("HammerHandle"),
-                        "topview",
-                        500,
-                        500,
-                        self.sim        
-                    ) + np.array([0., 0., 0.02])
-                    set_robot_based_on_ee_pos(
-                        self, 
-                        obj_pose,
-                        self._eef_xquat,
-                        qpos,
-                        qvel,
-                        False,
-                    )
-                if self.name == "peg-insert-side-v2":
-                    obj_pose = get_geom_pose_from_seg(
-                        self, 
-                        self.sim.model.geom_name2id("peg"),
-                        "topview",
-                        500,
-                        500,
-                        self.sim        
-                    )
-                    set_robot_based_on_ee_pos(
-                        self, 
-                        obj_pose + np.array([0.07, 0., 0.02]),
-                        self._eef_xquat,
-                        self.sim.data.qpos.copy(),
-                        self.sim.data.qvel.copy(),
-                        False,
-                    )
-                if self.name == "stick-pull-v2":
-                    stick_pos = get_geom_pose_from_seg(
-                        self, 
-                        36,
-                        "corner2",
-                        500,
-                        500,
-                        self.sim        
-                    ) + np.array([-0.05, 0., 0.02])
-                    set_robot_based_on_ee_pos(
-                        self, 
-                        stick_pos,
-                        self._eef_xquat,
-                        qpos,
-                        qvel,
-                        False,
-                    )
-                if self.name == "bin-picking-v2":
-                    obj_pose = get_geom_pose_from_seg(
-                        self, 
-                        36,
-                        "topview",
-                        500,
-                        500,
-                        self.sim        
-                    ) + np.array([0., 0.0, 0.02])
-                    set_robot_based_on_ee_pos(
-                        self, 
-                        obj_pose,
-                        self._eef_xquat,
-                        qpos,
-                        qvel,
-                        False,
-                    )
+                        set_robot_based_on_ee_pos(
+                            self, 
+                            obj_pose,
+                            self._eef_xquat,
+                            qpos,
+                            qvel,
+                            False,
+                        )
+                    if self.name == "peg-insert-side-v2":
+                        obj_pose = get_geom_pose_from_seg(
+                            self, 
+                            self.sim.model.geom_name2id("peg"),
+                            ["topview", "corner2"],
+                            500,
+                            500,
+                            self.sim        
+                        )
+                        set_robot_based_on_ee_pos(
+                            self, 
+                            obj_pose + np.array([0.05, 0., 0.02]),
+                            self._eef_xquat,
+                            self.sim.data.qpos.copy(),
+                            self.sim.data.qvel.copy(),
+                            False,
+                        )
+                    if self.name == "stick-pull-v2":
+                        stick_pos = get_geom_pose_from_seg(
+                            self, 
+                            36,
+                            ["topview", "corner2"],
+                            500,
+                            500,
+                            self.sim        
+                        ) + np.array([-0.05, 0., 0.02])
+                        set_robot_based_on_ee_pos(
+                            self, 
+                            stick_pos,
+                            self._eef_xquat,
+                            qpos,
+                            qvel,
+                            False,
+                        )
+                    if self.name == "bin-picking-v2":
+                        obj_pose = get_geom_pose_from_seg(
+                            self, 
+                            36,
+                            ["topview", "corner2"],
+                            500,
+                            500,
+                            self.sim        
+                        ) + np.array([0., 0.0, 0.02])
+                        set_robot_based_on_ee_pos(
+                            self, 
+                            obj_pose,
+                            self._eef_xquat,
+                            qpos,
+                            qvel,
+                            False,
+                        )
+                except:
+                    pos = self._eef_xpos
         return pos
 
     def reset(self, get_intermediate_frames=False, **kwargs):
@@ -1162,54 +1168,57 @@ class MPEnv(MetaworldEnv):
             else:
                 return False
         return (is_grasped and not self.check_com_grasp) and \
-                get_object_pos(self)[2] - self.initial_object_pos[2] > 0.05
+                get_object_pos(self)[2] - self.initial_object_pos[2] > 0.02
 
     def get_target_pos_no_planner(
         self,
     ):
-        if self.name == "peg-insert-side-v2":
-            if self.use_vision_pose_estimation:
-                pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
-            else:
-                pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
-        elif self.name == "hammer-v2":
-            if self.use_vision_pose_estimation:
-                pose = get_geom_pose_from_seg(
-                    self,
-                    53,
-                    "corner",
+        try:
+            if self.name == "peg-insert-side-v2":
+                if self.use_vision_pose_estimation:
+                    pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
+                else:
+                    pose = self._wrapped_env.sim.data.get_site_xpos("hole") + np.array([0.25, 0., 0.045])
+            elif self.name == "hammer-v2":
+                if self.use_vision_pose_estimation:
+                    pose = get_geom_pose_from_seg(
+                        self,
+                        53,
+                        ["corner", "corner2"],
+                        500,
+                        500,
+                        self.sim
+                    ) 
+                    pose += np.array([-0.18, -0.25, 0.05])
+                else:
+                    pose = self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05])
+            elif self.name == "assembly-v2":
+                if self.use_vision_pose_estimation:
+                    pose = get_geom_pose_from_seg(
+                        self,
+                        49,
+                        ["corner", "corner"],
+                        500,
+                        500,
+                        self.sim
+                    ) 
+                    pose += np.array([0.12, 0.0, 0.15])
+                else:
+                    raise NotImplementedError
+            elif self.name == "stick-pull-v2":
+                pail_pos = stick_pos = get_geom_pose_from_seg(
+                    self, 
+                    39,
+                    ["corner", "corner"],
                     500,
                     500,
-                    self.sim
-                ) 
-                pose += np.array([-0.03, -0.25, 0.05])
-            else:
-                pose = self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05])
-        elif self.name == "assembly-v2":
-            if self.use_vision_pose_estimation:
-                pose = get_geom_pose_from_seg(
-                    self,
-                    49,
-                    "corner",
-                    500,
-                    500,
-                    self.sim
-                ) 
-                pose += np.array([0.12, 0.0, 0.15])
-            else:
-                raise NotImplementedError
-        elif self.name == "stick-pull-v2":
-            pail_pos = stick_pos = get_geom_pose_from_seg(
-                self, 
-                39,
-                "corner2",
-                500,
-                500,
-                self.sim        
-            )
-            pose = pail_pos + np.array([-0.13, -0.05, -0.02])
-        else: # bin picking 
-            pose = self._target_pos + np.array([0, 0, 0.15])
+                    self.sim        
+                )
+                pose = pail_pos + np.array([-0.13, -0.05, -0.02])
+            else: # bin picking 
+                pose = self._target_pos + np.array([0, 0, 0.15])
+        except:
+            pose = self._eef_xpos
         return pose
 
     def clamp_planner_action_mp_space_bounds(self, action):
