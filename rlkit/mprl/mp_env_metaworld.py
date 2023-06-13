@@ -39,7 +39,6 @@ except ImportError:
     from os.path import abspath, dirname, join
 
     sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
-    #sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
     from ompl import base as ob
     from ompl import geometric as og
     from ompl import util as ou
@@ -52,7 +51,7 @@ def get_obj_name(env):
     elif env.name == "peg-insert-side-v2":
         obj_name = "peg"
     else:
-        raise NotImplementedError
+        obj_name = "obj"
     return obj_name
 
 ROBOT_BODIES = [
@@ -170,7 +169,7 @@ def check_robot_collision(env, ignore_object_collision, verbose=False):
                 # if the robot and the object collide, then we can ignore the collision
                 continue
             # check using bodies
-            if ((body1 == obj_name and body2 in ROBOT_BODIES) or (body2 == obj_name and body1 in ROBOT_BODIES)) and ignore_object_collision:
+            if ((body1 == obj_name and body2 in ROBOT_BODIES) or (body2 == obj_name and body1 in ROBOT_BODIES)) and not ignore_object_collision:
                 continue 
             return True
         elif ignore_object_collision:
@@ -513,6 +512,7 @@ def geom_pointcloud(env, geom, camera_names, camera_width, camera_height, sim):
 
 ################## VISION PIPELINE ##################
 
+
 def mp_to_point(
     env,
     ik_controller_config,
@@ -533,7 +533,6 @@ def mp_to_point(
     og_eef_xpos = env._eef_xpos.copy()
     og_eef_xquat = env._eef_xquat.copy()
     og_eef_xquat /= np.linalg.norm(og_eef_xquat)
-    og_eef_xpos = np.array([0., 0., 0.]).astype(np.float64)
 
     def isStateValid(state):
         pos = np.array([state.getX(), state.getY(), state.getZ()])
@@ -563,11 +562,11 @@ def mp_to_point(
     bounds = ob.RealVectorBounds(3)
 
     # compare bounds to start state
-    bounds_low = env.mp_bounds_low
-    bounds_high = env.mp_bounds_high
+    bounds_low = np.array((-2., -2., -2.))#env.mp_bounds_low
+    bounds_high = np.array((2., 2., 2.))#
 
-    bounds_low = np.minimum(env.mp_bounds_low, og_eef_xpos)
-    bounds_high = np.maximum(env.mp_bounds_high, og_eef_xpos)
+    bounds_low = np.minimum(bounds_low, og_eef_xpos)
+    bounds_high = np.maximum(bounds_high, og_eef_xpos)
     pos[:3] = np.clip(pos[:3], bounds_low, bounds_high)
 
     bounds.setLow(0, bounds_low[0])
@@ -583,21 +582,24 @@ def mp_to_point(
     # set state validity checking for this space
     si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
     # create a random start state
+    og_eef_xquat = og_eef_xquat.astype(np.float64)
+    og_eef_xquat /= np.linalg.norm(og_eef_xquat)
     start = ob.State(space)
     start().setXYZ(*og_eef_xpos)
-    start().rotation().x = float(og_eef_xquat[0])
-    start().rotation().y = float(og_eef_xquat[1])
-    start().rotation().z = float(og_eef_xquat[2])
-    start().rotation().w = float(og_eef_xquat[3])
+    start().rotation().x = og_eef_xquat[0]
+    start().rotation().y = og_eef_xquat[1]
+    start().rotation().z = og_eef_xquat[2]
+    start().rotation().w = og_eef_xquat[3]
 
     goal = ob.State(space)
     goal().setXYZ(*pos[:3])
-    goal().rotation().x = float(og_eef_xquat[0])
-    goal().rotation().y = float(og_eef_xquat[1])
-    goal().rotation().z = float(og_eef_xquat[2])
-    goal().rotation().w = float(og_eef_xquat[3])
+    goal().rotation().x = og_eef_xquat[0].astype(np.float64)
+    goal().rotation().y = og_eef_xquat[1].astype(np.float64)
+    goal().rotation().z = og_eef_xquat[2].astype(np.float64)
+    goal().rotation().w = og_eef_xquat[3].astype(np.float64)
     goal_valid = isStateValid(goal())
     goal_error = set_robot_based_on_ee_pos(env, pos[:3], og_eef_xquat.copy(), qpos, qvel, grasp)
+    check_robot_collision(env, ignore_object_collision=grasp, verbose=True)
     print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {goal_error}")
     print(f"Start valid: {isStateValid(start())}")
@@ -641,8 +643,8 @@ def mp_to_point(
                 f"{logger.get_snapshot_dir()}/failed_{env.num_steps}.png",
                 env.get_image(),
             )
-    if grasp and get_intermediate_frames:
-        print(f"Goal state has reward {env.reward(None)}")
+    # if grasp and get_intermediate_frames:
+    #     print(f"Goal state has reward {env.reward(None)}")
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
     # set the start and goal states
@@ -657,30 +659,30 @@ def mp_to_point(
     # attempt to solve the problem within planning_time seconds of planning time
     solved = planner.solve(planning_time)
 
-    if get_intermediate_frames:
-        set_robot_based_on_ee_pos(
-            env,
-            og_eef_xpos,
-            og_eef_xquat,
-            qpos,
-            qvel,
-            grasp,
-        )
-        set_robot_based_on_ee_pos(
-            env,
-            pos[:3],
-            pos[3:],
-            qpos,
-            qvel,
-            grasp,
-        )
+    # if get_intermediate_frames:
+    #     set_robot_based_on_ee_pos(
+    #         env,
+    #         og_eef_xpos,
+    #         og_eef_xquat,
+    #         qpos,
+    #         qvel,
+    #         grasp,
+    #     )
+    #     set_robot_based_on_ee_pos(
+    #         env,
+    #         pos[:3],
+    #         pos[3:],
+    #         qpos,
+    #         qvel,
+    #         grasp,
+    #     )
     intermediate_frames = []
     if solved:
         path = pdef.getSolutionPath()
         success = og.PathSimplifier(si).simplify(path, 1.0)
         converted_path = []
         for s, state in enumerate(path.getStates()):
-            new_state = [
+            new_state = np.array([
                 state.getX(),
                 state.getY(),
                 state.getZ(),
@@ -688,7 +690,7 @@ def mp_to_point(
                 state.rotation().y,
                 state.rotation().z,
                 state.rotation().w,
-            ]
+            ])
             if env.update_with_true_state:
                 # get actual state that we used for collision checking on
                 set_robot_based_on_ee_pos(
@@ -704,41 +706,85 @@ def mp_to_point(
                 new_state = np.array(new_state)
             converted_path.append(new_state)
         # reset env to original qpos/qvel
+        waypoint_images = []
+        waypoint_masks = []
+        for i, state in enumerate(converted_path):
+            set_robot_based_on_ee_pos(
+                env,
+                state[:3],
+                state[3:],
+                qpos,
+                qvel,
+                is_grasped=grasp,
+            )
+            im = env.sim.render(
+                camera_name="corner",
+                width=960,
+                height=540,
+            )
+            # cv2.imwrite("test_{i}.png".format(i=i), im)
+            sim = env.sim
+            segmentation_map = np.flipud(CU.get_camera_segmentation(
+                camera_name="corner",
+                camera_width=960,
+                camera_height=540,
+                sim=sim,
+            ))
+            # get robot segmentation mask
+            geom_ids = np.unique(segmentation_map[:, :, 1])
+            robot_ids = []
+            for geom_id in geom_ids:
+                if geom_id != -1:
+                    geom_name = sim.model.geom_id2name(geom_id)
+                    if geom_name == None:
+                        continue
+                    if geom_name.startswith("robot") or geom_name.startswith("left") or geom_name.startswith("right") or geom_id == 27:
+                        robot_ids.append(geom_id)
+            robot_ids.append(27)
+            robot_ids.append(28)
+            robot_mask = np.expand_dims(np.any(
+                [segmentation_map[:, :, 1] == robot_id for robot_id in robot_ids], axis=0
+            ), -1)
+            waypoint_masks.append(robot_mask)
+            # cv2.imwrite('masked_test_{i}.png'.format(i=i), robot_mask*im)
+            waypoint_images.append(robot_mask*im)
+        # assert final state in converted_path is equal to target
         env._wrapped_env.reset()
         env.sim.data.qpos[:] = qpos_curr.copy()
         env.sim.data.qvel[:] = qvel_curr.copy()
+        gripper_qpos = env.sim.data.qpos[7:9].copy()
+        gripper_qvel = env.sim.data.qvel[7:9].copy()
         env.sim.forward()
-
-        for state in converted_path:
+        env.set_robot_color(np.array([0.1, 0.3, 0.7, 1.0]))
+        # try doing [1:]again 
+        for state_idx, state in enumerate(converted_path):
             desired_rot = quat2mat(state[3:])
             for _ in range(50):
-                current_rot = quat2mat(env._eef_xquat)
-                rot_delta = orientation_error(desired_rot, current_rot)
-                pos_delta = state[:3] - env._eef_xpos
-                if grasp:
-                    grip_ctrl = env.grip_ctrl_scale
-                else:
-                    grip_ctrl = -1
-                action = np.concatenate((pos_delta, rot_delta, [grip_ctrl]))
-                if np.linalg.norm(action[:-4]) < 1e-3:
-                    break
-                policy_step = True
-                for i in range(int(env.control_timestep / env.model_timestep)):
+                for _ in range(50):
                     env.sim.forward()
+                    # set gripper qpos and qvel 
+                    env.sim.data.qpos[7:9] = gripper_qpos
+                    env.sim.data.qvel[7:9] = gripper_qvel
+                    env.set_xyz_action((state[:3] - env._eef_xpos))
                     env.sim.step()
-                    env._update_observables()
-                    policy_step = False
                 if hasattr(env, "num_steps"):
                     env.num_steps += 1
                 if get_intermediate_frames:
-                    im = env.get_image()
-                    add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
-                    intermediate_frames.append(im)
+                    im = env.sim.render(camera_name="corner", width=960, height=540).astype(np.float64)
+                    im /= 255
+                    robot_mask = waypoint_masks[state_idx].astype(np.float64)
+                    robot_waypt = 0.5 * (waypoint_images[state_idx].astype(np.float64) / 255)
+                    im = 0.5 * (im * robot_mask) + 0.5 * robot_waypt + im * (1 - robot_mask)
+                    # im = 0.5 * (im * robot_mask) + 0.5 * waypoint_images[state_idx] + im * (1 - robot_mask)
+                    intermediate_frames.append((im * 255).astype(np.uint8))
         env.mp_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
         print(f"Controller reaching MSE: {env.mp_mse}")
         env.goal_error = goal_error
+        if get_intermediate_frames:
+            env.intermediate_frames = intermediate_frames
+            env.reset_robot_color()
     else:
         env._wrapped_env.reset()
         env.sim.data.qpos[:] = qpos_curr.copy()
@@ -748,7 +794,7 @@ def mp_to_point(
         env.goal_error = 0
         env.num_failed_solves += 1
     env.intermediate_frames = intermediate_frames
-    return env._get_observations()
+    #return env._get_observations()
 
 
 class MetaworldEnv(ProxyEnv):
@@ -917,6 +963,42 @@ class MPEnv(MetaworldEnv):
                 high=np.inf,
                 shape=(self.observation_space.shape[0] + 1,),
             )
+        self.robot_bodies = [
+            'base', 'controller_box', 
+            'pedestal_feet', 'torso', 
+            'pedestal', 'right_arm_base_link', 
+            'right_l0', 'head', 
+            'screen', 'head_camera', 
+            'right_torso_itb', 'right_l1', 
+            'right_l2', 'right_l3', 
+            'right_l4', 'right_arm_itb', 
+            'right_l5', 'right_hand_camera', 
+            'right_wrist', 'right_l6', 'right_hand', 
+            'hand', 'rightclaw', 'rightpad', 
+            'leftclaw', 'leftpad', 'right_l4_2', 
+            'right_l2_2', 'right_l1_2',
+        ]
+        self.robot_body_ids, self.robot_geom_ids = self.get_body_geom_ids_from_robot_bodies()
+        self.original_colors = [env.sim.model.geom_rgba[idx].copy() for idx in self.robot_geom_ids]
+
+    def get_body_geom_ids_from_robot_bodies(self):
+        body_ids = [self.sim.model.body_name2id(body) for body in self.robot_bodies]
+        geom_ids = []
+        for geom_id, body_id in enumerate(self.sim.model.geom_bodyid):
+            if body_id in body_ids:
+                geom_ids.append(geom_id)
+        return body_ids, geom_ids
+
+    def set_robot_color(self, colors):
+        if type(colors) is np.ndarray:
+            colors = [colors] * len(self.robot_geom_ids)
+        for idx, geom_id in enumerate(self.robot_geom_ids):
+            self.sim.model.geom_rgba[geom_id] = colors[idx]
+        self.sim.forward()
+
+    def reset_robot_color(self):
+        self.set_robot_color(self.original_colors)
+        self.sim.forward()
 
     def get_target_pos_list(self):
         pos_list = []
@@ -980,94 +1062,127 @@ class MPEnv(MetaworldEnv):
                     is_grasped=False,
                 )
             else:
-                try:
-                    if self.name == "assembly-v2" or self.name == "disassemble-v2":
-                        pos = get_geom_pose_from_seg(
-                            self, 
-                            self.sim.model.geom_name2id("WrenchHandle"), 
-                            ["corner", "corner2"], 
-                            500, 
-                            500, 
-                            self.sim
-                            ) + np.array([0., 0., 0.02])
-                        set_robot_based_on_ee_pos(
-                            self,
-                            pos, 
-                            self._eef_xquat,
-                            qpos, 
-                            qvel,
-                            is_grasped=False,
-                        ) 
-                    if self.name == "hammer-v2":
-                        obj_pose = get_geom_pose_from_seg(
-                            self, 
-                            self.sim.model.geom_name2id("HammerHandle"),
-                            ["topview", "corner2"],
-                            500,
-                            500,
-                            self.sim        
-                        ) + np.array([0., 0., 0.02])
-                        set_robot_based_on_ee_pos(
-                            self, 
-                            obj_pose,
-                            self._eef_xquat,
-                            qpos,
-                            qvel,
-                            False,
-                        )
-                    if self.name == "peg-insert-side-v2":
-                        obj_pose = get_geom_pose_from_seg(
-                            self, 
-                            self.sim.model.geom_name2id("peg"),
-                            ["topview", "corner2"],
-                            500,
-                            500,
-                            self.sim        
-                        )
-                        set_robot_based_on_ee_pos(
-                            self, 
-                            obj_pose + np.array([0.05, 0., 0.02]),
-                            self._eef_xquat,
-                            self.sim.data.qpos.copy(),
-                            self.sim.data.qvel.copy(),
-                            False,
-                        )
-                    if self.name == "stick-pull-v2":
-                        stick_pos = get_geom_pose_from_seg(
-                            self, 
-                            36,
-                            ["topview", "corner2"],
-                            500,
-                            500,
-                            self.sim        
-                        ) + np.array([-0.05, 0., 0.02])
-                        set_robot_based_on_ee_pos(
-                            self, 
-                            stick_pos,
-                            self._eef_xquat,
-                            qpos,
-                            qvel,
-                            False,
-                        )
-                    if self.name == "bin-picking-v2":
-                        obj_pose = get_geom_pose_from_seg(
-                            self, 
-                            36,
-                            ["topview", "corner2"],
-                            500,
-                            500,
-                            self.sim        
-                        ) + np.array([0., 0.0, 0.02])
-                        set_robot_based_on_ee_pos(
-                            self, 
-                            obj_pose,
-                            self._eef_xquat,
-                            qpos,
-                            qvel,
-                            False,
-                        )
-                except:
-                    pos = self._eef_xpos
+                if self.name == "assembly-v2" or self.name == "disassemble-v2":
+                    pos = get_geom_pose_from_seg(
+                        self, 
+                        self.sim.model.geom_name2id("WrenchHandle"), 
+                        ["corner", "corner2"], 
+                        500, 
+                        500, 
+                        self.sim
+                        ) + np.array([0.02, 0.02, 0.03])
+                    obs = mp_to_point(
+                        self,
+                        pos=np.concatenate((pos.astype(np.float64), self._eef_xquat)),
+                        osc_controller_config=None,
+                        ik_controller_config=None,
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=False,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=True,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    )
+                    # set_robot_based_on_ee_pos(
+                    #     self,
+                    #     pos, 
+                    #     self._eef_xquat,
+                    #     qpos, 
+                    #     qvel,
+                    #     is_grasped=False,
+                    # ) 
+                if self.name == "hammer-v2":
+                    obj_pose = get_geom_pose_from_seg(
+                        self, 
+                        self.sim.model.geom_name2id("HammerHandle"),
+                        ["topview", "corner2"],
+                        500,
+                        500,
+                        self.sim        
+                    ) + np.array([0., 0., 0.02])
+                    # set_robot_based_on_ee_pos(
+                    #     self, 
+                    #     obj_pose,
+                    #     self._eef_xquat,
+                    #     qpos,
+                    #     qvel,
+                    #     False,
+                    # )
+                    obs = mp_to_point(
+                        self,
+                        pos=np.concatenate((obj_pose.astype(np.float64), self._eef_xquat)),
+                        osc_controller_config=None,
+                        ik_controller_config=None,
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=False,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=True,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    )
+                if self.name == "peg-insert-side-v2":
+                    obj_pose = get_geom_pose_from_seg(
+                        self, 
+                        self.sim.model.geom_name2id("peg"),
+                        ["topview", "corner2"],
+                        500,
+                        500,
+                        self.sim        
+                    )
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        obj_pose + np.array([0.05, 0., 0.02]),
+                        self._eef_xquat,
+                        self.sim.data.qpos.copy(),
+                        self.sim.data.qvel.copy(),
+                        False,
+                    )
+                if self.name == "stick-pull-v2":
+                    stick_pos = get_geom_pose_from_seg(
+                        self, 
+                        36,
+                        ["topview", "corner2"],
+                        500,
+                        500,
+                        self.sim        
+                    ) + np.array([-0.05, 0., 0.02])
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        stick_pos,
+                        self._eef_xquat,
+                        qpos,
+                        qvel,
+                        False,
+                    )
+                if self.name == "bin-picking-v2":
+                    obj_pose = get_geom_pose_from_seg(
+                        self, 
+                        36,
+                        ["topview", "corner2"],
+                        500,
+                        500,
+                        self.sim        
+                    ) + np.array([0., 0.0, 0.02])
+                    # set_robot_based_on_ee_pos(
+                    #     self, 
+                    #     obj_pose,
+                    #     self._eef_xquat,
+                    #     qpos,
+                    #     qvel,
+                    #     False,
+                    # )
+                    obs = mp_to_point(
+                        self,
+                        pos=np.concatenate((obj_pose.astype(np.float64), self._eef_xquat)),
+                        osc_controller_config=None,
+                        ik_controller_config=None,
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=False,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=True,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    )
         return pos
 
     def reset(self, get_intermediate_frames=False, **kwargs):
@@ -1101,7 +1216,7 @@ class MPEnv(MetaworldEnv):
                     qvel=self.reset_qvel,
                     grasp=False,
                     planning_time=self.planning_time,
-                    get_intermediate_frames=get_intermediate_frames,
+                    get_intermediate_frames=True,
                     backtrack_movement_fraction=self.backtrack_movement_fraction,
                 )
         if self.reset_at_grasped_state:
@@ -1203,7 +1318,7 @@ class MPEnv(MetaworldEnv):
                         500,
                         self.sim
                     ) 
-                    pose += np.array([0.12, 0.0, 0.15])
+                    pose += np.array([0.11, 0.0, 0.3]) # go back to 0.12
                 else:
                     raise NotImplementedError
             elif self.name == "stick-pull-v2":
@@ -1227,6 +1342,7 @@ class MPEnv(MetaworldEnv):
         return action
 
     def step(self, action, get_intermediate_frames=False):
+        self.intermediate_frames = []
         if self.plan_to_learned_goals or self.planner_only_actions:
             if self.take_planner_step:
                 target_pos = self.get_target_pos()
@@ -1304,16 +1420,28 @@ class MPEnv(MetaworldEnv):
             else:
                 is_grasped = False
             if (self.teleport_on_grasp and is_grasped) and self.use_teleports_in_step:
-                frame = self.sim.render(camera_name="corner", width=500, height=500)
                 target_pos = self.get_target_pos_no_planner()
                 if self.teleport_instead_of_mp:
-                    set_robot_based_on_ee_pos(
+                    # set_robot_based_on_ee_pos(
+                    #     self,
+                    #     target_pos,
+                    #     self.reset_ori,
+                    #     self.reset_qpos,
+                    #     self.reset_qvel,
+                    #     is_grasped=is_grasped,
+                    # )
+                    # _xpos+np.array([0., 0., 0.05])
+                    obs = mp_to_point(
                         self,
-                        target_pos,
-                        self.reset_ori,
-                        self.reset_qpos,
-                        self.reset_qvel,
-                        is_grasped=is_grasped,
+                        pos=np.concatenate((target_pos.astype(np.float64), self._eef_xquat)),
+                        osc_controller_config=None,
+                        ik_controller_config=None,
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=True,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=True,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
                     self.hasnt_teleported = False
                     print(
@@ -1337,7 +1465,7 @@ class MPEnv(MetaworldEnv):
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
-            assert self._wrapped_env.curr_path_length == curr_len + 1
+            #assert self._wrapped_env.curr_path_length == curr_len + 1
         i["grasped"] = float(self.check_grasp())
         i["num_steps"] = self.num_steps
         if not self.teleport_instead_of_mp:
