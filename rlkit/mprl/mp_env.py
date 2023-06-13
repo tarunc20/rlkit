@@ -536,6 +536,7 @@ def get_placement_pose_mp(env, obj_idx=0):
     if "PickPlace" in name:
         new_obj_idx = compute_correct_obj_idx(env, obj_idx)
         target_pos = env.target_bin_placements[new_obj_idx].copy()
+        # target_pos[2] += 0.175 #  use this for Cereal/Milk
         target_pos[2] += 0.125
     if "NutAssembly" in name:
         if name.endswith("Square") or obj_idx == 1:
@@ -1536,6 +1537,7 @@ def mp_to_point_joint(
     target_angles = compute_ik(
         env, target_xyz, target_quat, ik_ctrl, qpos, qvel, og_qpos, og_qvel
     ).astype(np.float64)
+
     # clamp target angles to be within joint limits
     # print(target_xyz)
     # print(target_quat)
@@ -1561,8 +1563,10 @@ def mp_to_point_joint(
 
     # print is goal valid
     goal_valid = isStateValid(goal)
+    print(f"Goal valid: {goal_valid}")
     if not goal_valid:
-        # maybe modify later
+        cv2.imwrite("goal_invalid.png", env.get_image())
+    #     # maybe modify later
         target_angles = backtracking_search_from_goal_joints(
             env,
             ignore_object_collision,
@@ -1580,24 +1584,24 @@ def mp_to_point_joint(
     goal_valid = isStateValid(goal)
     print(f"Updated goal valid: {goal_valid}")
 
-    success, state = check_linear_interpolation(
-        env,
-        pos,
-        target_angles,
-        qpos,
-        qvel,
-        og_qpos,
-        og_qvel,
-        checkpoint_frac=0.01,
-        get_intermediate_frames=get_intermediate_frames,
-        default_controller_configs=default_controller_configs,
-        ignore_object_collision=ignore_object_collision,
-        is_grasped=grasp,
-        obj_idx=obj_idx,
-    )
-    if success:
-        print(f"Linear Interpolation Worked")
-        return state
+    # success, state = check_linear_interpolation(
+    #     env,
+    #     pos,
+    #     target_angles,
+    #     qpos,
+    #     qvel,
+    #     og_qpos,
+    #     og_qvel,
+    #     checkpoint_frac=0.01,
+    #     get_intermediate_frames=get_intermediate_frames,
+    #     default_controller_configs=default_controller_configs,
+    #     ignore_object_collision=ignore_object_collision,
+    #     is_grasped=grasp,
+    #     obj_idx=obj_idx,
+    # )
+    # if success:
+    #     print(f"Linear Interpolation Worked")
+    #     return state
 
     # create a problem instance
     pdef = ob.ProblemDefinition(si)
@@ -1637,6 +1641,8 @@ def mp_to_point_joint(
         old_qvel = env.sim.data.qvel.copy()
 
         # set to every state in the path and see what it looks like:
+        waypoint_images = []
+        waypoint_masks = []
         for i, state in enumerate(converted_path):
             set_robot_based_on_joint_angles(
                 env,
@@ -1648,14 +1654,45 @@ def mp_to_point_joint(
                 obj_idx=obj_idx,
             )
             im = env.get_image()
-            cv2.imwrite("test_{i}.png".format(i=i), im)
+            # cv2.imwrite("test_{i}.png".format(i=i), im)
+            sim = env.sim
+            segmentation_map = CU.get_camera_segmentation(
+                camera_name="frontview",
+                camera_width=960,
+                camera_height=540,
+                sim=sim,
+            )
+            # get robot segmentation mask
+            geom_ids = np.unique(segmentation_map[:, :, 1])
+            robot_ids = []
+            for geom_id in geom_ids:
+                geom_name = sim.model.geom_id2name(geom_id)
+                if geom_name is None or geom_name.startswith("Visual"):
+                    continue
+                if geom_name.startswith("robot0") or geom_name.startswith("gripper"):
+                    robot_ids.append(geom_id)
+            robot_mask = np.expand_dims(np.any(
+                [segmentation_map[:, :, 1] == robot_id for robot_id in robot_ids], axis=0
+            ), -1)
+            waypoint_masks.append(robot_mask)
+            # cv2.imwrite('masked_test_{i}.png'.format(i=i), robot_mask*im)
+            waypoint_images.append(robot_mask*im)
+        if grasp:
+            print(env._eef_xpos, target_xyz, state, target_angles)
+        # assert final state in converted_path is equal to target
 
         env.sim.data.qpos[:] = old_state.copy()
         env.sim.data.qvel[:] = old_qvel.copy()
         env.sim.forward()
 
+        if get_intermediate_frames:
+            im = env.get_image()
+            intermediate_frames.append(im)
+        env.set_robot_color(np.array([0.1, 0.3, 0.7, 1.0]))
+        # get target pos image and alpha blend with current image
+
         # now take path and execute
-        for state in converted_path:
+        for state_idx, state in enumerate(converted_path):
             start_angles = env.sim.data.qpos[:7]
             for step in range(50):
                 policy_step = True
@@ -1686,8 +1723,12 @@ def mp_to_point_joint(
                     env._update_observables()
                 if get_intermediate_frames:
                     im = env.get_image()
-                    add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
+                    if state_idx > 0:
+                        robot_mask = waypoint_masks[state_idx]
+                        im = 0.5 * (im * robot_mask) + 0.5 * waypoint_images[state_idx] + im * (1 - robot_mask)
+                    # add_text(im, "Planner", (1, 10), 0.5, (0, 255, 0))
                     intermediate_frames.append(im)
+        env.reset_robot_color()
         # print(f"True target: {target_angles}")
         # print(
         #     f"Error: {np.linalg.norm(np.concatenate((env._eef_xpos, env._eef_xquat)) - pos)**2}"
@@ -1752,27 +1793,21 @@ class RobosuiteEnv(ProxyEnv):
             return di
 
     def add_cameras(self):
-        for cam_name, cam_w, cam_h, cam_d, cam_seg in zip(
-            self.camera_names,
-            self.camera_widths,
-            self.camera_heights,
-            self.camera_depths,
-            self.camera_segmentations,
-        ):
+        for cam_name in ['frontview']:
             # Add cameras associated to our arrays
             cam_sensors, _ = self._create_camera_sensors(
                 cam_name,
-                cam_w=cam_w,
-                cam_h=cam_h,
-                cam_d=cam_d,
-                cam_segs=cam_seg,
+                cam_w=960,
+                cam_h=540,
+                cam_d=False,
+                cam_segs=None,
                 modality="image",
             )
             self.cam_sensor = cam_sensors
 
     def get_image(self):
         im = self.cam_sensor[0](None)
-        im = cv2.flip(im[:, :, ::-1], 0)
+        im = cv2.flip(im, 0)
         return im
 
     def reset(self, **kwargs):
@@ -1919,6 +1954,13 @@ class MPEnv(RobosuiteEnv):
         self.use_vision_grasp_check = use_vision_grasp_check
         self.noisy_pose_estimates = noisy_pose_estimates
         self.pose_sigma = pose_sigma
+        self.robot_bodies = [
+            "robot0_link0", "robot0_link1", "robot0_link2", "robot0_link3", "robot0_link4",
+            "robot0_link5", "robot0_link6", "robot0_link7", "gripper0_right_gripper",
+            "gripper0_leftfinger", "gripper0_rightfinger"
+        ]
+        self.robot_body_ids, self.robot_geom_ids = self.get_body_geom_ids_from_robot_bodies()
+        self.original_colors = [env.sim.model.geom_rgba[idx].copy() for idx in self.robot_geom_ids]
         self.robot = URDF.load(
             robosuite.__file__[: -len("/__init__.py")]
             + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
@@ -1931,7 +1973,26 @@ class MPEnv(RobosuiteEnv):
                 high=np.inf,
                 shape=(self.observation_space.shape[0] + 1,),
             )
+    
+    def get_body_geom_ids_from_robot_bodies(self):
+        body_ids = [self.sim.model.body_name2id(body) for body in self.robot_bodies]
+        geom_ids = []
+        for geom_id, body_id in enumerate(self.sim.model.geom_bodyid):
+            if body_id in body_ids:
+                geom_ids.append(geom_id)
+        return body_ids, geom_ids
 
+    def set_robot_color(self, colors):
+        if type(colors) is np.ndarray:
+            colors = [colors] * len(self.robot_geom_ids)
+        for idx, geom_id in enumerate(self.robot_geom_ids):
+            self.sim.model.geom_rgba[geom_id] = colors[idx]
+        self.sim.forward()
+
+    def reset_robot_color(self):
+        self.set_robot_color(self.original_colors)
+        self.sim.forward()
+        
     def compute_hardcoded_orientation(self, target_pos, quat):
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
         # compute perpendicular top grasps for the object, pick one that has less error
@@ -2062,7 +2123,7 @@ class MPEnv(RobosuiteEnv):
     def reset(self, get_intermediate_frames=False, **kwargs):
         obs = self._wrapped_env.reset(**kwargs)
         # for nut assembly, we need to add a few burn in steps to get the right object pos
-        for _ in range(10):  # 100 was for old saved policies
+        for _ in range(100):  # 100 was for old saved policies
             a = np.zeros(7)
             a[-1] = -1
             self._wrapped_env.step(a)
@@ -2258,7 +2319,8 @@ class MPEnv(RobosuiteEnv):
                 else self.initial_object_pos
             )
             is_grasped = (
-                is_grasped and (pos[2] - init_object_pos[2]) > 0.005
+                # is_grasped and (pos[2] - init_object_pos[2]) > 0.005
+                is_grasped and (pos[2] - init_object_pos[2]) > 0.01
             )  # changed from 0.01 to 0.005 because vision is not as accurate
         return is_grasped
 

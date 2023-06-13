@@ -12,9 +12,10 @@ from rlkit.torch.model_based.dreamer.visualization import make_video
 
 if __name__ == "__main__":
     mp_env_kwargs = dict(
-        vertical_displacement=0.08,
-        teleport_instead_of_mp=False,
-        use_joint_space_mp=True,
+        # vertical_displacement=0.08,
+        vertical_displacement=0.06,
+        teleport_instead_of_mp=True,
+        use_joint_space_mp=False,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
         mp_bounds_high=(0.45, 0.85, 2.25),
@@ -29,7 +30,12 @@ if __name__ == "__main__":
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
         hardcoded_orientations=False,
-        use_pcd_collision_check=True,
+        use_pcd_collision_check=False,
+        #     use_vision_pose_estimation=True,
+        #     use_vision_placement_check=True,
+        #     use_vision_grasp_check=True,
+        noisy_pose_estimates=False,
+        # pose_sigma=0,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -37,8 +43,9 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceCan",
-        # valid_obj_names=["Cereal", "Milk", "Can", "Bread"],
+        env_name="PickPlace",
+        valid_obj_names=["Cereal", "Milk", "Can", "Bread"],
+        # valid_obj_names=["Can", "Bread"],
         reward_scale=4.0,
     )
     controller_configs = dict(
@@ -67,146 +74,151 @@ if __name__ == "__main__":
         has_offscreen_renderer=True,
         use_camera_obs=False,
         camera_names="frontview",
-        camera_heights=1024,
-        camera_widths=1024,
+        camera_heights=480,
+        camera_widths=640,
         hard_reset=False,
     )
-    np.random.seed(0)
     env = MPEnv(GymWrapper(env), **mp_env_kwargs)
-    # env = RobosuiteEnv(GymWrapper(env), terminate_on_success=True)
-    num_episodes = 10
-    total = 0
-    ptu.device = torch.device("cuda")
-    success_rate = 0
-    frames = []
-    env.intermediate_frames = []
-    for s in tqdm(range(num_episodes)):
-        o = env.reset(get_intermediate_frames=True)
-        print(env._eef_xpos, env._eef_xquat)
-        if len(env.intermediate_frames) > 0:
-            for frame in env.intermediate_frames:
-                frames.append(frame)
-            env.intermediate_frames = []
-        rs = []
-        frames.append(env.get_image())
-        for i in range(15):
-            a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            frames.append(env.get_image())
-        for i in range(10):
-            a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            frames.append(env.get_image())
-        for i in range(10):
-            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
-            o, r, d, info = env.step(a, get_intermediate_frames=True)
+    all_success_rates = []
+    for seed in range(1):
+        np.random.seed(2)
+        num_episodes = 1
+        total = 0
+        ptu.device = torch.device("cuda")
+        success_rate = 0
+        frames = []
+        env.intermediate_frames = []
+        for s in tqdm(range(num_episodes)):
+            o = env.reset(get_intermediate_frames=True)
             if len(env.intermediate_frames) > 0:
                 for frame in env.intermediate_frames:
                     frames.append(frame)
                 env.intermediate_frames = []
-            rs.append(r)
+            rs = []
             frames.append(env.get_image())
-        for i in range(10):
-            a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            frames.append(env.get_image())
-        for i in range(10):
-            a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
-            o, r, d, info = env.step(a)
-            rs.append(r)
-            frames.append(env.get_image())
+            for i in range(15):
+                a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(5):
+                a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+                o, r, d, info = env.step(a, get_intermediate_frames=True)
+                if len(env.intermediate_frames) > 0:
+                    for frame in env.intermediate_frames:
+                        frames.append(frame)
+                    env.intermediate_frames = []
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            # exit()
 
-        # for i in range(15):
-        #     a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
+            for i in range(15):
+                a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(30):
+                a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            cv2.imwrite('milk_cereal.png', frames[-1][:, :, ::-1])
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
+            for i in range(10):
+                a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+                o, r, d, info = env.step(a)
+                rs.append(r)
+                frames.append(env.get_image())
 
-        # for i in range(15):
-        #     a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
+            # for i in range(25):
+            #     a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(10):
+            #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(30):
+            #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(10):
+            #     a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(10):
+            #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
 
-        # for i in range(15):
-        #     a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
-        # for i in range(10):
-        #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
-        #     o, r, d, info = env.step(a)
-        #     rs.append(r)
-        #     frames.append(env.get_image())
+            # for i in range(25):
+            #     a = np.concatenate(([0, 0, -0.3], [0, 0, 0, -1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(10):
+            #     a = np.concatenate(([0, 0, 0], [0, 0, 0, 1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(30):
+            #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, 1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(10):
+            #     a = np.concatenate(([0, 0, 0.0], [0, 0, 0, -1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
+            # for i in range(10):
+            #     a = np.concatenate(([0, 0, 0.1], [0, 0, 0, -1]))
+            #     o, r, d, info = env.step(a)
+            #     rs.append(r)
+            #     frames.append(env.get_image())
 
-        # plt.plot(rs)
-        # plt.savefig(f"test_{s}.png")
-        # plt.clf()
-        # cumsum = np.cumsum(rs)
-        # plt.plot(cumsum)
-        # plt.savefig(f"test_{s}_cumsum.png")
-        # plt.clf()
-        # plt.show()
-        success_rate += env._check_success()
-        print(env._check_success())
-        print("Running Success Rate: ", success_rate / (s + 1))
-    print(f"Success Rate: {success_rate/num_episodes}")
+            # plt.plot(rs)
+            # plt.savefig(f"test_{s}.png")
+            # plt.clf()
+            # cumsum = np.cumsum(rs)
+            # plt.plot(cumsum)
+            # plt.savefig(f"test_{s}_cumsum.png")
+            # plt.clf()
+            # plt.show()
+            success_rate += env._check_success()
+            print(env._check_success())
+            print("Running Success Rate: ", success_rate / (s + 1))
+        print(f"Success Rate: {success_rate/num_episodes}")
+        all_success_rates.append(success_rate / num_episodes)
+    print("Mean success", np.mean(all_success_rates))
+    print("Std success", np.std(all_success_rates))
     make_video(frames, "videos", 0, use_wandb=False)

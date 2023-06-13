@@ -608,7 +608,7 @@ def set_robot_based_on_ee_pos(
 def check_robot_string(string):
     if string is None:
         return False
-    return string.startswith("robot") or string.startswith("gripper")
+    return string.startswith("panda0") or string.startswith("gripper")
 
 
 def check_string(string, other_string):
@@ -618,7 +618,26 @@ def check_string(string, other_string):
 
 
 def check_robot_collision(env, ignore_object_collision, obj_idx=0):
-    # TODO: implement
+    obj_string = get_object_string(env, obj_idx=obj_idx)
+    d = env.sim.data
+    for coni in range(d.ncon):
+        con1 = env.sim.model.geom_id2name(d.contact[coni].geom1)
+        con2 = env.sim.model.geom_id2name(d.contact[coni].geom2)
+        if check_robot_string(con1) ^ check_robot_string(con2):
+            if (
+                check_string(con1, obj_string)
+                or check_string(con2, obj_string)
+                and ignore_object_collision
+            ):
+                # if the robot and the object collide, then we can ignore the collision
+                continue
+            return True
+        elif ignore_object_collision:
+            if check_string(con1, obj_string) or check_string(con2, obj_string):
+                # if we are supposed to be "ignoring object collisions" then we assume the
+                # robot is "joined" to the object. so if the object collides with any non-robot
+                # object, then we should call that a collision
+                return True
     return False
 
 
@@ -708,7 +727,6 @@ def apply_controller(controller, action, robot, policy_step):
 
 def mp_to_point(
     env,
-    ik_controller_config,
     osc_controller_config,
     pos,
     qpos,
@@ -962,9 +980,381 @@ def mp_to_point(
         env.mp_mse = 0
         env.goal_error = 0
         env.num_failed_solves += 1
-    env.intermediate_frames = intermediate_frames
+    # env.intermediate_frames = intermediate_frames
     return env._get_observations()
 
+def set_robot_based_on_joint_angles(
+    env,
+    joint_pos,
+    qpos,
+    qvel,
+    is_grasped,
+    obj_idx=0,
+    open_gripper_on_tp=False,
+):
+    object_pos, object_quat = get_object_pose(env, obj_idx=obj_idx)
+    object_pos = object_pos.copy()
+    object_quat = object_quat.copy()
+    gripper_qpos = env.sim.data.qpos[7:9].copy()
+    gripper_qvel = env.sim.data.qvel[7:9].copy()
+    old_eef_xquat = env._eef_xquat.copy()
+    old_eef_xpos = env._eef_xpos.copy()
+
+    env.sim.data.qpos[:7] = (joint_pos)
+    env.sim.forward()
+    assert (env.sim.data.qpos[:7] - joint_pos).sum() < 1e-10
+    # error = np.linalg.norm(env._eef_xpos - pos[:3])
+
+    if is_grasped:
+        env.sim.data.qpos[7:9] = gripper_qpos
+        env.sim.data.qvel[7:9] = gripper_qvel
+
+        # compute the transform between the old and new eef poses
+        ee_old_mat = pose2mat((old_eef_xpos, old_eef_xquat))
+        ee_new_mat = pose2mat((env._eef_xpos, env._eef_xquat))
+        transform = ee_new_mat @ np.linalg.inv(ee_old_mat)
+
+        # apply the transform to the object
+        new_object_pose = mat2pose(
+            np.dot(transform, pose2mat((object_pos, object_quat)))
+        )
+        set_object_pose(env, new_object_pose[0], new_object_pose[1], obj_idx=obj_idx)
+        env.sim.forward()
+    else:
+        # make sure the object is back where it started
+        set_object_pose(env, object_pos, object_quat, obj_idx=obj_idx)
+
+    if open_gripper_on_tp:
+        env.sim.data.qpos[7:9] = np.array([0.04, 0.04])
+        env.sim.data.qvel[7:9] = np.zeros(2)
+        env.sim.forward()
+    else:
+        env.sim.data.qpos[7:9] = gripper_qpos
+        env.sim.data.qvel[7:9] = gripper_qvel
+        env.sim.forward()
+    
+def check_state_validity_joint(
+    env,
+    curr_pos,
+    qpos,
+    qvel,
+    is_grasped,
+    obj_idx,
+    ignore_object_collision=False,
+):
+    if env.use_pcd_collision_check:
+        collision = pcd_collision_check(
+            env,
+            curr_pos,
+            qpos[7:9],
+            is_grasped,
+        )
+        valid = not collision
+    else:
+        set_robot_based_on_joint_angles(
+            env,
+            curr_pos,
+            qpos,
+            qvel,
+            is_grasped,
+            obj_idx=obj_idx,
+        )
+        # fix ignore object collision to be the value passed in mp_to_point
+        valid = not check_robot_collision(
+            env, ignore_object_collision=ignore_object_collision, obj_idx=obj_idx
+        )
+    return valid
+
+def mp_to_point_joint(
+    env,
+    pos,
+    qpos,
+    qvel,
+    grasp=False,
+    ignore_object_collision=False,
+    planning_time=1,
+    get_intermediate_frames=False,
+    backtrack_movement_fraction=0.001,
+    open_gripper=False,
+    obj_idx=0,
+):
+    env.xyz, env.object_pcd = compute_pcd(env, obj_idx=obj_idx, is_grasped=grasp)
+    og_qpos = env.sim.data.qpos.copy()
+    og_qvel = env.sim.data.qvel.copy()
+    target_xyz = pos[:3]
+    target_quat = pos[3:]
+
+    env.mp_mse = 0
+    env.goal_error = 0
+
+    def isStateValid(state):
+        # set robot correctly
+        joint_pos = np.zeros(7)
+        for i in range(7):
+            joint_pos[i] = state[i]
+        # if all(joint_pos == og_qpos[:7]):
+        #     # start state is always valid.
+        #     return True
+        # else:
+        # TODO; if it was grasping before ik and not after automatically set to invalid
+        valid = check_state_validity_joint(
+            env,
+            joint_pos,
+            qpos,
+            qvel,
+            grasp,
+            obj_idx,
+            ignore_object_collision=ignore_object_collision,
+        )
+        return valid
+
+    # get target angles to achieve position
+    # target_angles = compute_ik(
+    #     env, target_xyz, target_quat, ik_ctrl, qpos, qvel, og_qpos, og_qvel
+    # ).astype(np.float64)
+
+    target_angles = qpos_from_site_pose_kitchen(
+        env,
+        "end_effector",
+        target_pos=target_xyz,
+        target_quat=target_quat.astype(np.float64),
+        joint_names=[
+            "panda_joint0",
+            "panda_joint1",
+            "panda_joint2",
+            "panda_joint3",
+            "panda_joint4",
+            "panda_joint5",
+            "panda_joint6",
+        ],
+        tol=1e-14,
+        rot_weight=1.0,
+        regularization_threshold=0.1,
+        regularization_strength=3e-2,
+        max_update_norm=2.0,
+        progress_thresh=20.0,
+        max_steps=1000,
+    ).qpos.copy()[:7]
+    env.sim.data.qpos[:] = og_qpos
+    env.sim.data.qvel[:] = og_qvel
+    env.sim.forward()
+
+    # clamp target angles to be within joint limits
+    # print(target_xyz)
+    # print(target_quat)
+    # print(target_angles)
+    # print()
+    # set up planning space for ompl
+    space = ob.RealVectorStateSpace(7)
+    bounds = ob.RealVectorBounds(7)
+    env_bounds = env.sim.model.jnt_range[:7, :]
+    for i in range(7):
+        bounds.setLow(i, env_bounds[i, 0]-np.pi)
+        bounds.setHigh(i, env_bounds[i, 1]+np.pi)
+    space.setBounds(bounds)
+    si = ob.SpaceInformation(space)
+    si.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
+    si.setStateValidityCheckingResolution(0.01)  # default of 0.01 is too coarse
+    start = ob.State(space)
+    for i in range(7):
+        start()[i] = env.sim.data.qpos[i]
+    goal = ob.State(space)
+    for i in range(7):
+        goal()[i] = target_angles[i]
+
+    # print is goal valid
+    goal_valid = isStateValid(goal)
+    print(f"Goal valid: {goal_valid}")
+    # if not goal_valid:
+    #     cv2.imwrite("goal_invalid.png", env.get_image())
+    # #     # maybe modify later
+    #     target_angles = backtracking_search_from_goal_joints(
+    #         env,
+    #         ignore_object_collision,
+    #         og_qpos[:7],
+    #         target_angles,
+    #         qpos,
+    #         qvel,
+    #         movement_fraction=backtrack_movement_fraction,
+    #         is_grasped=grasp,
+    #         default_controller_configs=default_controller_configs,
+    #         obj_idx=obj_idx,
+    #     )
+    #     for i in range(7):
+    #         goal()[i] = target_angles[i]
+    goal_valid = isStateValid(goal)
+    print(f"Updated goal valid: {goal_valid}")
+
+    # success, state = check_linear_interpolation(
+    #     env,
+    #     pos,
+    #     target_angles,
+    #     qpos,
+    #     qvel,
+    #     og_qpos,
+    #     og_qvel,
+    #     checkpoint_frac=0.01,
+    #     get_intermediate_frames=get_intermediate_frames,
+    #     default_controller_configs=default_controller_configs,
+    #     ignore_object_collision=ignore_object_collision,
+    #     is_grasped=grasp,
+    #     obj_idx=obj_idx,
+    # )
+    # if success:
+    #     print(f"Linear Interpolation Worked")
+    #     return state
+
+    # create a problem instance
+    pdef = ob.ProblemDefinition(si)
+    # set the start and goal states
+    pdef.setStartAndGoalStates(start, goal)
+    # create a planner for the defined space
+    planner = og.RRTConnect(si)
+    # set the problem we are trying to solve for the planner
+    planner.setProblemDefinition(pdef)
+    planner.setRange(0.05)
+    # perform setup steps for the planner
+    planner.setup()
+    solved = planner.solve(planning_time)
+    converted_path = []
+    if solved:
+        path = pdef.getSolutionPath()
+        init_p_len = len(path.getStates())
+        success = og.PathSimplifier(si).simplify(path, 1.0)
+        path = path.getStates()
+        # print(f"Length of path improvement: {init_p_len - len(path)}")
+        for i in range(len(path)):
+            converted_path.append(np.array([path[i][j] for j in range(7)]))
+        # reset environment
+        env._wrapped_env.reset()
+        env.sim.data.qpos[:] = og_qpos.copy()
+        env.sim.data.qvel[:] = og_qvel.copy()
+        env.sim.forward()
+
+        # update_controller_config(env, jp_controller_config)
+        # jp_ctrl = controller_factory("JOINT_POSITION", jp_controller_config)
+        # jp_ctrl.update_base_pose(env.robots[0].base_pos, env.robots[0].base_ori)
+        # jp_ctrl.reset_goal()
+
+        intermediate_frames = []
+
+        old_state = env.sim.data.qpos.copy()
+        old_qvel = env.sim.data.qvel.copy()
+
+        # set to every state in the path and see what it looks like:
+        waypoint_images = []
+        waypoint_masks = []
+        for i, state in enumerate(converted_path):
+            set_robot_based_on_joint_angles(
+                env,
+                state,
+                qpos,
+                qvel,
+                is_grasped=grasp,
+                obj_idx=obj_idx,
+            )
+            im = env.get_image()
+            # cv2.imwrite("test_{i}.png".format(i=i), im)
+            sim = env.sim
+            # segmentation_map = CU.get_camera_segmentation(
+            #     camera_name="frontview",
+            #     camera_width=960,
+            #     camera_height=540,
+            #     sim=sim,
+            # )
+            # # get robot segmentation mask
+            # geom_ids = np.unique(segmentation_map[:, :, 1])
+            # robot_ids = []
+            # for geom_id in geom_ids:
+            #     geom_name = sim.model.geom_id2name(geom_id)
+            #     if geom_name is None or geom_name.startswith("Visual"):
+            #         continue
+            #     if geom_name.startswith("panda0") or geom_name.startswith("gripper"):
+            #         robot_ids.append(geom_id)
+            # robot_mask = np.expand_dims(np.any(
+            #     [segmentation_map[:, :, 1] == robot_id for robot_id in robot_ids], axis=0
+            # ), -1)
+            # waypoint_masks.append(robot_mask)
+            # # cv2.imwrite('masked_test_{i}.png'.format(i=i), robot_mask*im)
+            # waypoint_images.append(robot_mask*im)
+        if grasp:
+            print(env._eef_xpos, target_xyz, state, target_angles)
+        # assert final state in converted_path is equal to target
+
+        env.sim.data.qpos[:] = old_state.copy()
+        env.sim.data.qvel[:] = old_qvel.copy()
+        env.sim.forward()
+
+        if get_intermediate_frames:
+            im = env.get_image()
+            intermediate_frames.append(im)
+        env.set_robot_color(np.array([0.1, 0.3, 0.7, 1.0]))
+        # get target pos image and alpha blend with current image
+
+        # now take path and execute
+        for state_idx, state in enumerate(converted_path):
+            start_angles = env.sim.data.qpos[:7]
+            for step in range(50):
+                policy_step = True
+                # change action action limits if this doesn't always work
+                if grasp:
+                    grip_val = env.grip_ctrl_scale
+                else:
+                    grip_val = -1
+                action = np.concatenate([(state - env.sim.data.qpos[:7]), [grip_val]])
+                if np.linalg.norm(action) < 1e-3:
+                    break
+                # linearly interpolate states
+                action = start_angles + (state - start_angles) * (step / 50)
+                set_robot_based_on_joint_angles(
+                    env,
+                    action,
+                    qpos,
+                    qvel,
+                    is_grasped=grasp,
+                    obj_idx=obj_idx,
+                    open_gripper_on_tp=True,
+                )
+                # valid = not check_robot_collision(env, ignore_object_collision)
+
+                # for i in range(int(env.control_timestep // env.model_timestep)):
+                #     env.sim.forward()
+                #     apply_controller(jp_ctrl, action, env.robots[0], policy_step)
+                #     env.sim.step()
+                #     env._update_observables()
+                if get_intermediate_frames:
+                    im = env.get_image()
+                    # if state_idx > 0:
+                    #     robot_mask = waypoint_masks[state_idx]
+                    #     im = 0.5 * (im * robot_mask) + 0.5 * waypoint_images[state_idx] + im * (1 - robot_mask)
+                    intermediate_frames.append(im)
+        env.reset_robot_color()
+        # print(f"True target: {target_angles}")
+        # print(
+        #     f"Error: {np.linalg.norm(np.concatenate((env._eef_xpos, env._eef_xquat)) - pos)**2}"
+        # )
+        print(f"XYZ distance: {np.linalg.norm(env._eef_xpos - pos[:3])}")
+        if get_intermediate_frames:
+            env.intermediate_frames = intermediate_frames
+        env.mp_mse = 0
+        # if open_gripper:
+        #     for i in range(int(env.control_timestep // env.model_timestep)):
+        #         env.sim.forward()
+        #         action = np.array([0, 0, 0, 0, 0, 0, 0, -1])
+        #         apply_controller(jp_ctrl, action, env.robots[0], True)
+        #         env.sim.step()
+        #         env._update_observables()
+    else:
+        print(f"Failed solve")
+        env._wrapped_env.reset()
+        env.sim.data.qpos[:] = og_qpos.copy()
+        env.sim.data.qvel[:] = og_qvel.copy()
+        env.sim.forward()
+        env.goal_error = 0
+        env.num_failed_solves += 1
+        intermediate_frames = []
+        env.intermediate_frames = intermediate_frames
+    # return env._get_observations()
 
 class KitchenEnv:
     def __init__(
@@ -1001,11 +1391,12 @@ class KitchenEnv:
         return self._wrapped_env.render(mode=mode)
 
     def get_image(self):
-        return self.render(
+        im = self.render(
             mode="rgb_array",
-            imwidth=512,
-            imheight=512,
+            imwidth=960,
+            imheight=540,
         )
+        return im
 
     def reset(self, **kwargs):
         self.num_steps = 0
@@ -1122,6 +1513,7 @@ class MPEnv(KitchenEnv):
         # grasp checks
         verify_stable_grasp=False,
         reset_at_grasped_state=False,
+        use_joint_space_mp=True,
     ):
         super().__init__(
             env,
@@ -1161,6 +1553,13 @@ class MPEnv(KitchenEnv):
         self.use_vision_pose_estimation = use_vision_pose_estimation
         self.use_vision_placement_check = use_vision_placement_check
         self.use_vision_grasp_check = use_vision_grasp_check
+        self.use_joint_space_mp = use_joint_space_mp
+        self.robot_bodies = [
+            "panda0_link0", "panda0_link1", "panda0_link2", "panda0_link3", "panda0_link4", "panda0_link5",
+            "panda0_link6", "panda0_link7", "panda0_leftfinger", "panda0_rightfinger"
+        ]
+        self.robot_body_ids, self.robot_geom_ids = self.get_body_geom_ids_from_robot_bodies()
+        self.original_colors = [env.sim.model.geom_rgba[idx].copy() for idx in self.robot_geom_ids]
         self.robot = URDF.load(
             robosuite.__file__[: -len("/__init__.py")]
             + "/models/assets/bullet_data/panda_description/urdf/panda_arm_hand.urdf"
@@ -1174,6 +1573,25 @@ class MPEnv(KitchenEnv):
                 high=np.inf,
                 shape=(self.observation_space.shape[0] + 1,),
             )
+    
+    def get_body_geom_ids_from_robot_bodies(self):
+        body_ids = [self.sim.model.body_name2id(body) for body in self.robot_bodies]
+        geom_ids = []
+        for geom_id, body_id in enumerate(self.sim.model.geom_bodyid):
+            if body_id in body_ids:
+                geom_ids.append(geom_id)
+        return body_ids, geom_ids
+
+    def set_robot_color(self, colors):
+        if type(colors) is np.ndarray:
+            colors = [colors] * len(self.robot_geom_ids)
+        for idx, geom_id in enumerate(self.robot_geom_ids):
+            self.sim.model.geom_rgba[geom_id] = colors[idx]
+        self.sim.forward()
+
+    def reset_robot_color(self):
+        self.set_robot_color(self.original_colors)
+        self.sim.forward()
 
     def compute_hardcoded_orientation(self, target_pos, quat):
         qpos, qvel = self.sim.data.qpos.copy(), self.sim.data.qvel.copy()
@@ -1290,18 +1708,31 @@ class MPEnv(KitchenEnv):
                 # self.num_steps += 100 #don't log this
             else:
                 # TODO: have mp also open gripper here
-                mp_to_point(
-                    self,
-                    self.ik_controller_config,
-                    self.osc_controller_config,
-                    np.concatenate((target_pos, target_quat)).astype(np.float64),
-                    qpos=self.reset_qpos,
-                    qvel=self.reset_qvel,
-                    grasp=False,
-                    planning_time=self.planning_time,
-                    get_intermediate_frames=get_intermediate_frames,
-                    backtrack_movement_fraction=self.backtrack_movement_fraction,
-                )
+                if self.use_joint_space_mp:
+                    mp_to_point_joint(
+                        self,
+                        np.concatenate((target_pos, target_quat)).astype(np.float64),
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=False,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=get_intermediate_frames,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                        open_gripper=True,
+                    )
+                else:
+                    mp_to_point(
+                        self,
+                        self.ik_controller_config,
+                        self.osc_controller_config,
+                        np.concatenate((target_pos, target_quat)).astype(np.float64),
+                        qpos=self.reset_qpos,
+                        qvel=self.reset_qvel,
+                        grasp=False,
+                        planning_time=self.planning_time,
+                        get_intermediate_frames=get_intermediate_frames,
+                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    )
             self.high_level_step += 1
             self.take_planner_step = False
         obs = self.get_observation()
@@ -1335,6 +1766,7 @@ class MPEnv(KitchenEnv):
         return action
 
     def step(self, action, get_intermediate_frames=False):
+        check_robot_collision(self, False)
         if self.plan_to_learned_goals or self.planner_only_actions:
             if self.take_planner_step:
                 target_pos = self.get_target_pos()
@@ -1373,7 +1805,6 @@ class MPEnv(KitchenEnv):
                 else:
                     o = mp_to_point(
                         self,
-                        self.ik_controller_config,
                         self.osc_controller_config,
                         np.concatenate((pos, quat), dtype=np.float64),
                         qpos=self.reset_qpos,
@@ -1419,31 +1850,53 @@ class MPEnv(KitchenEnv):
             if take_planner_step:
                 target_pos, target_quat = self.get_target_pos()
                 if self.teleport_instead_of_mp:
-                    set_robot_based_on_ee_pos(
+                    error = set_robot_based_on_ee_pos(
                         self,
                         target_pos,
                         target_quat,
+                        self.ik_ctrl,
                         self.reset_qpos,
                         self.reset_qvel,
                         is_grasped=is_grasped,
+                        default_controller_configs=self.controller_configs,
                         obj_idx=self.obj_idx,
                         open_gripper_on_tp=open_gripper_on_tp,
                     )
                 else:
                     # TODO: have mp also open gripper here if open_gripper_on_tp is True
-                    mp_to_point(
-                        self,
-                        self.ik_controller_config,
-                        self.osc_controller_config,
-                        np.concatenate((target_pos, self.reset_ori)).astype(np.float64),
-                        qpos=self.reset_qpos,
-                        qvel=self.reset_qvel,
-                        grasp=is_grasped,
-                        ignore_object_collision=is_grasped,
-                        planning_time=self.planning_time,
-                        get_intermediate_frames=get_intermediate_frames,
-                        backtrack_movement_fraction=self.backtrack_movement_fraction,
-                    )
+                    if self.use_joint_space_mp:
+                        mp_to_point_joint(
+                            self,
+                            np.concatenate((target_pos, target_quat)).astype(
+                                np.float64
+                            ),
+                            qpos=self.reset_qpos,
+                            qvel=self.reset_qvel,
+                            grasp=is_grasped,
+                            ignore_object_collision=is_grasped,
+                            planning_time=self.planning_time,
+                            get_intermediate_frames=get_intermediate_frames,
+                            backtrack_movement_fraction=self.backtrack_movement_fraction,
+                            open_gripper=open_gripper_on_tp,
+                            obj_idx=self.obj_idx,
+                        )
+                    else:
+                        mp_to_point(
+                            self,
+                            self.ik_controller_config,
+                            self.osc_controller_config,
+                            np.concatenate((target_pos, target_quat)).astype(
+                                np.float64
+                            ),
+                            qpos=self.reset_qpos,
+                            qvel=self.reset_qvel,
+                            grasp=is_grasped,
+                            ignore_object_collision=is_grasped,
+                            planning_time=self.planning_time,
+                            get_intermediate_frames=get_intermediate_frames,
+                            backtrack_movement_fraction=self.backtrack_movement_fraction,
+                            default_controller_configs=self.controller_configs,
+                        )
                 # TODO: should re-compute reward here so it is clear what action caused high reward
                 if self.recompute_reward_post_teleport:
                     r += self.env.reward()
