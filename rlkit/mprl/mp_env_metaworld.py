@@ -1313,7 +1313,7 @@ class MPEnv(MetaworldEnv):
                     pose = get_geom_pose_from_seg(
                         self,
                         49,
-                        ["corner", "corner"],
+                        ["corner", "corner2"],
                         500,
                         500,
                         self.sim
@@ -1325,7 +1325,7 @@ class MPEnv(MetaworldEnv):
                 pail_pos = stick_pos = get_geom_pose_from_seg(
                     self, 
                     39,
-                    ["corner", "corner"],
+                    ["corner", "corner2"],
                     500,
                     500,
                     self.sim        
