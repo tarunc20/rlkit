@@ -1071,26 +1071,26 @@ class MPEnv(MetaworldEnv):
                         500, 
                         self.sim
                         ) + np.array([0.02, 0.02, 0.03])
-                    obs = mp_to_point(
-                        self,
-                        pos=np.concatenate((pos.astype(np.float64), self._eef_xquat)),
-                        osc_controller_config=None,
-                        ik_controller_config=None,
-                        qpos=self.reset_qpos,
-                        qvel=self.reset_qvel,
-                        grasp=False,
-                        planning_time=self.planning_time,
-                        get_intermediate_frames=True,
-                        backtrack_movement_fraction=self.backtrack_movement_fraction,
-                    )
-                    # set_robot_based_on_ee_pos(
+                    # obs = mp_to_point(
                     #     self,
-                    #     pos, 
-                    #     self._eef_xquat,
-                    #     qpos, 
-                    #     qvel,
-                    #     is_grasped=False,
-                    # ) 
+                    #     pos=np.concatenate((pos.astype(np.float64), self._eef_xquat)),
+                    #     osc_controller_config=None,
+                    #     ik_controller_config=None,
+                    #     qpos=self.reset_qpos,
+                    #     qvel=self.reset_qvel,
+                    #     grasp=False,
+                    #     planning_time=self.planning_time,
+                    #     get_intermediate_frames=True,
+                    #     backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    # )
+                    set_robot_based_on_ee_pos(
+                        self,
+                        pos, 
+                        self._eef_xquat,
+                        qpos, 
+                        qvel,
+                        is_grasped=False,
+                    ) 
                 if self.name == "hammer-v2":
                     obj_pose = get_geom_pose_from_seg(
                         self, 
@@ -1100,26 +1100,26 @@ class MPEnv(MetaworldEnv):
                         500,
                         self.sim        
                     ) + np.array([0., 0., 0.02])
-                    # set_robot_based_on_ee_pos(
-                    #     self, 
-                    #     obj_pose,
-                    #     self._eef_xquat,
-                    #     qpos,
-                    #     qvel,
-                    #     False,
-                    # )
-                    obs = mp_to_point(
-                        self,
-                        pos=np.concatenate((obj_pose.astype(np.float64), self._eef_xquat)),
-                        osc_controller_config=None,
-                        ik_controller_config=None,
-                        qpos=self.reset_qpos,
-                        qvel=self.reset_qvel,
-                        grasp=False,
-                        planning_time=self.planning_time,
-                        get_intermediate_frames=True,
-                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        obj_pose,
+                        self._eef_xquat,
+                        qpos,
+                        qvel,
+                        False,
                     )
+                    # obs = mp_to_point(
+                    #     self,
+                    #     pos=np.concatenate((obj_pose.astype(np.float64), self._eef_xquat)),
+                    #     osc_controller_config=None,
+                    #     ik_controller_config=None,
+                    #     qpos=self.reset_qpos,
+                    #     qvel=self.reset_qvel,
+                    #     grasp=False,
+                    #     planning_time=self.planning_time,
+                    #     get_intermediate_frames=True,
+                    #     backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    # )
                 if self.name == "peg-insert-side-v2":
                     obj_pose = get_geom_pose_from_seg(
                         self, 
@@ -1163,26 +1163,26 @@ class MPEnv(MetaworldEnv):
                         500,
                         self.sim        
                     ) + np.array([0., 0.0, 0.02])
-                    # set_robot_based_on_ee_pos(
-                    #     self, 
-                    #     obj_pose,
-                    #     self._eef_xquat,
-                    #     qpos,
-                    #     qvel,
-                    #     False,
-                    # )
-                    obs = mp_to_point(
-                        self,
-                        pos=np.concatenate((obj_pose.astype(np.float64), self._eef_xquat)),
-                        osc_controller_config=None,
-                        ik_controller_config=None,
-                        qpos=self.reset_qpos,
-                        qvel=self.reset_qvel,
-                        grasp=False,
-                        planning_time=self.planning_time,
-                        get_intermediate_frames=True,
-                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    set_robot_based_on_ee_pos(
+                        self, 
+                        obj_pose,
+                        self._eef_xquat,
+                        qpos,
+                        qvel,
+                        False,
                     )
+                    # obs = mp_to_point(
+                    #     self,
+                    #     pos=np.concatenate((obj_pose.astype(np.float64), self._eef_xquat)),
+                    #     osc_controller_config=None,
+                    #     ik_controller_config=None,
+                    #     qpos=self.reset_qpos,
+                    #     qvel=self.reset_qvel,
+                    #     grasp=False,
+                    #     planning_time=self.planning_time,
+                    #     get_intermediate_frames=True,
+                    #     backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    # )
         return pos
 
     def reset(self, get_intermediate_frames=False, **kwargs):
@@ -1422,27 +1422,27 @@ class MPEnv(MetaworldEnv):
             if (self.teleport_on_grasp and is_grasped) and self.use_teleports_in_step:
                 target_pos = self.get_target_pos_no_planner()
                 if self.teleport_instead_of_mp:
-                    # set_robot_based_on_ee_pos(
-                    #     self,
-                    #     target_pos,
-                    #     self.reset_ori,
-                    #     self.reset_qpos,
-                    #     self.reset_qvel,
-                    #     is_grasped=is_grasped,
-                    # )
-                    # _xpos+np.array([0., 0., 0.05])
-                    obs = mp_to_point(
+                    set_robot_based_on_ee_pos(
                         self,
-                        pos=np.concatenate((target_pos.astype(np.float64), self._eef_xquat)),
-                        osc_controller_config=None,
-                        ik_controller_config=None,
-                        qpos=self.reset_qpos,
-                        qvel=self.reset_qvel,
-                        grasp=True,
-                        planning_time=self.planning_time,
-                        get_intermediate_frames=True,
-                        backtrack_movement_fraction=self.backtrack_movement_fraction,
+                        target_pos,
+                        self.reset_ori,
+                        self.reset_qpos,
+                        self.reset_qvel,
+                        is_grasped=is_grasped,
                     )
+                    # _xpos+np.array([0., 0., 0.05])
+                    # obs = mp_to_point(
+                    #     self,
+                    #     pos=np.concatenate((target_pos.astype(np.float64), self._eef_xquat)),
+                    #     osc_controller_config=None,
+                    #     ik_controller_config=None,
+                    #     qpos=self.reset_qpos,
+                    #     qvel=self.reset_qvel,
+                    #     grasp=True,
+                    #     planning_time=self.planning_time,
+                    #     get_intermediate_frames=True,
+                    #     backtrack_movement_fraction=self.backtrack_movement_fraction,
+                    # )
                     self.hasnt_teleported = False
                     print(
                         "distance to goal: ",
