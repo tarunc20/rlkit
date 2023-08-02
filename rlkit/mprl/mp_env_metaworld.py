@@ -530,7 +530,7 @@ def mp_to_point(
     #     return 
     qpos_curr = env.sim.data.qpos.copy()
     qvel_curr = env.sim.data.qvel.copy()
-
+    print(f"Starting eef xpos: {env._eef_xpos}")
     og_eef_xpos = env._eef_xpos.copy()
     og_eef_xquat = env._eef_xquat.copy()
     og_eef_xquat /= np.linalg.norm(og_eef_xquat)
@@ -604,10 +604,10 @@ def mp_to_point(
     print(f"Goal Validity: {goal_valid}")
     print(f"Goal Error {goal_error}")
     print(f"Start valid: {isStateValid(start())}")
-    print(f"Start state: {start().getX(), start().getY(), start().getZ()}")
-    print(f"Space bounds: {space.getBounds().low[0], space.getBounds().low[1], space.getBounds().low[2]}")
-    print(f"Space bounds: {space.getBounds().high[0], space.getBounds().high[1], space.getBounds().high[2]}")
-    print(space.satisfiesBounds(start()))
+    # print(f"Start state: {start().getX(), start().getY(), start().getZ()}")
+    # print(f"Space bounds: {space.getBounds().low[0], space.getBounds().low[1], space.getBounds().low[2]}")
+    # print(f"Space bounds: {space.getBounds().high[0], space.getBounds().high[1], space.getBounds().high[2]}")
+    # print(space.satisfiesBounds(start()))
     if not goal_valid:
         pos = backtracking_search_from_goal(
             env,
@@ -703,7 +703,6 @@ def mp_to_point(
                 new_state = np.array(new_state)
             converted_path.append(new_state)
         converted_path = converted_path[1:]
-        print(f"Length of converted path: {len(converted_path)}")
         # reset env to original qpos/qvel
         waypoint_images = []
         waypoint_masks = []
@@ -755,11 +754,12 @@ def mp_to_point(
         env.sim.step()
         env.sim.forward() 
         # return 
-        # env.set_robot_color(np.array([0.1, 0.3, 0.7, 1.0])) # replace later when generating videos
+        env.set_robot_color(np.array([0.1, 0.3, 0.7, 1.0])) # replace later when generating videos
         for state_idx, state in enumerate(converted_path):
             desired_rot = quat2mat(state[3:])
+            state_frames = []
             for _ in range(50):
-                for _ in range(30):
+                for s in range(50):
                     #env.sim.forward()
                     # set gripper qpos and qvel 
                     # replace with actually doing gripper action
@@ -770,23 +770,68 @@ def mp_to_point(
                         env.do_simulation([0.0, -0.0], n_frames=env.frame_skip)
                     for site in env._target_site_config: # taken from metaworld repo
                         env._set_pos_site(*site)
+                    # if get_intermediate_frames and s % 15 == 0:
+                    #     im = env.sim.render(camera_name="corner", width=960, height=540).astype(np.float64)
+                    #     im /= 255
+                    #     robot_mask = waypoint_masks[state_idx].astype(np.float64)
+                    #     robot_waypt = 0.5 * (waypoint_images[state_idx].astype(np.float64) / 255)
+                    #     im = 0.5 * (im * robot_mask) + 0.5 * robot_waypt + im * (1 - robot_mask)
+                    #     intermediate_frames.append((im * 255).astype(np.uint8))
+                    if get_intermediate_frames and s % 15 == 0:
+                        im = env.sim.render(camera_name="corner", width=960, height=540).astype(np.float64)
+                        state_frames.append(im / 255)
                 if hasattr(env, "num_steps"):
                     env.num_steps += 1
-                if get_intermediate_frames:
-                    im = env.sim.render(camera_name="corner", width=960, height=540).astype(np.float64)
-                    im /= 255
-                    robot_mask = waypoint_masks[state_idx].astype(np.float64)
-                    robot_waypt = 0.5 * (waypoint_images[state_idx].astype(np.float64) / 255)
-                    im = 0.5 * (im * robot_mask) + 0.5 * robot_waypt + im * (1 - robot_mask)
-                    intermediate_frames.append((im * 255).astype(np.uint8))
                 if np.linalg.norm(state[:3] - env._eef_xpos) < 1e-5:
                     break
+            # achieved state, now render and superimpose image over state 
+            env.reset_robot_color()
+            im = env.sim.render(
+                camera_name="corner",
+                width=960,
+                height=540,
+            )
+            # cv2.imwrite("test_{i}.png".format(i=i), im)
+            sim = env.sim
+            segmentation_map = np.flipud(CU.get_camera_segmentation(
+                camera_name="corner",
+                camera_width=960,
+                camera_height=540,
+                sim=sim,
+            ))
+            # get robot segmentation mask
+            geom_ids = np.unique(segmentation_map[:, :, 1])
+            robot_ids = []
+            for geom_id in geom_ids:
+                if geom_id != -1:
+                    geom_name = sim.model.geom_id2name(geom_id)
+                    if geom_name == None:
+                        continue
+                    if geom_name.startswith("robot") or geom_name.startswith("left") or geom_name.startswith("right") or geom_id == 27:
+                        robot_ids.append(geom_id)
+            robot_ids.append(27)
+            robot_ids.append(28)
+            robot_mask = np.expand_dims(np.any(
+                [segmentation_map[:, :, 1] == robot_id for robot_id in robot_ids], axis=0
+            ), -1)
+            waypoint_mask = robot_mask
+            # cv2.imwrite('masked_test_{i}.png'.format(i=i), robot_mask*im)
+            waypoint_img = robot_mask*im
+            for i in range(len(state_frames)):
+               robot_waypt = 0.5 * (waypoint_img.astype(np.float64) / 255) 
+               robot_mask = waypoint_mask.astype(np.float64)
+               state_frames[i] = 0.5 * (state_frames[i] * robot_mask) + 0.5 * robot_waypt + state_frames[i] * (1 - robot_mask)
+               state_frames[i] = (state_frames[i] * 255).astype(np.uint8)
+            #    print(state_frames[i].shape)
+            env.set_robot_color(np.array([0.1, 0.3, 0.7, 1.0]))
+            intermediate_frames.extend(state_frames)
         env.mp_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
         print(f"Controller reaching MSE: {env.mp_mse}")
         env.goal_error = goal_error
         if get_intermediate_frames:
+            print(f"Number of frames: {len(intermediate_frames)}")
             env.intermediate_frames = intermediate_frames
             env.reset_robot_color()
     else:
@@ -930,6 +975,8 @@ class MPEnv(MetaworldEnv):
         self.vertical_displacement = vertical_displacement
         self.teleport_instead_of_mp = teleport_instead_of_mp
         self.planning_time = planning_time
+        # add more planning time
+        self.planning_time = 10.0
         self.plan_to_learned_goals = plan_to_learned_goals
         self.learn_residual = learn_residual
         self.mp_bounds_low = mp_bounds_low
@@ -1312,7 +1359,7 @@ class MPEnv(MetaworldEnv):
                         500,
                         self.sim
                     ) 
-                    pose += np.array([-0.10, -0.20, 0.05])
+                    pose += np.array([-0.14, -0.17, 0.05])
                 else:
                     pose = self._wrapped_env._get_pos_objects()[3:] + np.array([-0.05, -0.20, 0.05])
             elif self.name == "assembly-v2":
@@ -1325,7 +1372,7 @@ class MPEnv(MetaworldEnv):
                         500,
                         self.sim
                     ) 
-                    pose += np.array([0.13, 0.0, 0.18]) # go back to 0.12
+                    pose += np.array([0.13, 0.0, 0.15]) # go back to 0.12
                 else:
                     raise NotImplementedError
             elif self.name == "stick-pull-v2":
@@ -1359,7 +1406,7 @@ class MPEnv(MetaworldEnv):
         return action
 
     def step(self, action, get_intermediate_frames=False):
-        self.intermediate_frames = []
+        #self.intermediate_frames = []
         if self.plan_to_learned_goals or self.planner_only_actions:
             if self.take_planner_step:
                 target_pos = self.get_target_pos()
@@ -1406,7 +1453,7 @@ class MPEnv(MetaworldEnv):
                         grasp=is_grasped,
                         ignore_object_collision=is_grasped,
                         planning_time=self.planning_time,
-                        get_intermediate_frames=get_intermediate_frames,
+                        get_intermediate_frames=True,
                         backtrack_movement_fraction=self.backtrack_movement_fraction,
                     )
                     self.hasnt_teleported = False
@@ -1428,6 +1475,7 @@ class MPEnv(MetaworldEnv):
         else:
             curr_len = self._wrapped_env.curr_path_length
             o, r, d, i = self._wrapped_env.step(action)
+            print(f"Current env eef xpos: {self._eef_xpos}")
             self.num_steps += 1
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
@@ -1437,8 +1485,9 @@ class MPEnv(MetaworldEnv):
                 #print(f"Is grasped :{is_grasped}")
             else:
                 is_grasped = False
-            if (self.teleport_on_grasp and is_grasped) and self.use_teleports_in_step:
+            if (self.teleport_on_grasp and is_grasped) and self.use_teleports_in_step and self.name != "disassemble-v2":
                 target_pos = self.get_target_pos_no_planner()
+                print(f"Target pos: {target_pos}")
                 if self.teleport_instead_of_mp:
                     set_robot_based_on_ee_pos(
                         self,
@@ -1487,4 +1536,5 @@ class MPEnv(MetaworldEnv):
         d = self.update_done_info_based_on_termination(i, d)
         if self.terminate_on_last_state:
             d = self.ep_step_ctr == self.horizon
+        #print(f"Num intermediate frames: {len(self.intermediate_frames)}")
         return o, r, d, i
