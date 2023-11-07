@@ -18,22 +18,22 @@ from robosuite.utils.transform_utils import (
 import time
 from mopa_rl.env.inverse_kinematics import qpos_from_site_pose_sampling, qpos_from_site_pose
 import robosuite.utils.transform_utils as T
-from mopa_rl.config.default_configs import LIFT_CONFIG
+from mopa_rl.config.default_configs import LIFT_CONFIG, ASSEMBLY_OBSTACLE_CONFIG
 
-try:
-    from ompl import base as ob
-    from ompl import geometric as og
-    from ompl import util as ou
-except ImportError:
-    # if the ompl module is not in the PYTHONPATH assume it is installed in a
-    # subdirectory of the parent directory called "py-bindings."
-    import sys
-    from os.path import abspath, dirname, join
+# try:
+#     from ompl import base as ob
+#     from ompl import geometric as og
+#     from ompl import util as ou
+# except ImportError:
+#     # if the ompl module is not in the PYTHONPATH assume it is installed in a
+#     # subdirectory of the parent directory called "py-bindings."
+import sys
+from os.path import abspath, dirname, join
 
-    sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
-    from ompl import base as ob
-    from ompl import geometric as og
-    from ompl import util as ou
+sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
+from ompl import base as ob
+from ompl import geometric as og
+from ompl import util as ou
 
 LIFT_ROBOT_BODIES = [
     'base', 'controller_box',
@@ -625,7 +625,7 @@ class MoPAMPEnv():
         # teleporting 
         self.vertical_displacement = vertical_displacement
         self.planner_command_orientation = planner_command_orientation
-        self.teleport_instead_of_mp = teleport_instead_of_mp
+        self.teleport_instead_of_mp = True
         self.teleport_on_grasp = teleport_on_grasp
         self.config = config
         self.num_ll_actions_per_hl_action = num_ll_actions_per_hl_action
@@ -672,7 +672,7 @@ class MoPAMPEnv():
             #     config["camera_name"] = "visview"
         elif self.name == "SawyerAssemblyObstacle-v0":
             config = ASSEMBLY_OBSTACLE_CONFIG
-            if mprl:
+            if not no_mprl:
                 config["camera_name"] = "eye_in_hand"
         elif self.name == "SawyerPushObstacle-v0":
             config = PUSHER_OBSTACLE_CONFIG
@@ -730,33 +730,33 @@ class MoPAMPEnv():
             ac = collections.OrderedDict()
             ac['default'] = cube_pos 
             ac['quat'] = quat
-            # result, err_norm = set_robot_based_on_ee_pos(
-            #     self._wrapped_env,
-            #     ac,
-            #     self.ik_env,
-            #     qpos,
-            #     qvel, 
-            #     False,
-            #     "cube",
-            #     self.config,
-            #     self.allowed_collision_pairs,
-            #     self.name,
-            # )
-            mp_to_point(
+            result, err_norm = set_robot_based_on_ee_pos(
                 self._wrapped_env,
                 ac,
                 self.ik_env,
-                self._wrapped_env.sim.data.qpos.copy(),
-                self._wrapped_env.sim.data.qvel.copy(),
+                qpos,
+                qvel, 
+                False,
+                "cube",
+                self.config,
                 self.allowed_collision_pairs,
-                is_grasped=False,
-                ignore_object_collision=False,
-                planning_time=15,
-                get_intermediate_frames=False,
-                backtrack_movement_fraction=0.01,
-                env_name="SawyerLiftObstacle-v0",
-                config=self.config
+                self.name,
             )
+            # mp_to_point(
+            #     self._wrapped_env,
+            #     ac,
+            #     self.ik_env,
+            #     self._wrapped_env.sim.data.qpos.copy(),
+            #     self._wrapped_env.sim.data.qvel.copy(),
+            #     self.allowed_collision_pairs,
+            #     is_grasped=False,
+            #     ignore_object_collision=False,
+            #     planning_time=15,
+            #     get_intermediate_frames=False,
+            #     backtrack_movement_fraction=0.01,
+            #     env_name="SawyerLiftObstacle-v0",
+            #     config=self.config
+            # )
             # open gripper and set to state of opened gripper
             self._wrapped_env.sim.data.qpos[self._wrapped_env.ref_gripper_joint_pos_indexes] = np.array([-0.0115, -0.0115])
             self._wrapped_env.sim.data.qvel[self._wrapped_env.ref_gripper_joint_pos_indexes] = np.array([0.03285798, 0.03401761])
@@ -772,33 +772,33 @@ class MoPAMPEnv():
             teleport_ac['default'] = hole_pos # + np.array([0.00, 0.2, 0.0])
             # rotation so that it can get in between back legs of table 
             teleport_ac['quat'] = np.array([-0.69904332, -0.35891423, -0.60671187,  0.12008213])
-            # result, err_norm = set_robot_based_on_ee_pos(
-            #     self._wrapped_env,
-            #     teleport_ac,
-            #     self.ik_env,
-            #     self._wrapped_env.sim.data.qpos.copy(),
-            #     self._wrapped_env.sim.data.qvel.copy(), 
-            #     False,
-            #     "0_part0",
-            #     self.config,
-            #     self.allowed_collision_pairs,
-            #     self.name,
-            # )
-            mp_to_point(
+            result, err_norm = set_robot_based_on_ee_pos(
                 self._wrapped_env,
                 teleport_ac,
                 self.ik_env,
                 self._wrapped_env.sim.data.qpos.copy(),
-                self._wrapped_env.sim.data.qvel.copy(),
+                self._wrapped_env.sim.data.qvel.copy(), 
+                False,
+                "0_part0",
+                self.config,
                 self.allowed_collision_pairs,
-                is_grasped=False,
-                ignore_object_collision=False,
-                planning_time=15,
-                get_intermediate_frames=False,
-                backtrack_movement_fraction=0.01,
-                env_name="SawyerAssemblyObstacle-v0",
-                config=self.config,
+                self.name,
             )
+            # mp_to_point(
+            #     self._wrapped_env,
+            #     teleport_ac,
+            #     self.ik_env,
+            #     self._wrapped_env.sim.data.qpos.copy(),
+            #     self._wrapped_env.sim.data.qvel.copy(),
+            #     self.allowed_collision_pairs,
+            #     is_grasped=False,
+            #     ignore_object_collision=False,
+            #     planning_time=15,
+            #     get_intermediate_frames=False,
+            #     backtrack_movement_fraction=0.01,
+            #     env_name="SawyerAssemblyObstacle-v0",
+            #     config=self.config,
+            # )
             return None
         else:
             if self.use_vision_pose_estimation:
@@ -1092,3 +1092,4 @@ class MoPAMPEnv():
         frame = (self._wrapped_env.render("rgb_array") * 255.0).astype(np.uint8)
         return frame
 
+    

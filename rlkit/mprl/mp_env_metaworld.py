@@ -38,7 +38,8 @@ except ImportError:
     import sys
     from os.path import abspath, dirname, join
 
-    sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+    #sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+    sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
     from ompl import base as ob
     from ompl import geometric as og
     from ompl import util as ou
@@ -195,20 +196,6 @@ def gripper_contact(string, side):
 def check_object_grasp(env):
     # TODO: finish this function
     obs = env._get_obs()
-    obj = obs[4:7]
-    action = np.zeros(4)
-    action[-1] = 1
-    # object_grasped = env._gripper_caging_reward(
-    #     action,
-    #     obj,
-    #     obj_radius=0.015,
-    #     pad_success_thresh=0.05,
-    #     object_reach_radius=0.01,
-    #     xz_thresh=0.01,
-    #     desired_gripper_effort=0.7,
-    #     high_density=True,
-    # )
-    thresh = 0.9
     # also check that object is in contact with gripper
     object_gripper_contact = False
     d = env.sim.data
@@ -232,14 +219,9 @@ def check_object_grasp(env):
                 object_in_contact_with_env = True
             if not check_robot_string(con2) and check_string(con1, obj_string):
                 object_in_contact_with_env = True
-        # if check_robot_string(con1) and check_string(con2, obj_string):
-        #     object_gripper_contact = True
-        # if check_robot_string(con2) and check_string(con1, obj_string):
-        #     object_gripper_contact = True
     # check if there exists a string starting with left and a string starting with right in gripper contacts
     object_gripper_contact = left_gripper_contact and right_gripper_contact
     is_grasped = object_gripper_contact and (not object_in_contact_with_env)
-    # is_grasped = object_grasped > thresh and object_gripper_contact and object_lifted
     return is_grasped
 
 def body_check_grasp(env):
@@ -674,6 +656,7 @@ def mp_to_point(
     #         grasp,
     #     )
     intermediate_frames = []
+    print(f"Solved: {solved}")
     if solved:
         path = pdef.getSolutionPath()
         success = og.PathSimplifier(si).simplify(path, 1.0)
@@ -777,7 +760,7 @@ def mp_to_point(
                     #     robot_waypt = 0.5 * (waypoint_images[state_idx].astype(np.float64) / 255)
                     #     im = 0.5 * (im * robot_mask) + 0.5 * robot_waypt + im * (1 - robot_mask)
                     #     intermediate_frames.append((im * 255).astype(np.uint8))
-                    if get_intermediate_frames and s % 15 == 0:
+                    if get_intermediate_frames and s % 10 == 0:
                         im = env.sim.render(camera_name="corner", width=960, height=540).astype(np.float64)
                         state_frames.append(im / 255)
                 if hasattr(env, "num_steps"):
@@ -1013,17 +996,17 @@ class MPEnv(MetaworldEnv):
         self.robot_bodies = [
             'base', 'controller_box', 
             'pedestal_feet', 'torso', 
-            'pedestal', 'right_arm_base_link', 
-            'right_l0', 'head', 
-            'screen', 'head_camera', 
-            'right_torso_itb', 'right_l1', 
-            'right_l2', 'right_l3', 
-            'right_l4', 'right_arm_itb', 
-            'right_l5', 'right_hand_camera', 
-            'right_wrist', 'right_l6', 'right_hand', 
-            'hand', 'rightclaw', 'rightpad', 
-            'leftclaw', 'leftpad', 'right_l4_2', 
-            'right_l2_2', 'right_l1_2',
+            # 'pedestal', 'right_arm_base_link', 
+            # 'right_l0', 'head', 
+            # 'screen', 'head_camera', 
+            # 'right_torso_itb', 'right_l1', 
+            # 'right_l2', 'right_l3', 
+            # 'right_l4', 'right_arm_itb', 
+            # 'right_l5', 'right_hand_camera', 
+            # 'right_wrist', 'right_l6', 'right_hand', 
+            # 'hand', 'rightclaw', 'rightpad', 
+            # 'leftclaw', 'leftpad', 'right_l4_2', 
+            # 'right_l2_2', 'right_l1_2',
         ]
         self.robot_body_ids, self.robot_geom_ids = self.get_body_geom_ids_from_robot_bodies()
         self.original_colors = [env.sim.model.geom_rgba[idx].copy() for idx in self.robot_geom_ids]
@@ -1337,6 +1320,11 @@ class MPEnv(MetaworldEnv):
                 return False
         # print(f"Height increase: {get_object_pos(self)[2] - self.initial_object_pos[2]}")
         # print(f"Grasped: {(is_grasped and not self.check_com_grasp) and get_object_pos(self)[2] - self.initial_object_pos[2] > 0.04 }")
+        # if (is_grasped and not self.check_com_grasp) and \
+        #         get_object_pos(self)[2] - self.initial_object_pos[2] > 0.04:
+        #         img = self.sim.render(camera_name="corner2", width=960, height=540)
+        #         plt.imshow(img)
+        #         plt.savefig("/home/tarunc/Desktop/research/DisentangledRep4RL/disrep4rl/grasped.png")
         return (is_grasped and not self.check_com_grasp) and \
                 get_object_pos(self)[2] - self.initial_object_pos[2] > 0.04 # should be 0.02 when testing with policies but try both
 
@@ -1475,7 +1463,6 @@ class MPEnv(MetaworldEnv):
         else:
             curr_len = self._wrapped_env.curr_path_length
             o, r, d, i = self._wrapped_env.step(action)
-            print(f"Current env eef xpos: {self._eef_xpos}")
             self.num_steps += 1
             self.ep_step_ctr += 1
             if self.hasnt_teleported:
@@ -1503,6 +1490,7 @@ class MPEnv(MetaworldEnv):
                         np.linalg.norm(target_pos - self._eef_xpos),
                     )
                 else:
+                    print(f"In case")
                     obs = mp_to_point(
                         self,
                         None,

@@ -13,8 +13,8 @@ from rlkit.torch.model_based.dreamer.visualization import make_video
 if __name__ == "__main__":
     mp_env_kwargs = dict(
         vertical_displacement=0.08,
-        teleport_instead_of_mp=False,
-        use_joint_space_mp=True,
+        teleport_instead_of_mp=True,
+        use_joint_space_mp=False,
         randomize_init_target_pos=False,
         mp_bounds_low=(-1.45, -1.25, 0.45),
         mp_bounds_high=(0.45, 0.85, 2.25),
@@ -29,7 +29,7 @@ if __name__ == "__main__":
         reset_at_grasped_state=False,
         verify_stable_grasp=True,
         hardcoded_orientations=False,
-        use_pcd_collision_check=True,
+        use_pcd_collision_check=False,
     )
     robosuite_args = dict(
         robots="Panda",
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         control_freq=20,
         ignore_done=True,
         use_object_obs=True,
-        env_name="PickPlaceCan",
+        env_name="PickPlace",
         # valid_obj_names=["Cereal", "Milk", "Can", "Bread"],
         reward_scale=4.0,
     )
