@@ -1368,7 +1368,6 @@ def mp_to_point(
         env.mp_mse = (
             np.linalg.norm(state - np.concatenate((env._eef_xpos, env._eef_xquat))) ** 2
         )
-        print(f"Controller reaching MSE: {env.mp_mse}")
         env.goal_error = goal_error
     else:
         env._wrapped_env.reset()
@@ -2234,8 +2233,6 @@ class MPEnv(RobosuiteEnv):
                 self.initial_object_pos.append(
                     get_object_pose_mp(self, obj_idx=obj_idx)[0].copy()
                 )
-            print(f"Initial object pos")
-            print(self.initial_object_pos)
 
         update_controller_config(self, self.ik_controller_config)
         self.ik_ctrl = controller_factory("IK_POSE", self.ik_controller_config)
@@ -2250,7 +2247,6 @@ class MPEnv(RobosuiteEnv):
         self.teleport_on_place = False
         if not self.plan_to_learned_goals and not self.planner_only_actions:
             target_pos, target_quat = self.get_target_pos()
-            print(f"Target pos {target_pos} Target quat {target_quat}")
             self.high_level_step += 1
             if self.teleport_instead_of_mp:
                 error = set_robot_based_on_ee_pos(
@@ -2434,7 +2430,6 @@ class MPEnv(RobosuiteEnv):
                 take_planner_step = False
             if take_planner_step:
                 target_pos, target_quat = self.get_target_pos()
-                print(f"Target pos {target_pos} Target quat {target_quat}")
                 self.high_level_step += 1
                 if self.teleport_instead_of_mp:
                     error = set_robot_based_on_ee_pos(
