@@ -27,11 +27,13 @@ except ImportError:
     # subdirectory of the parent directory called "py-bindings."
     import sys
     from os.path import abspath, dirname, join
-
-    sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
-    from ompl import base as ob
-    from ompl import geometric as og
-    from ompl import util as ou
+    try:
+        sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+        from ompl import base as ob
+        from ompl import geometric as og
+        from ompl import util as ou
+    except:
+        pass 
 
 
 def get_object_string(env, obj_idx=0):

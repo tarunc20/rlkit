@@ -29,11 +29,13 @@ from mopa_rl.config.default_configs import LIFT_CONFIG, ASSEMBLY_OBSTACLE_CONFIG
 #     # subdirectory of the parent directory called "py-bindings."
 import sys
 from os.path import abspath, dirname, join
-
-sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
-from ompl import base as ob
-from ompl import geometric as og
-from ompl import util as ou
+try:
+    sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
+    from ompl import base as ob
+    from ompl import geometric as og
+    from ompl import util as ou
+except:
+    pass
 
 LIFT_ROBOT_BODIES = [
     'base', 'controller_box',

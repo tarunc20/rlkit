@@ -39,10 +39,13 @@ except ImportError:
     from os.path import abspath, dirname, join
 
     #sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
-    sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
-    from ompl import base as ob
-    from ompl import geometric as og
-    from ompl import util as ou
+    try:
+        sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
+        from ompl import base as ob
+        from ompl import geometric as og
+        from ompl import util as ou
+    except:
+        pass
 
 def get_obj_name(env):
     if env.name == "hammer-v2":
