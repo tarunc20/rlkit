@@ -34,7 +34,7 @@ except ImportError:
     import sys
     from os.path import abspath, dirname, join
 
-    sys.path.insert(0, join(dirname(dirname(abspath(__file__))), "py-bindings"))
+    sys.path.insert(0, "/home/tarunc/Desktop/research/contact_graspnet/ompl/py-bindings")
     from ompl import base as ob
     from ompl import geometric as og
     from ompl import util as ou
@@ -1910,6 +1910,7 @@ class MPEnv(RobosuiteEnv):
         pose_sigma=0,
         noisy_pose_estimates=False,
     ):
+        print(f"USING OLD USING OLD")
         super().__init__(
             env,
             slack_reward=slack_reward,
